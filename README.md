@@ -24,27 +24,53 @@
 
 ## ✨ Features
 
-### Account Management
-- 🔐 **Multi-Account** - Support Google, GitHub, BuilderId login
-- 🎴 **Card Grid Layout** - Visual display of account status, quota, subscription type
-- 📊 **Quota Monitoring** - Real-time quota usage (main/trial/bonus)
-- 🔄 **One-Click Switch** - Seamless account switching with auto machine ID reset
-- 📦 **Batch Operations** - Batch refresh, delete, import/export
-- ⏰ **Auto Token Refresh** - Scheduled refresh to keep tokens valid
+### 🔐 Account Login
+- **Desktop OAuth** - Desktop authorization for Google/GitHub/BuilderId
+- **Web Portal OAuth** - Web authorization in WebView window
+- Two methods complement each other for reliable login
 
-### IDE Integration
-- ⚙️ **IDE Settings** - Proxy/model settings sync
-- 🔑 **Machine ID Management** - Reset Kiro IDE machine ID
-- 🛡️ **System Machine Code** - Backup/restore/reset Windows MachineGuid (admin required)
+### 📊 Account Display
+- Card grid layout, clear at a glance
+- Quota progress bar (main/trial/bonus)
+- Subscription type badge (Free/PRO/PRO+)
+- Token expiration countdown
+- Status highlight (normal/expired/banned/current)
 
-### Configuration Management
-- 🔌 **MCP Server Management** - View, add, edit, enable/disable MCP configs
-- ⚡ **Powers Management** - View, install, uninstall Powers
+### 🔄 One-Click Switch
+- Seamless Kiro IDE account switching
+- Auto reset machine ID
+- Real-time switch progress
 
-### UI Features
-- 🎨 **Theme Switching** - Light, dark, purple, green themes
-- 🔄 **Auto Update** - Check and download new versions
-- 🔒 **Local Storage** - All data stored locally, privacy safe
+### 📦 Batch Operations
+- Batch refresh / batch delete
+- JSON import/export (Social & IdC formats)
+- SSO Token batch import
+- Keyword search filter
+
+### 🔌 Kiro Config
+- **MCP Servers** - CRUD, enable/disable
+- **Powers** - View, install, uninstall
+- **Steering Rules** - View, edit
+
+### ⚙️ System Settings
+- Four themes (light/dark/purple/green)
+- AI model selection & lock
+- Auto token refresh (configurable interval)
+- Auto reset machine ID on switch
+
+### 🌐 Browser & Proxy
+- Custom browser / auto detect
+- Incognito mode launch
+- HTTP proxy config / auto detect
+
+### 🔑 Machine Code
+- View / backup / restore / reset
+- Windows / macOS support
+
+### 🖥️ IDE Integration
+- Detect Kiro IDE running status
+- One-click start / stop
+- Auto sync proxy and model settings
 
 ## 📸 Screenshots
 
