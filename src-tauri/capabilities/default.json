@@ -13,6 +13,17 @@
     "core:window:allow-center",
     "core:webview:allow-create-webview-window",
     "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "bin/kiro-server",
+          "cmd": "open",
+          "sidecar": true
+        }
+      ]
+    },
+    "shell:default",
     "process:allow-restart",
     "opener:default",
     "updater:default",

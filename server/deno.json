@@ -1,0 +1,26 @@
+{
+  "tasks": {
+    "start": "deno run --allow-net --allow-env --allow-read --allow-write --unstable-kv main.ts",
+    "dev": "deno run --allow-net --allow-env --allow-read --allow-write --unstable-kv --watch main.ts",
+    "test": "deno test --allow-net --allow-env --allow-read --unstable-kv",
+    "compile": "deno compile --allow-net --allow-env --allow-read --allow-write --unstable-kv --include static --output kiro2api main.ts",
+    "check": "deno check main.ts",
+    "fmt": "deno fmt",
+    "lint": "deno lint"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.unstable"],
+    "strict": true
+  }
+}

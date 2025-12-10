@@ -14,6 +14,7 @@ mod mcp;
 mod powers;
 mod process;
 mod providers;
+mod server_process;
 mod state;
 mod steering;
 mod account;
@@ -46,6 +47,7 @@ use kiro::{
     get_kiro_local_token, get_kiro_telemetry_info, reset_kiro_machine_id, switch_kiro_account,
 };
 use process::{close_kiro_ide, is_kiro_ide_running, start_kiro_ide};
+use server_process::{start_local_server, stop_local_server, get_server_status, ServerProcessState};
 
 fn main() {
     tauri::Builder::default()
@@ -76,6 +78,10 @@ fn main() {
                     let _ = window.set_focus();
                 }
             });
+
+            // Note: Automatic server startup is handled by the frontend (LocalServerContext)
+            // when the application mounts. This ensures the UI is ready to receive
+            // status updates and logs immediately.
             
             Ok(())
         })
@@ -84,6 +90,7 @@ fn main() {
             auth: AuthState::new(),
             pending_login: Mutex::new(None),
         })
+        .manage(ServerProcessState::new())
         .invoke_handler(tauri::generate_handler![
             // 账号命令
             get_accounts,
@@ -165,7 +172,11 @@ fn main() {
             get_steering_file,
             save_steering_file,
             delete_steering_file,
-            create_steering_file
+            create_steering_file,
+            // Local Server 命令
+            start_local_server,
+            stop_local_server,
+            get_server_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

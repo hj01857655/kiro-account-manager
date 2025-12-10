@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Dashboard - Kiro2API</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>🔐 KIRO Token Dashboard</h1>
+                <p>实时监控Token池状态和使用情况</p>
+            </div>
+            <div>
+                <a href="/admin" style="padding: 8px 16px; background: #6366f1; color: white; text-decoration: none; border-radius: 6px; display: inline-block;">⚙️ Token 管理</a>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="refresh-btn">
+                🔄 手动刷新
+            </button>
+            <div class="auto-refresh">
+                <span>自动刷新</span>
+                <div class="switch"></div>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">总Token数</span>
+                <span class="status-value" id="totalTokens">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">可用Token</span>
+                <span class="status-value" id="activeTokens">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">最后更新</span>
+                <span class="status-value" id="lastUpdate">-</span>
+            </div>
+        </div>
+        
+        <div class="main-card">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>用户邮箱</th>
+                            <th>Token预览</th>
+                            <th>认证方式</th>
+                            <th>剩余次数</th>
+                            <th>过期时间</th>
+                            <th>最后使用</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tokenTableBody">
+                        <tr>
+                            <td colspan="7" class="loading">
+                                <div class="spinner"></div>
+                                正在加载Token数据...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

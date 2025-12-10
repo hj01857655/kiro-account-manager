@@ -46,6 +46,9 @@
     "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "copyright": "© 2025 hj01857655",
+    "externalBin": [
+      "bin/kiro-server"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

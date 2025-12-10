@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  kiro2api-deno:
+    build: .
+    container_name: kiro2api-deno
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - KIRO_CLIENT_TOKEN=${KIRO_CLIENT_TOKEN}
+      - KIRO_AUTH_TOKEN=${KIRO_AUTH_TOKEN}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    # Optional: mount .env file
+    # volumes:
+    #   - ./.env:/app/.env:ro

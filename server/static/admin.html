@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token 管理 - Kiro2API</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .nav-link {
+            padding: 8px 16px;
+            background: #6366f1;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: background 0.3s;
+        }
+        
+        .nav-link:hover {
+            background: #4f46e5;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #1e293b;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #475569;
+        }
+        
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        .form-textarea {
+            min-height: 150px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #6366f1;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #4f46e5;
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .token-list {
+            margin-top: 20px;
+        }
+        
+        .token-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            background: #f8fafc;
+        }
+        
+        .token-info {
+            flex: 1;
+        }
+        
+        .token-type {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #dbeafe;
+            color: #1e40af;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+        
+        .token-value {
+            font-family: monospace;
+            font-size: 13px;
+            color: #64748b;
+        }
+        
+        .message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+        }
+        
+        .message-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        
+        .message-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        
+        .message-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+        
+        .import-help {
+            background: #f1f5f9;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #475569;
+        }
+        
+        .import-help code {
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="admin-header">
+            <div>
+                <h1>🔐 Token 管理中心</h1>
+                <p>管理您的 KIRO_AUTH_TOKEN 配置</p>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link">📊 Dashboard</a>
+            </div>
+        </div>
+        
+        <div id="messageContainer"></div>
+        
+        <!-- 批量导入 -->
+        <div class="card">
+            <div class="card-title">📥 批量导入 Tokens</div>
+            <div class="import-help">
+                <strong>导入格式说明：</strong><br>
+                支持 JSON 数组格式，每个对象包含：<br>
+                <code>{"auth": "Social", "refreshToken": "your_token", "description": "描述信息"}</code><br>
+                也可以简化为一行一个 refreshToken（默认使用 Social 认证）
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Tokens (JSON 格式或一行一个)</label>
+                <textarea id="importTokensInput" class="form-textarea" placeholder='[
+  {"auth": "Social", "refreshToken": "token1", "description": "账号1"},
+  {"auth": "Social", "refreshToken": "token2", "description": "账号2"}
+]
+
+或者直接输入（一行一个）:
+token1
+token2
+token3'></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">导入模式</label>
+                <select id="importMode" class="form-select">
+                    <option value="replace">替换现有（覆盖）</option>
+                    <option value="append">追加到现有</option>
+                </select>
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="importTokens()">导入 Tokens</button>
+                <button class="btn btn-danger" onclick="clearAllTokens()">清空所有 Tokens</button>
+            </div>
+        </div>
+        
+        <!-- 添加单个 Token -->
+        <div class="card">
+            <div class="card-title">➕ 添加单个 Token</div>
+            
+            <div class="form-group">
+                <label class="form-label">认证类型</label>
+                <select id="authType" class="form-select" onchange="toggleIdCFields()">
+                    <option value="Social">Social</option>
+                    <option value="IdC">IdC</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Refresh Token</label>
+                <input type="text" id="refreshToken" class="form-input" placeholder="输入 refresh token">
+            </div>
+            
+            <div id="idcFields" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">Client ID</label>
+                    <input type="text" id="clientId" class="form-input" placeholder="IdC Client ID">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Client Secret</label>
+                    <input type="text" id="clientSecret" class="form-input" placeholder="IdC Client Secret">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">描述信息（可选）</label>
+                <input type="text" id="description" class="form-input" placeholder="例如：账号1 - 测试用">
+            </div>
+            
+            <button class="btn btn-primary" onclick="addToken()">添加 Token</button>
+        </div>
+        
+        <!-- 当前 Tokens 列表 -->
+        <div class="card">
+            <div class="card-title">📋 当前 Tokens 列表</div>
+            <button class="btn btn-primary" onclick="loadTokens()">🔄 刷新列表</button>
+            <div id="tokenList" class="token-list"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

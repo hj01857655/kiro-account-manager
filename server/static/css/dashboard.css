@@ -1,0 +1,268 @@
+/* Token Dashboard - 企业级样式系统 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.header h1 {
+    color: white;
+    font-size: 2.5rem;
+    font-weight: 300;
+    margin-bottom: 10px;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.header p {
+    color: rgba(255,255,255,0.8);
+    font-size: 1.1rem;
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.refresh-btn {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.refresh-btn:hover {
+    background: rgba(255,255,255,0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.refresh-btn:active {
+    transform: translateY(0);
+}
+
+.auto-refresh {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+}
+
+.switch {
+    position: relative;
+    width: 50px;
+    height: 24px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.switch.active {
+    background: rgba(76, 175, 80, 0.8);
+}
+
+.switch.active::after {
+    left: 28px;
+}
+
+.status-bar {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 15px;
+    padding: 15px 25px;
+    margin-bottom: 30px;
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+}
+
+.status-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.status-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.status-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.main-card {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 20px;
+    backdrop-filter: blur(20px);
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 15px 20px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+th {
+    background: rgba(255,255,255,0.1);
+    color: white;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+}
+
+td {
+    color: rgba(255,255,255,0.9);
+}
+
+tr:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.token-preview {
+    font-family: 'Courier New', monospace;
+    background: rgba(255,255,255,0.1);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.status-active {
+    background: rgba(76, 175, 80, 0.8);
+    color: white;
+}
+
+.status-expired {
+    background: rgba(244, 67, 54, 0.8);
+    color: white;
+}
+
+.status-low {
+    background: rgba(255, 152, 0, 0.8);
+    color: white;
+}
+
+.status-exhausted {
+    background: rgba(158, 158, 158, 0.8);
+    color: white;
+}
+
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 50px;
+    color: rgba(255,255,255,0.8);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-top: 3px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error {
+    background: rgba(244, 67, 54, 0.1);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    color: #ff5252;
+    padding: 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .header h1 {
+        font-size: 2rem;
+    }
+    
+    .controls {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .status-bar {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .status-item {
+        flex-direction: row;
+        gap: 10px;
+    }
+    
+    th, td {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+    }
+}

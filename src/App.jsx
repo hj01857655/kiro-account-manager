@@ -11,8 +11,10 @@ import Login from './components/Login'
 import WebOAuthLogin from './components/WebOAuthLogin'
 import AuthCallback from './components/AuthCallback'
 import UpdateChecker from './components/UpdateChecker'
+import LocalServerPage from './components/LocalServer/LocalServerPage'
 
 import { useTheme } from './contexts/ThemeContext'
+import { LocalServerProvider } from './contexts/LocalServerContext'
 
 // 默认自动刷新间隔：50分钟
 const DEFAULT_REFRESH_INTERVAL = 50 * 60 * 1000
@@ -193,6 +195,7 @@ function App() {
       case 'home': return <Home onNavigate={setActiveMenu} />
       case 'token': return <AccountManager />
       case 'kiro-config': return <KiroConfig />
+      case 'local-server': return <LocalServerPage />
       case 'login': return <Login onLogin={(user) => { handleLogin(user); setActiveMenu('token'); }} />
       case 'web-oauth': return <WebOAuthLogin onLogin={(user) => { handleLogin(user); setActiveMenu('token'); }} />
       case 'callback': return <AuthCallback />
@@ -211,19 +214,21 @@ function App() {
   }
 
   return (
-    <div className={`flex h-screen ${colors.main}`}>
-      <Sidebar 
-        activeMenu={activeMenu} 
-        onMenuChange={setActiveMenu}
-        user={user}
-        onLogout={handleLogout}
-      />
-      <main className="flex-1 overflow-hidden">
-        {renderContent()}
-      </main>
-      
-      <UpdateChecker />
-    </div>
+    <LocalServerProvider>
+      <div className={`flex h-screen ${colors.main}`}>
+        <Sidebar 
+          activeMenu={activeMenu} 
+          onMenuChange={setActiveMenu}
+          user={user}
+          onLogout={handleLogout}
+        />
+        <main className="flex-1 overflow-hidden">
+          {renderContent()}
+        </main>
+        
+        <UpdateChecker />
+      </div>
+    </LocalServerProvider>
   )
 }
 

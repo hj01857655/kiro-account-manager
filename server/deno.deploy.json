@@ -1,0 +1,7 @@
+{
+  "entrypoint": "main.ts",
+  "env": {
+    "KIRO_CLIENT_TOKEN": "",
+    "KIRO_AUTH_TOKEN": ""
+  }
+}
