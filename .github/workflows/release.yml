@@ -26,8 +26,8 @@ jobs:
       - name: Checkout from private repo
         uses: actions/checkout@v4
         with:
-          repository: hj01857655/kiro-account-manager_dev
-          ref: dev
+          repository: ${{ secrets.PRIVATE_REPO }}
+          ref: ${{ secrets.PRIVATE_REPO_REF }}
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
 
       - name: Setup Node
