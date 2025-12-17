@@ -49,7 +49,6 @@
 
 ### 🔌 Kiro Config
 - **MCP Servers** - CRUD, enable/disable
-- **Powers** - View, install, uninstall
 - **Steering Rules** - View, edit
 
 ### ⚙️ System Settings
