@@ -51,7 +51,6 @@
 
 ### 🔌 Kiro 配置
 - **MCP 服务器** - 增删改查、启用/禁用
-- **Powers** - 查看、安装、卸载
 - **Steering 规则** - 查看、编辑
 
 ### ⚙️ 系统设置
@@ -117,7 +116,6 @@
 | 应用设置 | `%APPDATA%\.kiro-account-manager\app-settings.json` |
 | 机器码备份 | `%APPDATA%\.kiro-account-manager\machine-guid-backup.json` |
 | MCP 配置 | `~/.kiro/settings/mcp.json` |
-| Powers 注册表 | `~/.kiro/powers/registry.json` |
 | Steering 规则 | `~/.kiro/steering/*.md` |
 
 ## 🔨 自行构建（Fork 用户）
