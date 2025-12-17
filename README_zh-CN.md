@@ -131,7 +131,9 @@
 5. 等待约 15 分钟完成构建
 6. 从完成的工作流运行中下载构建产物
 
-> ⚠️ 自行构建的版本未签名，Windows 安装时会显示安全警告。
+> ⚠️ 自行构建的版本默认未签名，Windows 安装时会显示安全警告。
+>
+> 💡 如需启用代码签名，请在你的 fork 仓库添加 Secrets：`TAURI_SIGNING_PRIVATE_KEY` 和 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 >
 > ⚠️ "Release" 工作流仅作者可用（需要私有仓库访问权限），Fork 用户请使用 "Build (Fork)" 工作流。
 
