@@ -124,7 +124,9 @@ If you want to build the application yourself:
 5. Wait ~15 minutes for the build to complete
 6. Download artifacts from the completed workflow run
 
-> ⚠️ Self-built versions are unsigned. Windows will show a security warning during installation.
+> ⚠️ Self-built versions are unsigned by default. Windows will show a security warning during installation.
+>
+> 💡 To enable code signing, add these secrets to your fork: `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 >
 > ⚠️ The "Release" workflow is for the author only (requires private repo access). Fork users should use "Build (Fork)" workflow instead.
 
