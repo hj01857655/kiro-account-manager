@@ -113,6 +113,19 @@
 3. Login with Google, GitHub, or BuilderId
 4. Manage your Kiro accounts with ease!
 
+## 🔨 Build from Source (Fork Users)
+
+If you want to build the application yourself:
+
+1. **Fork** this repository to your account
+2. Go to **Actions** tab and enable workflows
+3. Click **"Build (Fork)"** workflow on the left
+4. Click **"Run workflow"** button to start building
+5. Wait ~15 minutes for the build to complete
+6. Download artifacts from the completed workflow run
+
+> ⚠️ Self-built versions are unsigned. Windows will show a security warning during installation.
+
 ## 💬 Feedback
 
 - 🐛 [Submit Issue](https://github.com/hj01857655/kiro-account-manager/issues)
