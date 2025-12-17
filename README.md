@@ -125,6 +125,22 @@ If you want to build the application yourself:
 6. Download artifacts from the completed workflow run
 
 > ⚠️ Self-built versions are unsigned. Windows will show a security warning during installation.
+>
+> ⚠️ The "Release" workflow is for the author only (requires private repo access). Fork users should use "Build (Fork)" workflow instead.
+
+## ❓ FAQ
+
+**Q: Login failed?**
+A: Check your network connection, try using a proxy or switch login method.
+
+**Q: Token expired?**
+A: Click the refresh button, or enable auto-refresh feature.
+
+**Q: How to backup accounts?**
+A: Use the export feature to save account data as JSON file.
+
+**Q: Failed to reset system machine code?**
+A: Windows requires admin privileges to modify registry. Right-click the app and select "Run as administrator".
 
 ## 💬 Feedback
 
