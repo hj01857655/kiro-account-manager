@@ -90,11 +90,16 @@ pub fn try_import_from_normal_mode() -> Result<bool, String> {
     
     // 如果便携数据目录已存在且有内容，跳过导入
     if portable_data_dir.exists() {
-        let has_files = std::fs::read_dir(&portable_data_dir)
-            .map(|mut d| d.next().is_some())
-            .unwrap_or(false);
-        if has_files {
-            return Ok(false);
+        match std::fs::read_dir(&portable_data_dir) {
+            Ok(mut entries) => {
+                if entries.next().is_some() {
+                    return Ok(false);
+                }
+            }
+            Err(e) => {
+                // 无法读取目录(权限等问题)，返回错误而不是继续导入
+                return Err(format!("无法读取便携数据目录 ({}): {}", portable_data_dir.display(), e));
+            }
         }
     }
     
