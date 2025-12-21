@@ -18,7 +18,10 @@ struct PortableState {
 impl PortableState {
     fn init() -> Self {
         // current_exe() 在 Windows/macOS 桌面应用中几乎不会失败
-        // 回退到 "." 是防御性编程，但会打印警告
+        // 注意：这里选择回退到 "." 而非 panic，原因：
+        // 1. 这是 GUI 应用，panic 会导致程序闪退，用户看不到任何提示
+        // 2. 回退到 "." 至少程序能启动，用户可正常使用非便携模式
+        // 3. 已打印警告信息，可通过控制台排查问题
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
