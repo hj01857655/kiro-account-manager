@@ -348,9 +348,9 @@ function AccountDetailModal({ account, onClose }) {
           {/* Footer */}
           <div className={`flex justify-between items-center px-6 py-4 ${colors.card} border-t ${colors.cardBorder}`}>
             <div className={`text-xs ${colors.textMuted}`}>
-              {account.status === '正常' || account.status === '有效' 
+              {account.status === '正常' || account.status === '有效' || account.status === 'active'
                 ? <span className="flex items-center gap-1 text-green-500"><Shield size={12} />{t('detail.accountNormal')}</span> 
-                : account.status === '封禁' || account.status === '已封禁'
+                : account.status === '封禁' || account.status === '已封禁' || account.status === 'banned'
                   ? <span className="flex items-center gap-1 text-red-500"><Shield size={12} />{t('detail.accountBanned')}</span>
                   : <span className="flex items-center gap-1 text-orange-500"><Shield size={12} />{account.status}</span>}
             </div>

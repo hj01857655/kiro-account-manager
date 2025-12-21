@@ -16,7 +16,7 @@ pub struct SteeringFile {
 pub struct SteeringManager;
 
 impl SteeringManager {
-    /// 获取 steering 目录路径
+    /// 获取 steering 目录路径（始终使用系统路径，因为 Kiro IDE 从这里读取）
     pub fn steering_dir() -> Option<PathBuf> {
         dirs::home_dir().map(|h| h.join(".kiro").join("steering"))
     }

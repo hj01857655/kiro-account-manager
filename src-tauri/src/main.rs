@@ -11,6 +11,7 @@ mod deep_link_handler;
 mod kiro;
 mod kiro_auth_client;
 mod mcp;
+mod portable;
 mod powers;
 mod process;
 mod providers;
@@ -36,6 +37,7 @@ use commands::auth_cmd::*;
 use commands::kiro_settings_cmd::*;
 use commands::machine_guid_cmd::*;
 use commands::mcp_cmd::*;
+use commands::portable_cmd::*;
 use commands::powers_cmd::*;
 use commands::proxy_cmd::*;
 use commands::sso_import_cmd::*;
@@ -48,6 +50,19 @@ use kiro::{
 use process::{close_kiro_ide, is_kiro_ide_running, start_kiro_ide};
 
 fn main() {
+    // 初始化便携模式：确保数据目录存在，并尝试从普通模式导入配置
+    if let Err(e) = portable::ensure_data_dir() {
+        eprintln!("[Portable] 创建数据目录失败: {}", e);
+    }
+    if portable::is_portable() {
+        println!("[Portable] 便携模式已启用，数据目录: {:?}", portable::get_data_dir());
+        match portable::try_import_from_normal_mode() {
+            Ok(true) => println!("[Portable] 已从普通模式导入配置"),
+            Ok(false) => {}
+            Err(e) => eprintln!("[Portable] 导入配置失败: {}", e),
+        }
+    }
+    
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
@@ -165,7 +180,9 @@ fn main() {
             get_steering_file,
             save_steering_file,
             delete_steering_file,
-            create_steering_file
+            create_steering_file,
+            // 便携模式命令
+            get_portable_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

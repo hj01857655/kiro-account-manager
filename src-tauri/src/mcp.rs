@@ -59,7 +59,7 @@ pub struct PowerMcpServer {
 }
 
 impl McpConfig {
-    /// 获取 MCP 配置文件路径
+    /// 获取 MCP 配置文件路径（始终使用系统路径，因为 Kiro IDE 从这里读取）
     pub fn config_path() -> Option<PathBuf> {
         dirs::home_dir().map(|h| h.join(".kiro").join("settings").join("mcp.json"))
     }
