@@ -94,7 +94,7 @@ pub struct PowerSource {
 }
 
 impl PowersRegistry {
-    /// 获取 Powers 目录路径
+    /// 获取 Powers 目录路径（始终使用系统路径，因为 Kiro IDE 从这里读取）
     pub fn powers_dir() -> Option<PathBuf> {
         dirs::home_dir().map(|h| h.join(".kiro").join("powers"))
     }

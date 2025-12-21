@@ -187,6 +187,7 @@
   "accounts.used": "Used",
   "accounts.status": "Status",
   "accounts.active": "Active",
+  "accounts.banned": "Banned",
   "accounts.expired": "Expired",
   "accounts.expiringSoon": "Expiring Soon",
   "accounts.noAccounts": "No accounts",

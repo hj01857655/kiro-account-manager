@@ -70,7 +70,7 @@ pub struct KiroTelemetryInfo {
     pub service_machine_id: Option<String>,
 }
 
-/// 获取 Kiro 数据目录
+/// 获取 Kiro 数据目录（始终使用系统路径，因为这是 Kiro IDE 的数据）
 fn get_kiro_data_dir() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
     {
@@ -226,7 +226,7 @@ pub async fn switch_kiro_account(params: SwitchAccountParams) -> Result<SwitchAc
             let _ = reset_kiro_machine_id_inner();
         }
         
-        // 3. 替换 Token
+        // 3. 替换 Token（始终使用系统路径，因为 Kiro IDE 从这里读取）
         let home = std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
             .map_err(|_| "Cannot find home directory")?;

@@ -174,6 +174,7 @@
   "accounts.used": "已用",
   "accounts.status": "状态",
   "accounts.active": "正常",
+  "accounts.banned": "已封禁",
   "accounts.expired": "已过期",
   "accounts.expiringSoon": "即将过期",
   "accounts.noAccounts": "暂无账号",

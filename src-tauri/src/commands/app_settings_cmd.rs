@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use crate::portable;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -20,16 +21,7 @@ pub struct AppSettings {
 }
 
 fn get_app_settings_path() -> PathBuf {
-    let data_dir = dirs::data_dir()
-        .unwrap_or_else(|| {
-            let home = std::env::var("USERPROFILE")
-                .or_else(|_| std::env::var("HOME"))
-                .unwrap_or_else(|_| ".".to_string());
-            PathBuf::from(home)
-        });
-    data_dir
-        .join(".kiro-account-manager")
-        .join("app-settings.json")
+    portable::get_app_data_dir().join("app-settings.json")
 }
 
 fn get_app_settings_inner() -> Result<AppSettings, String> {

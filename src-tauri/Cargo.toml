@@ -1,6 +1,6 @@
 [package]
 name = "kiro-account-manager"
-version = "1.5.1"
+version = "1.5.5"
 description = "Kiro Account Manager"
 authors = ["you"]
 license = ""
