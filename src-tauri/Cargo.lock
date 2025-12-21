@@ -2143,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "kiro-account-manager"
-version = "1.5.1"
+version = "1.5.5"
 dependencies = [
  "async-trait",
  "base64 0.22.1",

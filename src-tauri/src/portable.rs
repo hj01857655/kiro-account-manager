@@ -17,10 +17,15 @@ struct PortableState {
 
 impl PortableState {
     fn init() -> Self {
+        // current_exe() 在 Windows/macOS 桌面应用中几乎不会失败
+        // 回退到 "." 是防御性编程，但会打印警告
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."));
+            .unwrap_or_else(|| {
+                eprintln!("[Portable] 警告: 无法获取可执行文件路径，回退到当前目录");
+                PathBuf::from(".")
+            });
         
         let portable_marker = exe_dir.join(".portable");
         let is_portable = portable_marker.exists();
@@ -37,10 +42,12 @@ impl PortableState {
 
 /// 获取默认数据目录（非便携模式）
 fn get_default_data_dir() -> PathBuf {
+    // 优先使用 dirs::data_dir()，失败时尝试环境变量
+    // 如果都失败则 panic，因为静默回退到 "." 可能导致数据丢失
     dirs::data_dir().unwrap_or_else(|| {
         let home = std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
-            .unwrap_or_else(|_| ".".to_string());
+            .expect("无法确定用户数据目录：dirs::data_dir() 失败且 USERPROFILE/HOME 环境变量均未设置");
         PathBuf::from(home)
     })
 }
@@ -101,9 +108,13 @@ pub fn try_import_from_normal_mode() -> Result<bool, String> {
     
     // 创建便携数据目录
     std::fs::create_dir_all(&portable_data_dir)
-        .map_err(|e| format!("创建便携数据目录失败: {}", e))?;
+        .map_err(|e| format!("创建便携数据目录失败 ({}): {}", portable_data_dir.display(), e))?;
     
     // 复制配置文件
+    // 注意：这里不使用原子事务（临时目录+重命名），原因：
+    // 1. 只复制两个小配置文件，部分失败概率极低
+    // 2. 即使失败，用户可手动删除 data 目录重试
+    // 3. 添加复杂事务机制会增加代码复杂度，收益不大
     let files_to_copy = ["accounts.json", "app-settings.json"];
     let mut copied = false;
     
@@ -112,7 +123,7 @@ pub fn try_import_from_normal_mode() -> Result<bool, String> {
         let dst = portable_data_dir.join(file);
         if src.exists() {
             std::fs::copy(&src, &dst)
-                .map_err(|e| format!("复制 {} 失败: {}", file, e))?;
+                .map_err(|e| format!("复制 {} 失败 ({} -> {}): {}", file, src.display(), dst.display(), e))?;
             copied = true;
         }
     }
@@ -124,5 +135,5 @@ pub fn try_import_from_normal_mode() -> Result<bool, String> {
 pub fn ensure_data_dir() -> Result<(), String> {
     let dir = get_app_data_dir();
     std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("创建数据目录失败: {}", e))
+        .map_err(|e| format!("创建数据目录失败 ({}): {}", dir.display(), e))
 }
