@@ -156,6 +156,15 @@ This software is for learning and communication purposes only. Do not use for co
 
 [GPL-3.0](LICENSE) - Modifications must be open-sourced. Commercial use is prohibited.
 
+## 💖 Sponsor / 赞助
+
+If this project helps you, consider buying me a coffee ☕
+
+<p align="center">
+  <img src="src/assets/donate/wechat.jpg" alt="WeChat" width="200">
+  <img src="src/assets/donate/alipay.jpg" alt="Alipay" width="200">
+</p>
+
 ---
 
 <p align="center">Made with ❤️ by hj01857655</p>
