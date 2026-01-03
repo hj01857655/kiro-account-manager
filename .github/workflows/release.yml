@@ -73,3 +73,33 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+  # 生成 deb 专用的 latest-deb.json
+  generate-deb-json:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download latest.json
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          curl -L -o latest.json "https://github.com/hj01857655/kiro-account-manager/releases/download/${VERSION}/latest.json"
+          cat latest.json
+
+      - name: Generate latest-deb.json
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          # 读取 latest.json 并修改 linux-x86_64 平台的 URL 为 deb
+          jq --arg ver "$VERSION" '
+            .platforms["linux-x86_64"].url = "https://github.com/hj01857655/kiro-account-manager/releases/download/\($ver)/Kiro.Account.Manager_\($ver | ltrimstr("v"))_amd64.deb" |
+            .platforms["linux-x86_64"].signature = (.platforms["linux-x86_64"].signature // "")
+          ' latest.json > latest-deb.json
+          cat latest-deb.json
+
+      - name: Upload latest-deb.json to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          gh release upload "$VERSION" latest-deb.json --clobber -R hj01857655/kiro-account-manager
