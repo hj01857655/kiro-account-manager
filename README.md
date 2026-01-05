@@ -28,11 +28,9 @@
 
 ### 🔐 账号登录
 - **Desktop OAuth** - 桌面端授权，支持 Google/GitHub/BuilderId
-- **Web Portal OAuth** - 网页端授权，WebView 窗口内完成
-- 两种方式互补，确保登录成功率
 
 ### 📊 账号展示
-- 卡片网格布局，一目了然
+- 🆕 卡片/列表双视图切换
 - 配额进度条（主配额/试用/奖励）
 - 订阅类型标识（Free/PRO/PRO+）
 - Token 过期倒计时
@@ -44,20 +42,39 @@
 - 切换进度实时显示
 
 ### 📦 批量操作
-- 批量刷新 / 批量删除
+- 🆕 批量刷新 / 批量删除 / 批量打标签
 - JSON 导入导出（Social / IdC 格式）
 - SSO Token 批量导入
 - 关键词搜索过滤
+
+### 🏷️ 标签管理 🆕
+- 自定义标签（名称/颜色）
+- 批量设置标签
+- 按标签筛选账号
+
+### 🔍 高级筛选与排序 🆕
+- 按订阅类型筛选（Free/PRO/PRO+）
+- 按状态筛选（正常/封禁）
+- 按使用率/添加时间/试用到期排序
+- 三态排序（降序→升序→取消）
 
 ### 🔌 Kiro 配置
 - **MCP 服务器** - 增删改查、启用/禁用
 - **Steering 规则** - 查看、编辑
 
+### ⚡ KiroGate
+- 内置 OpenAI 兼容 API 代理服务
+- 独立 Token 管理
+- 支持多种 AI 客户端接入
+
 ### ⚙️ 系统设置
 - 四种主题（浅色/深色/紫色/绿色）
 - AI 模型选择与锁定
+- 🆕 代码库索引开关
+- 🆕 信任所有命令开关
 - Token 自动刷新（可配置间隔）
 - 切号自动重置机器 ID
+- 🆕 隐私模式（隐藏敏感信息）
 
 ### 🌐 浏览器与代理
 - 自定义浏览器 / 自动检测
@@ -65,8 +82,8 @@
 - HTTP 代理配置 / 自动检测
 
 ### 🔑 机器码管理
-- 查看 / 备份 / 恢复 / 重置
-- 支持 Windows / macOS
+- 查看 / 复制 / 重置
+- 支持 Windows / macOS / Linux
 
 ### 🖥️ IDE 集成
 - 检测 Kiro IDE 运行状态
@@ -75,31 +92,41 @@
 
 ## 📸 截图
 
-| 首页 | 账号管理 |
-|:---:|:---:|
-| ![首页](screenshots/首页.png) | ![账号管理](screenshots/账号管理.png) |
-
-| 登录 | 设置 |
-|:---:|:---:|
-| ![登录页](screenshots/登录页.png) | ![设置](screenshots/设置.png) |
+![首页](screenshots/首页.webp)
+![账号管理](screenshots/账号管理.webp)
+![桌面授权](screenshots/桌面授权.webp)
+![规则管理](screenshots/规则管理.webp)
+![设置](screenshots/设置.png)
+![关于](screenshots/关于.png)
 
 ## 📥 下载
 
-� **[点击这里下载最新版本](https://github.com/hj01857655/kiro-account-manager/releases/latest)**
+🌐 **[官网](https://vercel-lajuwps1g-hj01857655s-projects-fa88a766.vercel.app)** | 👉 **[GitHub Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest)**
 
 - Windows `.msi` - 推荐，双击安装
-- Windows `.exe` - NSIS 安装程序
 - macOS `.dmg` - 拖入 Applications
+- Linux `.deb` / `.AppImage` - Debian/Ubuntu 或通用
 
 ## 💻 系统要求
 
 - **Windows**: Windows 10/11 (64-bit)，需要 WebView2 (Win11 已内置)
 - **macOS**: macOS 10.15+ (Intel/Apple Silicon 通用)
+- **Linux**: x86_64，需要 WebKitGTK
 
 ## � 交流反求馈
 
 - 🐛 [提交 Issue](https://github.com/hj01857655/kiro-account-manager/issues)
 - 💬 QQ 群：[1020204332](https://qm.qq.com/q/Vh7mUrNpa8)
+
+## ❓ 常见问题
+
+**Q: 切换账号时提示 "bearer token invalid"**
+
+A: Token 过期了，切换前先点「刷新」按钮。这是 Kiro 服务端返回的错误，不是管理器的问题。
+
+**Q: 刷新 Token 失败**
+
+A: 网络超时，手动再刷新一次或换个网络试试。
 
 ## �  源码说明
 
@@ -134,11 +161,9 @@
 
 ### 🔐 Account Login
 - **Desktop OAuth** - Desktop authorization for Google/GitHub/BuilderId
-- **Web Portal OAuth** - Web authorization in WebView window
-- Two methods complement each other for reliable login
 
 ### 📊 Account Display
-- Card grid layout, clear at a glance
+- 🆕 Card/List dual view toggle
 - Quota progress bar (main/trial/bonus)
 - Subscription type badge (Free/PRO/PRO+)
 - Token expiration countdown
@@ -150,20 +175,39 @@
 - Real-time switch progress
 
 ### 📦 Batch Operations
-- Batch refresh / batch delete
+- 🆕 Batch refresh / batch delete / batch tagging
 - JSON import/export (Social & IdC formats)
 - SSO Token batch import
 - Keyword search filter
 
-### � Kiro Config
+### 🏷️ Tag Management 🆕
+- Custom tags (name/color)
+- Batch tag assignment
+- Filter accounts by tag
+
+### 🔍 Advanced Filter & Sort 🆕
+- Filter by subscription (Free/PRO/PRO+)
+- Filter by status (normal/banned)
+- Sort by usage/added time/trial expiry
+- Tri-state sorting (desc→asc→cancel)
+
+### 🔌 Kiro Config
 - **MCP Servers** - CRUD, enable/disable
 - **Steering Rules** - View, edit
+
+### ⚡ KiroGate
+- Built-in OpenAI compatible API proxy
+- Independent token management
+- Support multiple AI clients
 
 ### ⚙️ System Settings
 - Four themes (light/dark/purple/green)
 - AI model selection & lock
+- 🆕 Codebase indexing toggle
+- 🆕 Trust all commands toggle
 - Auto token refresh (configurable interval)
 - Auto reset machine ID on switch
+- 🆕 Privacy mode (hide sensitive info)
 
 ### 🌐 Browser & Proxy
 - Custom browser / auto detect
@@ -171,8 +215,8 @@
 - HTTP proxy config / auto detect
 
 ### 🔑 Machine Code
-- View / backup / restore / reset
-- Windows / macOS support
+- View / copy / reset
+- Windows / macOS / Linux support
 
 ### 🖥️ IDE Integration
 - Detect Kiro IDE running status
@@ -181,31 +225,41 @@
 
 ## 📸 Screenshots
 
-| Home | Account Management |
-|:---:|:---:|
-| ![Home](screenshots/首页.png) | ![Accounts](screenshots/账号管理.png) |
-
-| Login | Settings |
-|:---:|:---:|
-| ![Login](screenshots/登录页.png) | ![Settings](screenshots/设置.png) |
+![Home](screenshots/首页.webp)
+![Accounts](screenshots/账号管理.webp)
+![Desktop Auth](screenshots/桌面授权.webp)
+![Rules](screenshots/规则管理.webp)
+![Settings](screenshots/设置.png)
+![About](screenshots/关于.png)
 
 ## 📥 Download
 
-👉 **[Download Latest Version](https://github.com/hj01857655/kiro-account-manager/releases/latest)**
+🌐 **[Website](https://vercel-lajuwps1g-hj01857655s-projects-fa88a766.vercel.app)** | 👉 **[GitHub Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest)**
 
 - Windows `.msi` - Recommended, double-click to install
-- Windows `.exe` - NSIS installer
 - macOS `.dmg` - Drag to Applications
+- Linux `.deb` / `.AppImage` - Debian/Ubuntu or universal
 
 ## 💻 System Requirements
 
 - **Windows**: Windows 10/11 (64-bit), WebView2 required (built-in on Win11)
 - **macOS**: macOS 10.15+ (Intel/Apple Silicon universal)
+- **Linux**: x86_64, WebKitGTK required
 
 ## 💬 Feedback
 
 - 🐛 [Submit Issue](https://github.com/hj01857655/kiro-account-manager/issues)
 - 💬 QQ Group: [1020204332](https://qm.qq.com/q/Vh7mUrNpa8)
+
+## ❓ FAQ
+
+**Q: "bearer token invalid" error when switching accounts**
+
+A: Token expired. Click "Refresh" button before switching. This error comes from Kiro server, not the manager.
+
+**Q: Token refresh failed**
+
+A: Network issue or account restricted by Kiro. Try re-login.
 
 ## 🚫 Source Code Notice
 
@@ -236,11 +290,9 @@ If this project helps you, consider buying me a coffee ☕
 
 ### 🔐 Вход в аккаунт
 - **Desktop OAuth** - Авторизация на рабочем столе для Google/GitHub/BuilderId
-- **Web Portal OAuth** - Веб-авторизация в окне WebView
-- Два метода дополняют друг друга для надёжного входа
 
 ### 📊 Отображение аккаунтов
-- Карточный интерфейс, всё наглядно
+- Переключение между карточками и списком
 - Прогресс-бар квот (основные/пробные/бонусные)
 - Значок типа подписки (Free/PRO/PRO+)
 - Обратный отсчёт истечения токена
@@ -252,20 +304,39 @@ If this project helps you, consider buying me a coffee ☕
 - Отображение прогресса в реальном времени
 
 ### 📦 Пакетные операции
-- Массовое обновление / удаление
+- Массовое обновление / удаление / присвоение тегов
 - Импорт/экспорт JSON (Social / IdC форматы)
 - Массовый импорт SSO Token
 - Поиск по ключевым словам
+
+### 🏷️ Управление тегами
+- Пользовательские теги (название/цвет)
+- Массовое присвоение тегов
+- Фильтрация аккаунтов по тегам
+
+### 🔍 Расширенная фильтрация и сортировка
+- Фильтр по подписке (Free/PRO/PRO+)
+- Фильтр по статусу (активен/заблокирован)
+- Сортировка по использованию/дате добавления/истечению пробного периода
+- Трёхрежимная сортировка (убыв→возр→отмена)
 
 ### 🔌 Конфигурация Kiro
 - **MCP серверы** - CRUD, включение/отключение
 - **Steering правила** - Просмотр, редактирование
 
+### ⚡ KiroGate
+- Встроенный OpenAI-совместимый API прокси
+- Независимое управление токенами
+- Поддержка различных AI клиентов
+
 ### ⚙️ Системные настройки
 - Четыре темы (светлая/тёмная/фиолетовая/зелёная)
 - Выбор и блокировка AI модели
+- 🆕 Переключатель индексации кодовой базы
+- 🆕 Переключатель доверия всем командам
 - Автообновление токенов (настраиваемый интервал)
 - Автосброс Machine ID при переключении
+- 🆕 Режим конфиденциальности (скрытие данных)
 
 ### 🌐 Браузер и прокси
 - Пользовательский браузер / автоопределение
@@ -273,8 +344,8 @@ If this project helps you, consider buying me a coffee ☕
 - Настройка HTTP прокси / автоопределение
 
 ### 🔑 Управление Machine Code
-- Просмотр / резервное копирование / восстановление / сброс
-- Поддержка Windows / macOS
+- Просмотр / копирование / сброс
+- Поддержка Windows / macOS / Linux
 
 ### 🖥️ Интеграция с IDE
 - Определение статуса работы Kiro IDE
@@ -283,31 +354,41 @@ If this project helps you, consider buying me a coffee ☕
 
 ## 📸 Скриншоты
 
-| Главная | Управление аккаунтами |
-|:---:|:---:|
-| ![Главная](screenshots/首页.png) | ![Аккаунты](screenshots/账号管理.png) |
-
-| Вход | Настройки |
-|:---:|:---:|
-| ![Вход](screenshots/登录页.png) | ![Настройки](screenshots/设置.png) |
+![Главная](screenshots/首页.webp)
+![Аккаунты](screenshots/账号管理.webp)
+![Авторизация](screenshots/桌面授权.webp)
+![Правила](screenshots/规则管理.webp)
+![Настройки](screenshots/设置.png)
+![О программе](screenshots/关于.png)
 
 ## 📥 Скачать
 
-👉 **[Скачать последнюю версию](https://github.com/hj01857655/kiro-account-manager/releases/latest)**
+🌐 **[Сайт](https://vercel-lajuwps1g-hj01857655s-projects-fa88a766.vercel.app)** | 👉 **[GitHub Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest)**
 
 - Windows `.msi` - Рекомендуется, двойной клик для установки
-- Windows `.exe` - NSIS установщик
 - macOS `.dmg` - Перетащите в Applications
+- Linux `.deb` / `.AppImage` - Debian/Ubuntu или универсальный
 
 ## 💻 Системные требования
 
 - **Windows**: Windows 10/11 (64-bit), требуется WebView2 (встроен в Win11)
 - **macOS**: macOS 10.15+ (универсальный для Intel/Apple Silicon)
+- **Linux**: x86_64, требуется WebKitGTK
 
 ## 💬 Обратная связь
 
 - 🐛 [Создать Issue](https://github.com/hj01857655/kiro-account-manager/issues)
-- 💬 Telegram: [@kiro520](https://t.me/kiro520)
+- 🛒 [Магазин](https://pay.ldxp.cn/shop/U60F42WD)
+
+## ❓ Частые вопросы
+
+**Q: Ошибка "bearer token invalid" при переключении аккаунта**
+
+A: Токен истёк. Нажмите «Обновить» перед переключением. Это ошибка сервера Kiro, а не менеджера.
+
+**Q: Не удалось обновить токен**
+
+A: Проблема сети или аккаунт ограничен Kiro. Попробуйте войти заново.
 
 ## 🚫 Примечание об исходном коде
 
