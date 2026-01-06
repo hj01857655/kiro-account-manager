@@ -17,6 +17,12 @@
   <b>🚀 智能管理 Kiro IDE 账号，一键切换，配额监控</b>
 </p>
 
+<p align="center">
+  🌐 <b><a href="https://vercel-api-lemon-five.vercel.app">官方网站</a></b> | 
+  📥 <b><a href="https://github.com/hj01857655/kiro-account-manager/releases/latest">下载最新版本</a></b> | 
+  💬 <b><a href="https://qm.qq.com/q/Vh7mUrNpa8">加入 QQ 群</a></b>
+</p>
+
 > **📢 语言支持**：从当前版本开始，本项目**仅支持简体中文界面**，已移除英文和俄语翻译。这样可以简化维护，专注于功能开发。
 
 ---
