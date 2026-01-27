@@ -185,7 +185,7 @@
 ## 💬 交流反馈
 
 - 🐛 [提交 Issue](https://github.com/hj01857655/kiro-account-manager/issues)
-- 💬 QQ 群：[1020204332](https://qm.qq.com/q/Vh7mUrNpa8)
+- 💬 QQ 群：[1020204332](https://qm.qq.com/q/Vh7mUrNpa8)（⚠️ 仅限 QQ 等级 90 级及以上）
 
 ---
 
