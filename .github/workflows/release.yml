@@ -74,11 +74,23 @@ jobs:
           echo "" >> release_notes.md
           
           if [ -n "$PREVIOUS_TAG" ]; then
-            # 获取两个 tag 之间的 commits
-            git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s" --no-merges >> release_notes.md
+            # 获取两个 tag 之间的 commits，过滤掉 docs/ci/chore/refactor 等内部开发相关的 commit
+            git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s" --no-merges | \
+              grep -v "^- docs:" | \
+              grep -v "^- ci:" | \
+              grep -v "^- chore:" | \
+              grep -v "^- refactor:" | \
+              grep -v "^- style:" | \
+              grep -v "^- test:" >> release_notes.md
           else
             # 如果没有上一个 tag，获取最近 20 个 commits
-            git log -20 --pretty=format:"- %s" --no-merges >> release_notes.md
+            git log -20 --pretty=format:"- %s" --no-merges | \
+              grep -v "^- docs:" | \
+              grep -v "^- ci:" | \
+              grep -v "^- chore:" | \
+              grep -v "^- refactor:" | \
+              grep -v "^- style:" | \
+              grep -v "^- test:" >> release_notes.md
           fi
           
           echo "" >> release_notes.md
