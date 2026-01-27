@@ -32,6 +32,7 @@ jobs:
           repository: ${{ secrets.PRIVATE_REPO }}
           ref: ${{ github.ref_name }}
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          fetch-depth: 0  # 获取完整 git 历史，用于生成 Release Notes
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
