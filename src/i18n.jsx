@@ -6,12 +6,14 @@ import { initReactI18next, I18nextProvider, useTranslation } from 'react-i18next
 import zhCN from '../locales/zh-CN.json'
 import enUS from '../locales/en-US.json'
 import ruRU from '../locales/ru-RU.json'
+import trTR from '../locales/tr-TR.json'
 
 // 支持的语言
 export const locales = {
   'zh-CN': '简体中文',
   'en-US': 'English',
   'ru-RU': 'Русский',
+  'tr-TR': 'Türkçe',
 }
 
 i18n
@@ -19,13 +21,14 @@ i18n
   .init({
     lng: localStorage.getItem('locale') || 'zh-CN',
     fallbackLng: 'zh-CN',
-    supportedLngs: ['zh-CN', 'en-US', 'ru-RU'],
+    supportedLngs: ['zh-CN', 'en-US', 'ru-RU', 'tr-TR'],
     
     // 从 JSON 文件加载翻译
     resources: {
       'zh-CN': { translation: zhCN },
       'en-US': { translation: enUS },
       'ru-RU': { translation: ruRU },
+      'tr-TR': { translation: trTR },
     },
     
     interpolation: {
