@@ -20,7 +20,7 @@
 <p align="center">
   🌐 <b><a href="https://kiro-website-six.vercel.app">官方网站</a></b> | 
   📥 <b><a href="#-下载">立即下载</a></b> | 
-  💬 <b><a href="https://qm.qq.com/q/Vh7mUrNpa8">加入 QQ 群</a></b>
+  💬 <b><a href="https://qm.qq.com/q/xi0AglEqGs">加入 QQ 2群</a></b>
 </p>
 
 > **📢 语言支持**：从当前版本开始，本项目**仅支持简体中文界面**，已移除英文和俄语翻译。这样可以简化维护，专注于功能开发。
@@ -88,6 +88,8 @@
 - JSON 格式（文件导入 / 文本粘贴）
 - 🆕 从 Kiro IDE 导入（自动检测已登录账号）
 - 🆕 从 kiro-cli 导入（读取 SQLite 数据库）
+  - macOS / Linux：可直接安装 `kiro-cli`（`curl -fsSL https://cli.kiro.dev/install | bash`）
+  - Windows：需通过 WSL 使用 `kiro-cli`，数据库路径可填 `\\wsl$\<distro>\home\<user>\.local\share\kiro-cli\data.sqlite3`
 - 导出为 JSON 文件（支持批量选择）
 
 **批量管理**
@@ -122,8 +124,12 @@
 
 ### 🔌 Kiro 配置
 
-- **MCP 服务器** - 增删改查、启用 / 禁用
-- **Steering 规则** - 查看、编辑
+- **MCP 服务器** - 增删改查、启用 / 禁用、autoApprove 通配符支持
+- **Steering 规则** - 4 种 inclusion 模式（always / auto / fileMatch / manual）、name / description 元数据
+- **Skills 管理** - 浏览、创建、编辑、删除 SKILL.md（name + description frontmatter）
+- **Custom Agents** - 完整 v0.9.2 schema（name / description / tools / model / includeMcpJson / includePowers）
+- **Powers 管理** - 浏览已安装 Powers、查看 POWER.md / MCP 服务器 / Steering 文件、卸载
+- 🆕 **项目级支持** - Skills / Steering / Agents 同时支持用户级（~/.kiro/）和项目级（\<project\>/.kiro/）
 
 ### ⚙️ 系统设置
 
@@ -185,7 +191,8 @@
 ## 💬 交流反馈
 
 - 🐛 [提交 Issue](https://github.com/hj01857655/kiro-account-manager/issues)
-- 💬 QQ 群：[1020204332](https://qm.qq.com/q/Vh7mUrNpa8)（⚠️ 仅限 QQ 等级 90 级及以上）
+- 💬 QQ 1群：[1020204332](https://qm.qq.com/q/Vh7mUrNpa8)（已满）
+- 💬 QQ 2群：[1080919449](https://qm.qq.com/q/xi0AglEqGs)
 
 ---
 
