@@ -130,12 +130,52 @@
 
 ### 🔌 Kiro 配置
 
-- **MCP 服务器** - 增删改查、启用 / 禁用、autoApprove 通配符支持
-- **Steering 规则** - 4 种 inclusion 模式（always / auto / fileMatch / manual）、name / description 元数据
-- **Skills 管理** - 浏览、创建、编辑、删除 SKILL.md（name + description frontmatter）
-- **Custom Agents** - 完整 v0.9.2 schema（name / description / tools / model / includeMcpJson / includePowers）
-- **Powers 管理** - 浏览已安装 Powers、查看 POWER.md / MCP 服务器 / Steering 文件、卸载
-- 🆕 **项目级支持** - Skills / Steering / Agents 同时支持用户级（~/.kiro/）和项目级（\<project\>/.kiro/）
+**MCP 服务器管理**
+- 增删改查 MCP 配置
+- 启用 / 禁用服务器
+- autoApprove 通配符支持（`*` / `tool_*` / 正则）
+- 环境变量配置
+- 实时连接状态检测
+
+**Steering 规则管理**
+- 4 种 inclusion 模式：
+  - `always` - 始终包含
+  - `auto` - 自动包含（关键词匹配）
+  - `fileMatch` - 文件匹配时包含
+  - `manual` - 手动引用（`#steering-name`）
+- frontmatter 元数据（name / description / keywords）
+- 文件引用支持（`#[[file:path]]`）
+- Markdown 语法高亮编辑
+
+**Skills 管理**（Kiro v0.9.2+）
+- 浏览用户级和项目级 Skills
+- 创建 / 编辑 / 删除 SKILL.md
+- frontmatter 支持（name / description）
+- 快速激活 / 停用
+
+**Custom Agents 管理**（Kiro v0.9.2+）
+- 完整 v0.9.2 schema 支持：
+  - `name` / `description` - 基础信息
+  - `tools` - 工具权限（read / write / shell / web / spec / mcp / *）
+  - `model` - 指定 AI 模型
+  - `includeMcpJson` - 包含 MCP 配置
+  - `includePowers` - 包含 Powers
+- 用户级（~/.kiro/agents/）和项目级（.kiro/agents/）
+- JSON 编辑器（语法高亮 + 验证）
+
+**Powers 管理**（Kiro v0.9.2+）
+- 浏览已安装的 Powers
+- 查看 POWER.md 文档
+- 查看包含的 MCP 服务器配置
+- 查看 Steering 文件列表
+- 一键卸载 Power
+
+**项目级配置支持**
+- Skills / Steering / Custom Agents 同时支持：
+  - 用户级：`~/.kiro/`（全局生效）
+  - 项目级：`<project>/.kiro/`（仅当前项目）
+- 自动检测并切换配置路径
+- 项目级配置优先级更高
 
 ### ⚙️ 系统设置
 
