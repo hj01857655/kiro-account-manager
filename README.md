@@ -20,7 +20,7 @@
 <p align="center">
   🌐 <b><a href="https://kiro-website-six.vercel.app">官方网站</a></b> | 
   📥 <b><a href="#-下载">立即下载</a></b> | 
-  💬 <b><a href="https://qm.qq.com/q/xi0AglEqGs">加入 QQ 2群</a></b>
+  💬 <b><a href="https://qm.qq.com/q/3KYs28eAKQ">加入 QQ 3群</a></b>
 </p>
 
 > **📢 语言支持**：从当前版本开始，本项目**仅支持简体中文界面**，已移除英文和俄语翻译。这样可以简化维护，专注于功能开发。
@@ -228,7 +228,7 @@
 
 - 🐛 [提交 Issue](https://github.com/hj01857655/kiro-account-manager/issues)
 - 💬 QQ 1群：[1020204332](https://qm.qq.com/q/Vh7mUrNpa8)（已满）
-- 💬 QQ 2群：[1080919449](https://qm.qq.com/q/xi0AglEqGs)
+- 💬 QQ 3群：[1076442194](https://qm.qq.com/q/3KYs28eAKQ)
 
 ---
 
