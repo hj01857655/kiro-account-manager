@@ -9,7 +9,8 @@
   <img src="https://img.shields.io/github/v/release/hj01857655/kiro-account-manager?label=Version&color=green" alt="Version">
   <img src="https://img.shields.io/github/downloads/hj01857655/kiro-account-manager/total?color=brightgreen" alt="Downloads">
   <img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-orange" alt="License">
-  <img src="https://img.shields.io/badge/QQ群-1080919449-12B7F5?logo=tencentqq" alt="QQ群">
+  <img src="https://img.shields.io/badge/QQ群1-1020204332-12B7F5?logo=tencentqq" alt="QQ群1">
+  <img src="https://img.shields.io/badge/QQ群2-1080919449-12B7F5?logo=tencentqq" alt="QQ群2">
   <img src="https://img.shields.io/badge/语言-简体中文-red" alt="语言">
 </p>
 
