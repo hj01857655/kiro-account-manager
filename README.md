@@ -164,7 +164,7 @@
 - 快速激活 / 停用
 
 **Custom Agents 管理**（Kiro v0.9.2+）
-- 完整 v0.9.2 schema 支持：
+- 完整 v0.10.32 schema 支持：
   - `name` / `description` - 基础信息
   - `tools` - 工具权限（read / write / shell / web / spec / mcp / *）
   - `model` - 指定 AI 模型
@@ -179,6 +179,14 @@
 - 查看包含的 MCP 服务器配置
 - 查看 Steering 文件列表
 - 一键卸载 Power
+
+**版本变化速览（Kiro）**
+- **v0.9.2 引入**：Skills、Custom Agents（sub-agent 更名）、Powers registry-v2
+- **v0.10.x 增强（含 v0.10.32）**：
+  - Spec：Feature 双工作流（Requirements-First / Design-First）+ Bugfix 工作流（`bugfix.md -> design.md -> tasks.md`）
+  - Supervised hunk 级审查（逐块接受/拒绝/讨论）
+  - Task Hooks：Pre/Post Task Execution
+  - MCP：Prompts / Resource Templates / Elicitation
 
 **项目级配置支持**
 - Skills / Steering / Custom Agents 同时支持：
