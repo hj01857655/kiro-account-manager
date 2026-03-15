@@ -33,8 +33,14 @@
 
 ## Security & Configuration Tips
 - 不要提交密钥/Token；示例占位使用 `[REDACTED]`。Tauri 签名私钥仅在 CI secrets。
+- `.tauri-updater-key` / `.tauri-updater-password` 仅本地使用，严禁提交到仓库。
 - Kiro 数据文件默认位于 `~/.kiro/`，应用数据在 `~/.kiro-account-manager/`；调试时勿覆盖用户真实配置，先备份。
 - Kiro IDE 必须关闭后再触发切号/重置机器 ID；代理变更需重启 IDE 才生效。
+
+## Public Repo Sync
+- 开发以私有仓库 `dev` 为主；公开仓库默认分支为 `public`，旧版本分支为 `v1.5.1`。
+- 同步到公开仓库时，移除 `docs/` 等内部内容，但保留 `screenshots/`。
+- 公开仓库 Release 工作流直接从公开仓库构建，需在 GitHub Actions 配置 `TAURI_SIGNING_PRIVATE_KEY` 与 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
 
 ## Agent-Specific Notes
 - 遵循 UI 安全规则：暗色模式避免低对比度，统一输入占位符色，Select/MultiSelect 需显式 hover/选中样式；优先在主题层修复再到页面局部。
