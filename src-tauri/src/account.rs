@@ -214,7 +214,7 @@ impl Account {
 
     /// 判断账号是否可用（未封禁）
     pub fn is_available(&self) -> bool {
-        self.status != "banned"
+        !matches!(self.status.as_str(), "banned" | "封禁" | "已封禁" | "已过期")
     }
 }
 

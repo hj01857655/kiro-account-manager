@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useApp } from '../../../../hooks/useApp'
 import { useAppSettings } from '../../../../contexts/AppSettingsContext'
+import { applyMachineGuid, buildSwitchParams } from '../../../../utils/kiroSwitch'
 
 /**
  * 账号切换逻辑 hook
@@ -13,61 +14,6 @@ export function useSwitchAccount(onLocalTokenChange) {
   const { settings: appSettings } = useAppSettings()
   const [switchingId, setSwitchingId] = useState(null)
   const [switchDialog, setSwitchDialog] = useState(null)
-
-  // 处理机器码逻辑
-  const handleMachineGuid = useCallback(async (account, settings) => {
-    const autoChangeMachineId = settings.autoChangeMachineId !== false
-    const bindMachineIdToAccount = settings.bindMachineIdToAccount !== false
-    
-    if (!autoChangeMachineId) return
-    
-    try {
-      if (bindMachineIdToAccount) {
-        // 绑定模式：使用账号自带的 machineId，没有则生成新的并保存
-        let machineId = account.machineId
-        
-        if (!machineId) {
-          machineId = await invoke('generate_machine_guid')
-          await invoke('update_account', { id: account.id, machineId })
-        }
-        
-        await invoke('set_custom_machine_guid', { newGuid: machineId })
-      } else {
-        // 随机模式：每次生成新的机器码
-        const newMachineId = await invoke('generate_machine_guid')
-        await invoke('set_custom_machine_guid', { newGuid: newMachineId })
-      }
-    } catch (e) {
-      // 机器码操作失败不阻断切换流程
-    }
-  }, [])
-
-  // 构建切换参数
-  const buildSwitchParams = useCallback((account) => {
-    const isIdC = account.provider === 'BuilderId' || account.provider === 'Enterprise' || account.clientIdHash
-    const authMethod = isIdC ? 'IdC' : 'social'
-    
-    const params = {
-      accessToken: account.accessToken,
-      refreshToken: account.refreshToken,
-      provider: account.provider || 'Google',
-      authMethod
-    }
-    
-    if (isIdC) {
-      params.region = account.region || 'us-east-1'
-      params.clientId = account.clientId
-      params.clientSecret = account.clientSecret
-      // Enterprise 需要传递 startUrl
-      if (account.provider === 'Enterprise') {
-        params.startUrl = account.startUrl
-      }
-    } else {
-      params.profileArn = account.profileArn || 'arn:aws:codewhisperer:us-east-1:699475941385:profile/EHGA3GRVQMUK'
-    }
-    
-    return params
-  }, [])
 
   // 显示切换确认弹窗
   const handleSwitchAccount = useCallback((account) => {
@@ -94,10 +40,10 @@ export function useSwitchAccount(onLocalTokenChange) {
     try {
       // 先同步账号（刷新 token + 获取最新配额）
       const syncResult = await invoke('sync_account', { id: account.id })
-      const refreshedAccount = syncResult.account  // ✅ 修复：从 syncResult 中提取 account
+      let refreshedAccount = syncResult.account  // ✅ 修复：从 syncResult 中提取 account
       
       const settings = appSettings || {}
-      await handleMachineGuid(refreshedAccount, settings)
+      refreshedAccount = await applyMachineGuid(refreshedAccount, settings)
       
       const params = buildSwitchParams(refreshedAccount)
       await invoke('switch_kiro_account', { params })
@@ -154,7 +100,7 @@ export function useSwitchAccount(onLocalTokenChange) {
     } finally {
       setSwitchingId(null)
     }
-  }, [switchDialog, appSettings, handleMachineGuid, buildSwitchParams, onLocalTokenChange, t])
+  }, [switchDialog, appSettings, onLocalTokenChange, t])
 
   // 关闭弹窗
   const closeSwitchDialog = useCallback(() => setSwitchDialog(null), [])

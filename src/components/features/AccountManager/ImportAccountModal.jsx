@@ -6,6 +6,7 @@ import { useApp } from '../../../hooks/useApp'
 import { getThemeAccent } from '../KiroConfig/themeAccent'
 import { getConcurrency } from '../../../utils/concurrency'
 import { getAccountDisplayName } from '../../../utils/accountStats'
+import { isBannedStatus } from '../../../utils/accountStatus'
 import {
   DialogRoot,
   DialogContent,
@@ -269,7 +270,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
         }
 
         const account = result.account
-        if (account.status === 'banned') {
+        if (isBannedStatus(account.status)) {
           return { success: true, index: item._index + 1, email: getAccountDisplayName(account), isNew: result.isNew, banned: true }
         }
         return { success: true, index: item._index + 1, email: getAccountDisplayName(account), isNew: result.isNew }
@@ -344,7 +345,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
         }
 
         const acc = result.account
-        if (acc.status === 'banned') {
+        if (isBannedStatus(acc.status)) {
           return { success: true, email: acc.email, isNew: result.isNew, banned: true }
         }
         return { success: true, email: acc.email, isNew: result.isNew }

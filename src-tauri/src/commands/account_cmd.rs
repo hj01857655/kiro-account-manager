@@ -26,6 +26,7 @@ pub struct SyncAccountResult {
 pub struct UpdateAccountParams {
     pub id: String,
     pub label: Option<String>,
+    pub status: Option<String>,
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
     pub client_id: Option<String>,
@@ -808,6 +809,9 @@ pub fn update_account(
     if let Some(idx) = idx {
         if let Some(l) = params.label {
             store.accounts[idx].label = l;
+        }
+        if let Some(status) = params.status {
+            store.accounts[idx].status = status;
         }
         if let Some(at) = params.access_token {
             store.accounts[idx].access_token = Some(at);

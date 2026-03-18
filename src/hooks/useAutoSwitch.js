@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { getQuota, getUsed } from '../utils/accountStats'
+import { isBannedStatus } from '../utils/accountStatus'
+import { applyMachineGuid, buildSwitchParams } from '../utils/kiroSwitch'
 
 // 默认值
 const DEFAULT_THRESHOLD = 1 // 余额阈值
@@ -39,7 +41,7 @@ export function useAutoSwitch(appSettings, settingsLoading) {
       // 获取当前使用的账号（从本地 Kiro 凭证）
       let currentAccount = null
       try {
-        const localToken = await invoke('get_local_token')
+        const localToken = await invoke('get_kiro_local_token')
         if (localToken?.refreshToken) {
           currentAccount = accounts.find(acc => acc.refreshToken === localToken.refreshToken)
         }
@@ -60,9 +62,9 @@ export function useAutoSwitch(appSettings, settingsLoading) {
         if (errorMsg.includes('BANNED')) {
           // 更新账号状态为封禁
           try {
-            await invoke('update_account', { 
-              id: currentAccount.id, 
-              updates: { status: 'banned' } 
+            await invoke('update_account', {
+              id: currentAccount.id,
+              status: 'banned'
             })
             emit('accounts-updated')
           } catch (updateErr) {
@@ -88,7 +90,7 @@ export function useAutoSwitch(appSettings, settingsLoading) {
         // 排除当前账号
         if (acc.id === currentAccount.id) return false
         // 排除被封禁的账号
-        if (acc.status === 'banned' || acc.status === '封禁' || acc.status === '已封禁') return false
+        if (isBannedStatus(acc.status)) return false
         // 排除余额不足的账号
         const accQuota = getQuota(acc)
         const accUsed = getUsed(acc)
@@ -102,11 +104,9 @@ export function useAutoSwitch(appSettings, settingsLoading) {
       }
 
       // 执行切换
-      await invoke('switch_account', {
-        id: availableAccount.id,
-        resetMachineId: settings.autoChangeMachineId ?? false,
-        bindMachineIdToAccount: settings.bindMachineIdToAccount ?? true
-      })
+      const switchableAccount = await applyMachineGuid(availableAccount, settings)
+      const params = buildSwitchParams(switchableAccount)
+      await invoke('switch_kiro_account', { params })
 
       emit('accounts-updated')
       emit('account-switched', { email: availableAccount.email })

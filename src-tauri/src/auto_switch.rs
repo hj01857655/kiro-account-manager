@@ -3,6 +3,7 @@
 
 use crate::account::Account;
 use rand::seq::SliceRandom;
+use serde_json::Value;
 
 /// 换号策略枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -66,20 +67,16 @@ impl AccountSwitcher {
 
     /// 检查账号是否需要切换
     pub fn should_switch(&self, account: &Account) -> bool {
-        if account.status == "已封禁" || account.status == "已过期" {
+        if is_unavailable_status(&account.status) {
             return true;
         }
 
         // 从 usage_data 中解析配额信息
-        if let Some(ref data) = account.usage_data {
-            if let Some(usage) = data.get("usage") {
-                let current = usage.get("current").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                let limit = usage.get("limit").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                if limit > 0 {
-                    #[allow(clippy::cast_precision_loss)] // i64 → f64 转换用于百分比计算，精度损失可接受
-                    let usage_percent = (current as f64 / limit as f64) * 100.0;
-                    return usage_percent >= f64::from(self.threshold);
-                }
+        if let Some((current, limit)) = extract_usage_totals(account.usage_data.as_ref()) {
+            if limit > 0 {
+                #[allow(clippy::cast_precision_loss)] // i64 → f64 转换用于百分比计算，精度损失可接受
+                let usage_percent = (current as f64 / limit as f64) * 100.0;
+                return usage_percent >= f64::from(self.threshold);
             }
         }
 
@@ -110,16 +107,11 @@ impl AccountSwitcher {
                 // 选择剩余配额最多的账号
                 available.iter()
                     .max_by_key(|a| {
-                        // 从 usage_data 中解析剩余配额
-                        if let Some(ref data) = a.usage_data {
-                            if let Some(usage) = data.get("usage") {
-                                let current = usage.get("current").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                                let limit = usage.get("limit").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                                #[allow(clippy::cast_possible_truncation)] // i64 → i32 转换用于排序，配额值不会超过 i32 范围
-                                return (limit - current) as i32;
-                            }
+                        if let Some((current, limit)) = extract_usage_totals(a.usage_data.as_ref()) {
+                            #[allow(clippy::cast_possible_truncation)] // i64 → i32 转换用于排序，配额值不会超过 i32 范围
+                            return (limit - current) as i32;
                         }
-                        0i32
+                        0
                     })
                     .copied()
             }
@@ -129,6 +121,28 @@ impl AccountSwitcher {
             }
         }
     }
+}
+
+fn is_unavailable_status(status: &str) -> bool {
+    matches!(status, "banned" | "封禁" | "已封禁" | "已过期")
+}
+
+fn extract_usage_totals(usage_data: Option<&Value>) -> Option<(i64, i64)> {
+    let breakdown = usage_data?
+        .get("usageBreakdownList")?
+        .as_array()?
+        .first()?;
+
+    let current = breakdown
+        .get("currentUsage")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let limit = breakdown
+        .get("usageLimit")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+
+    Some((current, limit))
 }
 
 /// 换号结果

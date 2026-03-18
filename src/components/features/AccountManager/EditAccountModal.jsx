@@ -136,7 +136,7 @@ function EditAccountModal({ account, onClose, onSuccess }) {
         params.clientId = form.clientId || null
         params.clientSecret = form.clientSecret || null
       }
-      await invoke('update_account', { params })
+      await invoke('update_account', params)
       await setAccountGroup(account.id, selectedGroupId || null)
       await setAccountTags(account.id, selectedTagIds)
       onSuccess?.()

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, emit } from '@tauri-apps/api/event'
+import { isBannedStatus } from '../../../../utils/accountStatus'
 
 export function useAccounts() {
   const [accounts, setAccounts] = useState([])
@@ -14,7 +15,7 @@ export function useAccounts() {
   // 判断账号是否即将过期（5分钟内）
   const isExpiringSoon = useCallback((account) => {
     // 跳过已封禁账号
-    if (account.status === 'banned') return false
+    if (isBannedStatus(account.status)) return false
     // 没有过期时间的不刷新
     if (!account.expiresAt) return false
     try {
@@ -45,7 +46,7 @@ export function useAccounts() {
   const batchRefreshAccounts = useCallback(async (accountIds, accountList) => {
     if (autoRefreshing || accountList.length === 0) return
     
-    const validAccounts = accountList.filter(acc => acc.status !== 'banned')
+    const validAccounts = accountList.filter(acc => !isBannedStatus(acc.status))
     // 如果指定了账号ID，强制刷新这些账号；否则只刷新即将过期的
     const accountsToRefresh = accountIds.length > 0
       ? validAccounts.filter(acc => accountIds.includes(acc.id))
@@ -127,7 +128,7 @@ export function useAccounts() {
       // 只有封禁时才更新状态
       if (errorMsg.includes('BANNED')) {
         try {
-          await invoke('update_account', { id, updates: { status: 'banned' } })
+          await invoke('update_account', { id, status: 'banned' })
           setAccounts(prev => prev.map(a => a.id === id ? { ...a, status: 'banned' } : a))
         } catch (updateErr) {
           // 静默处理
