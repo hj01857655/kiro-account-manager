@@ -1,3 +1,5 @@
+import { normalizeAccountStatus } from '../../../../utils/accountStatus'
+
 // 筛选器应用函数
 export function applyFilters(accounts, filters) {
   if (!filters) return accounts
@@ -29,11 +31,13 @@ export function applyFilters(accounts, filters) {
 
     // 状态筛选
     if (filters.statuses?.length > 0) {
-      const rawStatus = (account.status || '').toLowerCase()
+      const normalizedStatus = normalizeAccountStatus(account.status)
       let status = 'normal'
-      if (rawStatus.includes('ban') || rawStatus.includes('封禁')) {
+      if (normalizedStatus === 'banned') {
         status = 'banned'
-      } else if (rawStatus.includes('expir') || rawStatus.includes('过期')) {
+      } else if (normalizedStatus === 'invalid') {
+        status = 'invalid'
+      } else if (normalizedStatus === 'expired') {
         status = 'expired'
       }
       if (!filters.statuses.includes(status)) return false

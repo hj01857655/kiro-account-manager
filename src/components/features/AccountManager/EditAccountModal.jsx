@@ -104,6 +104,7 @@ function EditAccountModal({ account, onClose, onSuccess }) {
   const { t, colors, theme } = useApp()
   const accent = getThemeAccent(theme)
   const { showError } = useDialog()
+  const isIdCAccount = account.provider === 'BuilderId' || account.provider === 'Enterprise'
   
   const [form, setForm] = useState({
     label: account.label || '',
@@ -132,7 +133,7 @@ function EditAccountModal({ account, onClose, onSuccess }) {
         refreshToken: form.refreshToken || null,
         machineId: form.machineId || null,
       }
-      if (account.provider === 'BuilderId') {
+      if (isIdCAccount) {
         params.clientId = form.clientId || null
         params.clientSecret = form.clientSecret || null
       }
@@ -196,7 +197,7 @@ function EditAccountModal({ account, onClose, onSuccess }) {
             </div>
           </div>
 
-          {account.provider === 'BuilderId' && (
+          {isIdCAccount && (
             <>
               <div>
                 <label className={`block text-sm font-medium ${colors.text} mb-2`}>

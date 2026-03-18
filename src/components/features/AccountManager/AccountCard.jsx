@@ -6,6 +6,8 @@ import { useTheme } from '../../../contexts/ThemeContext'
 import { usePrivacy } from '../../../contexts/PrivacyContext'
 import { getUsagePercent, getProgressBarColor } from './hooks/useAccountStats'
 import { getQuota, getUsed, getSubType, getSubPlan, formatUsage, getAccountDisplayName } from '../../../utils/accountStats'
+import { getAccountStatusMeta, isBannedStatus, isUnavailableStatus } from '../../../utils/accountStatus'
+import { getProviderDisplayName, isGitHubProvider } from '../../../utils/accountProvider'
 import { getThemeAccent } from '../KiroConfig/themeAccent'
 
 const AccountCard = memo(function AccountCard({
@@ -42,16 +44,18 @@ const AccountCard = memo(function AccountCard({
     const subType = getSubType(account)
     const subPlan = getSubPlan(account)
     const percent = getUsagePercent(used, quota)
-    const isBanned = account.status === 'banned' || account.status === '封禁' || account.status === '已封禁'
-    const isNormal = account.status === 'active' || account.status === '正常' || account.status === '有效'
+    const statusMeta = getAccountStatusMeta(account.status, t)
+    const isBanned = isBannedStatus(account.status)
+    const isNormal = statusMeta.key === 'active'
+    const isUnavailable = isUnavailableStatus(account.status)
     const isExpired = account.expiresAt && new Date(account.expiresAt.replace(/\//g, '-')) < new Date()
     const breakdown = account.usageData?.usageBreakdownList?.[0]
     const nextDateReset = account.usageData?.nextDateReset
     
-    return { quota, used, subType, subPlan, percent, isBanned, isNormal, isExpired, breakdown, nextDateReset }
-  }, [account])
+    return { quota, used, subType, subPlan, percent, statusMeta, isBanned, isNormal, isUnavailable, isExpired, breakdown, nextDateReset }
+  }, [account, t])
 
-  const { quota, used, subType, subPlan, percent, isBanned, isNormal, isExpired, breakdown, nextDateReset } = cardData
+  const { quota, used, subType, subPlan, percent, statusMeta, isBanned, isNormal, isUnavailable, isExpired, breakdown, nextDateReset } = cardData
 
   // 右键菜单处理
   const handleContextMenu = useCallback((e) => {
@@ -103,12 +107,12 @@ const AccountCard = memo(function AccountCard({
       {/* 状态标签 */}
       <div className="absolute top-3 right-3 flex items-center gap-2">
         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-          account.status === 'active' || account.status === '正常' || account.status === '有效'
+          statusMeta.key === 'active'
             ? colors.badgeSuccess
-            : account.status === 'banned' || account.status === '封禁' || account.status === '已封禁'
+            : statusMeta.tone === 'danger'
               ? colors.error
               : colors.badgeWarning
-        }`}>{isNormal ? t('accounts.active') : isBanned ? t('accounts.banned') : account.status}</span>
+        }`}>{statusMeta.label}</span>
       </div>
 
       <div className="p-4 pt-9 flex-1 flex flex-col gap-2.5">
@@ -116,7 +120,7 @@ const AccountCard = memo(function AccountCard({
         <div className="flex items-start gap-2">
           <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-base font-bold shadow-md ${
             account.provider === 'Google' ? colors.providerGoogle :
-            account.provider === 'Github' ? colors.providerGithub :
+            isGitHubProvider(account.provider) ? colors.providerGithub :
             colors.badgeInfo
           }`}>
             {getAccountDisplayName(account)[0].toUpperCase()}
@@ -133,7 +137,7 @@ const AccountCard = memo(function AccountCard({
                 {copiedId === account.id ? <Check size={11} className={colors.iconSuccess} /> : <Copy size={11} className={colors.textMuted} />}
               </button>
             </div>
-            <div className={`text-[11px] ${colors.textMuted}`}>{account.label || account.provider || t('common.noLabel')}</div>
+            <div className={`text-[11px] ${colors.textMuted}`}>{account.label || getProviderDisplayName(account.provider) || t('common.noLabel')}</div>
           </div>
         </div>
 
@@ -154,12 +158,12 @@ const AccountCard = memo(function AccountCard({
           </span>
           <span className={`text-[11px] px-2 py-0.5 rounded-lg font-medium shadow-sm ${
             account.provider === 'Google' ? colors.providerGoogle
-              : account.provider === 'GitHub' ? colors.providerGithub
+              : isGitHubProvider(account.provider) ? colors.providerGithub
               : account.provider === 'BuilderId' ? colors.providerBuilderId
               : account.provider === 'Enterprise' ? colors.providerEnterprise
               : colors.providerDefault
           }`}>
-            {account.provider || t('common.unknown')}
+            {getProviderDisplayName(account.provider) || t('common.unknown')}
           </span>
           {isCurrentAccount && (
             <span className="text-[11px] px-2 py-0.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-medium shadow-sm">
@@ -302,9 +306,9 @@ const AccountCard = memo(function AccountCard({
             {!isCurrentAccount && (
               <button
                 onClick={(e) => { e.stopPropagation(); onSwitch(account) }}
-                disabled={switchingId === account.id || isBanned}
+                disabled={switchingId === account.id || isUnavailable}
                 className={`p-2 rounded-lg ${colors.cardHover} ${colors.actionSwitch} disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-110 shadow-sm`}
-                title={isBanned ? t('accountCard.bannedCannotSwitch') : t('accountCard.switchAccount')}
+                title={isUnavailable ? `${statusMeta.label}账号不可切换` : t('accountCard.switchAccount')}
               >
                 <Repeat size={16} className={switchingId === account.id ? 'animate-spin' : ''} />
               </button>

@@ -7,12 +7,32 @@ const AppSettingsContext = createContext(null)
 // 默认设置
 const DEFAULT_SETTINGS = {
   lockModel: true,
-  lockedModel: null,
+  lockedModel: 'claude-opus-4.5',
   autoRefresh: true,
   autoRefreshInterval: 50,
-  autoChangeMachineId: false,
-  bindMachineIdToAccount: false,
-  browserPath: ''
+  autoChangeMachineId: true,
+  bindMachineIdToAccount: true,
+  browserPath: '',
+  privacyMode: true,
+  autoSwitchEnabled: false,
+  autoSwitchThreshold: 1,
+  autoSwitchInterval: 5,
+  enableCodebaseIndexing: true,
+  enableTabAutocomplete: true,
+  usageSummary: true,
+  codeReferences: true,
+  enableDebugLogs: false,
+  notifyActionRequired: true,
+  notifyFailure: true,
+  notifySuccess: true,
+  notifyBilling: true,
+  trustedTools: [],
+  referenceTracker: false,
+  configureMcp: 'Enabled',
+  telemetryContentCollection: false,
+  telemetryUsageAnalytics: false,
+  telemetryEditStats: false,
+  telemetryFeedback: false
 }
 
 export function AppSettingsProvider({ children }) {
@@ -36,11 +56,15 @@ export function AppSettingsProvider({ children }) {
   const updateSettings = async (updates) => {
     try {
       await invoke('save_app_settings', { settings: updates })
-      setSettings(prev => ({ ...prev, ...updates }))
-      return true
+      let nextSettings = null
+      setSettings(prev => {
+        nextSettings = { ...(prev || DEFAULT_SETTINGS), ...updates }
+        return nextSettings
+      })
+      return nextSettings
     } catch (err) {
       console.error('[AppSettings] 保存失败:', err)
-      return false
+      return null
     }
   }
 

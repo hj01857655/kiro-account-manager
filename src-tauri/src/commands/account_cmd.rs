@@ -10,7 +10,7 @@ use crate::auth::{User, refresh_token_desktop};
 use crate::providers::{AuthProvider, IdcProvider, RefreshMetadata, KiroPortalClient};
 use crate::commands::common::{
     get_usage_by_provider, RefreshResult, refresh_token_by_provider,
-    calc_expires_at, calc_status, extract_user_info, find_existing_account_idx
+    calc_expires_at, calc_status, extract_user_info, find_existing_account_idx, is_auth_error_message
 };
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
@@ -146,11 +146,14 @@ pub async fn sync_account(state: State<'_, AppState>, id: String) -> Result<Sync
                 refresh_result = Some(refreshed);
             }
             Err(e) => {
-                // 刷新失败，检查是否封禁
-                if e.starts_with("BANNED:") {
+                if e.starts_with("BANNED:") || is_auth_error_message(&e) {
                     let mut store = state.store.lock().expect("Failed to acquire store lock");
                     if let Some(a) = store.accounts.iter_mut().find(|a| a.id == id) {
-                        a.status = "banned".to_string();
+                        a.status = if e.starts_with("BANNED:") {
+                            "banned".to_string()
+                        } else {
+                            "invalid".to_string()
+                        };
                         store.save_to_file();
                     }
                 }
@@ -185,7 +188,7 @@ pub async fn sync_account(state: State<'_, AppState>, id: String) -> Result<Sync
         if let Some(usage_data) = usage {
             // 直接移动所有权，避免 clone
             a.usage_data = Some(usage_data.usage_data);
-            a.status = calc_status(usage_data.is_banned);
+            a.status = calc_status(usage_data.is_banned, usage_data.is_auth_error);
             
             // 从 usage_data 中提取并更新 email 和 user_id
             if let Some(user_info) = a.usage_data.as_ref().and_then(|d| d.get("userInfo")) {
@@ -235,7 +238,23 @@ pub async fn refresh_account_token(state: State<'_, AppState>, id: String) -> Re
         }
     }
 
-    let refresh_result = refresh_token_by_provider(&account).await?;
+    let refresh_result = match refresh_token_by_provider(&account).await {
+        Ok(result) => result,
+        Err(e) => {
+            if e.starts_with("BANNED:") || is_auth_error_message(&e) {
+                let mut store = state.store.lock().expect("Failed to acquire store lock");
+                if let Some(a) = store.accounts.iter_mut().find(|a| a.id == id) {
+                    a.status = if e.starts_with("BANNED:") {
+                        "banned".to_string()
+                    } else {
+                        "invalid".to_string()
+                    };
+                    store.save_to_file();
+                }
+            }
+            return Err(e);
+        }
+    };
 
     let mut store = state.store.lock().expect("Failed to acquire store lock");
     if let Some(a) = store.accounts.iter_mut().find(|a| a.id == id) {
@@ -243,6 +262,9 @@ pub async fn refresh_account_token(state: State<'_, AppState>, id: String) -> Re
         a.access_token = Some(refresh_result.access_token);
         a.refresh_token = refresh_result.refresh_token;
         a.expires_at = Some(calc_expires_at(refresh_result.expires_in));
+        if matches!(a.status.as_str(), "invalid" | "失效" | "已失效" | "Token已失效") {
+            a.status = "active".to_string();
+        }
         let result = a.clone();
         store.save_to_file();
         return Ok(result);
@@ -375,7 +397,7 @@ pub async fn add_account_by_social(
         existing.profile_arn = Some(final_profile_arn.clone());  // ✅ 保存 profile_arn
         existing.user_id = user_id;
         existing.usage_data = Some(usage_result.usage_data);
-        existing.status = calc_status(usage_result.is_banned);
+        existing.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
         existing.clone()  // ✅ 必须 clone，因为要返回给前端
     } else {
         let mut account = Account::new(final_email.clone(), format!("Kiro {idp} 账号"));
@@ -386,7 +408,7 @@ pub async fn add_account_by_social(
         account.auth_method = Some("social".to_string());
         account.user_id = user_id;
         account.usage_data = Some(usage_result.usage_data);
-        account.status = calc_status(usage_result.is_banned);
+        account.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
         // 使用传入的 machine_id，没有则自动生成
         account.machine_id = machine_id.or_else(|| Some(uuid::Uuid::new_v4().to_string().to_lowercase()));  // ✅ 避免 clone
         store.accounts.insert(0, account.clone());
@@ -694,7 +716,7 @@ async fn add_account_by_idc_internal(
                 existing.sso_session_id = sso_session_id;
             }
             existing.usage_data = Some(usage_result.usage_data);
-            existing.status = calc_status(usage_result.is_banned);
+            existing.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
             existing.clone()
         } else {
             // 创建新的 Enterprise 账号
@@ -713,7 +735,7 @@ async fn add_account_by_idc_internal(
             account.id_token = id_token;
             account.sso_session_id = sso_session_id;
             account.usage_data = Some(usage_result.usage_data);
-            account.status = calc_status(usage_result.is_banned);
+            account.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
             account.machine_id = Some(params.machine_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string().to_lowercase()));
             account.password.clone_from(&params.password);
             store.accounts.insert(0, account.clone());
@@ -763,7 +785,7 @@ async fn add_account_by_idc_internal(
                 existing.sso_session_id = sso_session_id;
             }
             existing.usage_data = Some(usage_result.usage_data);
-            existing.status = calc_status(usage_result.is_banned);
+            existing.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
             existing.clone()
         } else {
             // 创建新的 BuilderId 账号
@@ -783,7 +805,7 @@ async fn add_account_by_idc_internal(
             account.id_token = id_token;
             account.sso_session_id = sso_session_id;
             account.usage_data = Some(usage_result.usage_data);
-            account.status = calc_status(usage_result.is_banned);
+            account.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
             account.machine_id = Some(params.machine_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string().to_lowercase()));
             account.password = params.password;
             store.accounts.insert(0, account.clone());

@@ -2,6 +2,7 @@ import { Card, Badge, Group, Stack, Text, ActionIcon, Tooltip } from '@mantine/c
 import { RefreshCw, Users, Clock } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getProviderDisplayName, isGitHubProvider } from '../../../utils/accountProvider'
 
 // 当前账号卡片
 function CurrentAccountCard({ localToken, refreshing, handleRefresh, colors, t }) {
@@ -35,7 +36,7 @@ function CurrentAccountCard({ localToken, refreshing, handleRefresh, colors, t }
           <Group gap="md" className="group relative">
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg transition-transform hover:scale-105 flex-shrink-0 ${
               localToken.provider === 'Google' ? 'bg-gradient-to-br from-red-500 to-orange-500 shadow-red-500/25' :
-              localToken.provider === 'Github' ? 'bg-gradient-to-br from-gray-700 to-gray-900 shadow-gray-500/25' :
+              isGitHubProvider(localToken.provider) ? 'bg-gradient-to-br from-gray-700 to-gray-900 shadow-gray-500/25' :
               `bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} ${accent.shadow}`
             }`}>
               {localToken.provider?.[0] || 'K'}
@@ -43,7 +44,7 @@ function CurrentAccountCard({ localToken, refreshing, handleRefresh, colors, t }
             <Stack gap={4} style={{ flex: 1 }}>
               <Group gap="xs">
                 <Text fw={600} size="lg" className={colors.text}>
-                  {localToken.provider || t('home.unknown')}
+                  {getProviderDisplayName(localToken.provider) || t('home.unknown')}
                 </Text>
                 <Badge
                   color="green"

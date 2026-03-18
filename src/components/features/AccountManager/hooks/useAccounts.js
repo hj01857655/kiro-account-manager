@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, emit } from '@tauri-apps/api/event'
-import { isBannedStatus } from '../../../../utils/accountStatus'
+import { isUnavailableStatus } from '../../../../utils/accountStatus'
 
 export function useAccounts() {
   const [accounts, setAccounts] = useState([])
@@ -14,8 +14,8 @@ export function useAccounts() {
 
   // 判断账号是否即将过期（5分钟内）
   const isExpiringSoon = useCallback((account) => {
-    // 跳过已封禁账号
-    if (isBannedStatus(account.status)) return false
+    // 跳过不可用账号
+    if (isUnavailableStatus(account.status)) return false
     // 没有过期时间的不刷新
     if (!account.expiresAt) return false
     try {
@@ -46,7 +46,7 @@ export function useAccounts() {
   const batchRefreshAccounts = useCallback(async (accountIds, accountList) => {
     if (autoRefreshing || accountList.length === 0) return
     
-    const validAccounts = accountList.filter(acc => !isBannedStatus(acc.status))
+    const validAccounts = accountList.filter(acc => !isUnavailableStatus(acc.status))
     // 如果指定了账号ID，强制刷新这些账号；否则只刷新即将过期的
     const accountsToRefresh = accountIds.length > 0
       ? validAccounts.filter(acc => accountIds.includes(acc.id))
@@ -83,9 +83,9 @@ export function useAccounts() {
           const idx = updatedAccounts.findIndex(a => a.id === account.id)
           if (idx !== -1) updatedAccounts[idx] = { ...updatedAccounts[idx], status: 'banned' }
         } else if (errorMsg.includes('AUTH_ERROR') || errorMsg.includes('401') || errorMsg.includes('invalid')) {
-          message = 'Token已失效'
+          message = '账号已失效'
           const idx = updatedAccounts.findIndex(a => a.id === account.id)
-          if (idx !== -1) updatedAccounts[idx] = { ...updatedAccounts[idx], status: 'Token已失效' }
+          if (idx !== -1) updatedAccounts[idx] = { ...updatedAccounts[idx], status: 'invalid' }
         } else {
           message = errorMsg.slice(0, 30)
         }
@@ -125,11 +125,18 @@ export function useAccounts() {
       return { success: true, data: updated }
     } catch (e) {
       const errorMsg = String(e)
-      // 只有封禁时才更新状态
+      // 失效或封禁时更新状态，避免后续继续参与自动链路
       if (errorMsg.includes('BANNED')) {
         try {
           await invoke('update_account', { id, status: 'banned' })
           setAccounts(prev => prev.map(a => a.id === id ? { ...a, status: 'banned' } : a))
+        } catch (updateErr) {
+          // 静默处理
+        }
+      } else if (errorMsg.includes('AUTH_ERROR') || errorMsg.includes('401') || errorMsg.includes('invalid')) {
+        try {
+          await invoke('update_account', { id, status: 'invalid' })
+          setAccounts(prev => prev.map(a => a.id === id ? { ...a, status: 'invalid' } : a))
         } catch (updateErr) {
           // 静默处理
         }

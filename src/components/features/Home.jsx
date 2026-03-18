@@ -67,7 +67,7 @@ function Home({ onNavigate }) {
   // 缓存 statCards，避免每次 render 都重新创建
   const statCards = useMemo(() => [
     { icon: Users, iconBg: colors.badgeInfo, iconColor: accent.text, value: stats.total, label: t('home.totalAccounts'), delay: 'delay-100' },
-    { icon: Shield, iconBg: colors.badgeSuccess, iconColor: accent.text, value: `${stats.active}/${stats.banned}`, label: t('home.activeVsBanned'), delay: 'delay-200' },
+    { icon: Shield, iconBg: colors.badgeSuccess, iconColor: accent.text, value: `${stats.active}/${stats.unavailable}`, label: t('home.activeVsUnavailable'), delay: 'delay-200' },
     { icon: Zap, iconBg: colors.badgePurple, iconColor: accent.text, value: stats.proPlus + stats.pro, label: t('home.proAccounts'), delay: 'delay-300' },
     { icon: TrendingUp, iconBg: colors.badgeWarning, iconColor: 'text-orange-500', value: `${stats.usagePercent}%`, label: t('home.usagePercent'), delay: 'delay-400' },
     { 

@@ -119,6 +119,7 @@ function Settings() {
                 setAiModel(kiroSettings.modelSelection || 'claude-sonnet-4.5')
                 setEnableCodebaseIndexing(kiroSettings.enableCodebaseIndexing ?? true)
                 setTrustedCommandsMode(kiroSettings.trustedCommandsMode || 'none')
+                setCustomTrustedCommands(kiroSettings.customTrustedCommands || '')
                 // Agent 设置
                 setAgentAutonomy(kiroSettings.agentAutonomy || 'Supervised')
                 setEnableTabAutocomplete(kiroSettings.enableTabAutocomplete ?? true)
@@ -169,14 +170,15 @@ function Settings() {
     // 保存应用设置（后端已实现增量更新，直接传入要更新的字段）
     const saveAppSettings = async (updates, notifyChange = false) => {
         try {
-            await invoke('save_app_settings', { settings: updates })
-            // 同步到AppSettingsContext缓存
-            await updateAppSettings(updates)
+            const nextSettings = await updateAppSettings(updates)
+            if (!nextSettings) {
+                await showError(t('settings.saveFailed'), t('settings.saveFailed'))
+                return
+            }
             if (notifyChange) {
                 await emit('settings-changed')
             }
-            // 同时发送app-settings-changed事件，确保App.jsx的ref同步
-            await emit('app-settings-changed')
+            await emit('app-settings-changed', nextSettings)
         } catch (err) {
             console.error('Failed to save app settings:', err)
             await showError(t('settings.saveFailed'), t('settings.saveFailed') + ': ' + err)
@@ -224,7 +226,6 @@ function Settings() {
             // 如果锁定模型，保存到应用设置
             if (lockModel) {
                 await saveAppSettings({ lockedModel: model })
-                await emit('app-settings-changed')
             }
         } catch (err) {
             await showError(t('settings.saveFailed'), t('settings.saveFailed') + ': ' + err)
@@ -236,20 +237,17 @@ function Settings() {
     const handleLockModelChange = async (checked) => {
         setLockModel(checked)
         await saveAppSettings({ lockModel: checked, lockedModel: checked ? aiModel : null })
-        await emit('app-settings-changed')
     }
 
     const handleAutoRefreshChange = async (checked) => {
         setAutoRefresh(checked)
         await saveAppSettings({ autoRefresh: checked }, true)
-        await emit('app-settings-changed')
     }
 
     const handleAutoRefreshIntervalChange = async (value) => {
         const interval = parseInt(value) || 50
         setAutoRefreshInterval(interval)
         await saveAppSettings({ autoRefreshInterval: interval }, true)
-        await emit('app-settings-changed')
     }
 
     const handleAutoChangeMachineIdChange = async (checked) => {
@@ -269,7 +267,8 @@ function Settings() {
     }
 
     const handleAutoSwitchThresholdChange = async (value) => {
-        const threshold = parseFloat(value) || 1
+        const parsedValue = typeof value === 'number' ? value : parseFloat(value)
+        const threshold = Number.isFinite(parsedValue) ? parsedValue : 1
         setAutoSwitchThreshold(threshold)
         await saveAppSettings({ autoSwitchThreshold: threshold }, true)
     }

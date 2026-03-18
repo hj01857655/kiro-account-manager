@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { getQuota, getUsed } from '../utils/accountStats'
-import { isBannedStatus } from '../utils/accountStatus'
+import { isUnavailableStatus } from '../utils/accountStatus'
 import { applyMachineGuid, buildSwitchParams } from '../utils/kiroSwitch'
 
 // 默认值
@@ -71,6 +71,17 @@ export function useAutoSwitch(appSettings, settingsLoading) {
             // 静默处理
           }
           return
+        } else if (errorMsg.includes('AUTH_ERROR') || errorMsg.includes('401') || errorMsg.includes('invalid')) {
+          try {
+            await invoke('update_account', {
+              id: currentAccount.id,
+              status: 'invalid'
+            })
+            emit('accounts-updated')
+          } catch (updateErr) {
+            // 静默处理
+          }
+          return
         }
         // 其他错误静默处理
       }
@@ -89,8 +100,8 @@ export function useAutoSwitch(appSettings, settingsLoading) {
       const availableAccount = accounts.find(acc => {
         // 排除当前账号
         if (acc.id === currentAccount.id) return false
-        // 排除被封禁的账号
-        if (isBannedStatus(acc.status)) return false
+        // 排除不可用账号
+        if (isUnavailableStatus(acc.status)) return false
         // 排除余额不足的账号
         const accQuota = getQuota(acc)
         const accUsed = getUsed(acc)

@@ -124,7 +124,10 @@ impl AccountSwitcher {
 }
 
 fn is_unavailable_status(status: &str) -> bool {
-    matches!(status, "banned" | "封禁" | "已封禁" | "已过期")
+    matches!(
+        status,
+        "banned" | "封禁" | "已封禁" | "invalid" | "失效" | "已失效" | "Token已失效" | "expired" | "过期" | "已过期"
+    )
 }
 
 fn extract_usage_totals(usage_data: Option<&Value>) -> Option<(i64, i64)> {

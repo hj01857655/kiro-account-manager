@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { getConcurrency, runWithConcurrency } from '../utils/concurrency'
-import { isBannedStatus } from '../utils/accountStatus'
+import { isUnavailableStatus } from '../utils/accountStatus'
 
 // 常量
 const DEFAULT_REFRESH_INTERVAL = 10 // 分钟
@@ -28,8 +28,8 @@ export function useAutoRefresh(appSettings, settingsLoading) {
       const accounts = await invoke('get_accounts')
       if (!accounts?.length) return
 
-      // 只排除封禁账号，其他都交给后端判断
-      const validAccounts = accounts.filter(acc => !isBannedStatus(acc.status))
+      // 只同步可用账号，失效/过期/封禁都应跳过
+      const validAccounts = accounts.filter(acc => !isUnavailableStatus(acc.status))
       if (!validAccounts.length) {
         return
       }

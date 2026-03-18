@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useApp } from '../../../../hooks/useApp'
 import { useAppSettings } from '../../../../contexts/AppSettingsContext'
 import { applyMachineGuid, buildSwitchParams } from '../../../../utils/kiroSwitch'
+import { getAccountStatusMeta, isUnavailableStatus } from '../../../../utils/accountStatus'
 
 /**
  * 账号切换逻辑 hook
@@ -17,6 +18,11 @@ export function useSwitchAccount(onLocalTokenChange) {
 
   // 显示切换确认弹窗
   const handleSwitchAccount = useCallback((account) => {
+    if (isUnavailableStatus(account.status)) {
+      const statusMeta = getAccountStatusMeta(account.status, t)
+      setSwitchDialog({ type: 'error', title: t('switch.failed'), message: `账号当前状态为${statusMeta.label}，请重新登录或恢复后再切换`, account: null })
+      return
+    }
     if (!account.accessToken || !account.refreshToken) {
       setSwitchDialog({ type: 'error', title: t('switch.failed'), message: t('switch.missingAuth'), account: null })
       return

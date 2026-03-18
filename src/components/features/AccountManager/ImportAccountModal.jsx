@@ -7,6 +7,7 @@ import { getThemeAccent } from '../KiroConfig/themeAccent'
 import { getConcurrency } from '../../../utils/concurrency'
 import { getAccountDisplayName } from '../../../utils/accountStats'
 import { isBannedStatus } from '../../../utils/accountStatus'
+import { getProviderDisplayName, isGitHubProvider, normalizeProviderId } from '../../../utils/accountProvider'
 import {
   DialogRoot,
   DialogContent,
@@ -47,25 +48,26 @@ function validateAccount(item, index) {
     }
   }
 
+  const normalizedProvider = normalizeProviderId(provider)
   const validProviders = ['Google', 'Github', 'BuilderId', 'Enterprise']
-  if (!validProviders.includes(provider)) {
+  if (!validProviders.includes(normalizedProvider)) {
     errors.push(`第 ${index + 1} 条: provider 必须是 ${validProviders.join('/')}`)
     return { valid: false, errors, type: null }
   }
 
-  if (isSocial && !['Google', 'Github'].includes(provider)) {
+  if (isSocial && !(normalizedProvider === 'Google' || isGitHubProvider(normalizedProvider))) {
     errors.push(`第 ${index + 1} 条: Social 账号的 provider 应为 Google/Github`)
     return { valid: false, errors, type: null }
   }
 
-  if (isIdC && !['BuilderId', 'Enterprise'].includes(provider)) {
+  if (isIdC && !['BuilderId', 'Enterprise'].includes(normalizedProvider)) {
     errors.push(`第 ${index + 1} 条: IdC 账号的 provider 应为 BuilderId/Enterprise`)
     return { valid: false, errors, type: null }
   }
 
   // Enterprise 账号不需要额外校验（region 可选，默认 us-east-1）
 
-  return { valid: true, errors: [], type: isSocial ? 'social' : 'idc', inferredProvider: provider }
+  return { valid: true, errors: [], type: isSocial ? 'social' : 'idc', inferredProvider: normalizedProvider }
 }
 
 function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
@@ -659,7 +661,7 @@ return (
                             <div className="flex items-center justify-between">
                               <div>
                                 <div className={`text-sm font-medium ${colors.text}`}>
-                                  {account.provider} ({account.authMethod})
+                                  {getProviderDisplayName(account.provider)} ({account.authMethod})
                                 </div>
                                 <div className={`text-xs ${colors.textMuted}`}>
                                   {getAccountDisplayName(account)}

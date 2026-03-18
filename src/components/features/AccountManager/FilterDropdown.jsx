@@ -17,12 +17,13 @@ const STATUS_OPTIONS = [
   { value: '', label: '全部' },
   { value: 'normal', label: '正常' },
   { value: 'banned', label: '封禁' },
+  { value: 'invalid', label: '失效' },
   { value: 'expired', label: '过期' },
 ]
 const PROVIDER_OPTIONS = [
   { value: '', label: '全部' },
   { value: 'Google', label: 'Google' },
-  { value: 'GitHub', label: 'GitHub' },
+  { value: 'Github', label: 'Github' },
   { value: 'BuilderId', label: 'BuilderId' },
   { value: 'Enterprise', label: 'Enterprise' },
 ]

@@ -27,7 +27,7 @@ fn determine_provider(cli_account: &crate::kiro_cli_db::KiroCliAccount) -> Strin
             if arn.contains("google") {
                 return "Google".to_string();
             } else if arn.contains("github") {
-                return "GitHub".to_string();
+                return "Github".to_string();
             }
         }
         "Unknown".to_string()

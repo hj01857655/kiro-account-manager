@@ -10,6 +10,7 @@ import { applyFilters } from './utils/filterUtils'
 import { cn } from '../../../utils/cn'
 import { showSuccess, showError } from '../../../utils/toast.jsx'
 import { getAccountDisplayName } from '../../../utils/accountStats'
+import { isActiveStatus, isBannedStatus, isExpiredStatus, isInvalidStatus } from '../../../utils/accountStatus'
 import { getThemeAccent } from '../KiroConfig/themeAccent'
 import AccountHeader from './AccountHeader'
 import AccountTable from './AccountTable'
@@ -140,8 +141,6 @@ function AccountManager({ onNavigate }) {
     try {
       const account = await invoke('refresh_account_token', { id })
       showSuccess('Token 刷新成功')
-      // 重新加载账号列表
-      await loadAccounts()
       return { success: true, account }
     } catch (e) {
       const errorMsg = String(e)
@@ -156,6 +155,7 @@ function AccountManager({ onNavigate }) {
       }
       return { success: false, error: errorMsg }
     } finally {
+      await loadAccounts()
       setRefreshingTokenId(null)
     }
   }, [loadAccounts])
@@ -226,8 +226,10 @@ function AccountManager({ onNavigate }) {
          tagIds.includes(selectedTag))
       // 状态过滤
       const matchStatus = !selectedStatus || 
-        (selectedStatus === 'active' && (a.status === 'active' || a.status === '正常' || a.status === '有效')) ||
-        (selectedStatus === 'banned' && (a.status === 'banned' || a.status === '封禁' || a.status === '已封禁'))
+        (selectedStatus === 'active' && isActiveStatus(a.status)) ||
+        (selectedStatus === 'banned' && isBannedStatus(a.status)) ||
+        (selectedStatus === 'invalid' && isInvalidStatus(a.status)) ||
+        (selectedStatus === 'expired' && isExpiredStatus(a.status))
       return matchSearch && matchGroup && matchTag && matchStatus
     })
     // 应用高级筛选
@@ -499,4 +501,3 @@ function AccountManager({ onNavigate }) {
 }
 
 export default AccountManager
-

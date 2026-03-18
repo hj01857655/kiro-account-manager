@@ -212,9 +212,12 @@ impl Account {
         }
     }
 
-    /// 判断账号是否可用（未封禁）
+    /// 判断账号是否可用（可正常参与切换/同步）
     pub fn is_available(&self) -> bool {
-        !matches!(self.status.as_str(), "banned" | "封禁" | "已封禁" | "已过期")
+        !matches!(
+            self.status.as_str(),
+            "banned" | "封禁" | "已封禁" | "invalid" | "失效" | "已失效" | "Token已失效" | "expired" | "过期" | "已过期"
+        )
     }
 }
 

@@ -98,7 +98,7 @@ fn parse_usage_result(
             is_auth_error: false,
         }),
         // 401 或认证相关错误（包括 403 + token invalid）
-        Err(e) if e.starts_with("AUTH_ERROR:") || e.contains("401") || e.contains("Unauthorized") || e.contains("expired") || e.contains("invalid") => Ok(UsageResult {
+        Err(e) if is_auth_error_message(&e) => Ok(UsageResult {
             usage_data: serde_json::Value::Null,
             is_banned: false,
             is_auth_error: true,
@@ -108,6 +108,15 @@ fn parse_usage_result(
     }
 }
 
+pub fn is_auth_error_message(error: &str) -> bool {
+    let lower = error.to_lowercase();
+    error.starts_with("AUTH_ERROR:")
+        || error.contains("401")
+        || error.contains("Unauthorized")
+        || lower.contains("expired")
+        || lower.contains("invalid")
+}
+
 /// 计算过期时间字符串
 pub fn calc_expires_at(expires_in: i64) -> String {
     let expires_at = chrono::Local::now() + chrono::Duration::seconds(expires_in);
@@ -115,8 +124,14 @@ pub fn calc_expires_at(expires_in: i64) -> String {
 }
 
 /// 根据 `usage_result` 计算账号状态
-pub fn calc_status(is_banned: bool) -> String {
-    if is_banned { "banned".to_string() } else { "active".to_string() }
+pub fn calc_status(is_banned: bool, is_auth_error: bool) -> String {
+    if is_banned {
+        "banned".to_string()
+    } else if is_auth_error {
+        "invalid".to_string()
+    } else {
+        "active".to_string()
+    }
 }
 
 /// 从 `usage_data` 中简单提取 `email` 和 `user_id`（不依赖结构体）

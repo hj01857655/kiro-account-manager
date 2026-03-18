@@ -5,6 +5,8 @@ import { Checkbox } from '@mantine/core'
 import { useApp } from '../../../hooks/useApp'
 import { usePrivacy } from '../../../contexts/PrivacyContext'
 import { getQuota, getUsed, formatUsage, getAccountDisplayName } from '../../../utils/accountStats'
+import { getAccountStatusMeta, isBannedStatus, isUnavailableStatus } from '../../../utils/accountStatus'
+import { getProviderDisplayName, isGitHubProvider } from '../../../utils/accountProvider'
 import ContextMenu from './ContextMenu'
 import { getThemeAccent, isLightTheme as checkIsLightTheme } from '../KiroConfig/themeAccent'
 
@@ -17,8 +19,10 @@ const ListRow = memo(function ListRow({
   const used = getUsed(account)
   const limit = getQuota(account)
   const remaining = limit - used
-  const isBanned = account.status === 'banned' || account.status === '封禁' || account.status === '已封禁'
-  const isActive = account.status === 'active' || account.status === '正常' || account.status === '有效'
+  const usagePercent = limit > 0 ? Math.min((used / limit) * 100, 100) : 0
+  const isBanned = isBannedStatus(account.status)
+  const isUnavailable = isUnavailableStatus(account.status)
+  const statusMeta = getAccountStatusMeta(account.status, t)
   const isRefreshing = refreshingId === account.id
   const isSwitching = switchingId === account.id
 
@@ -37,13 +41,13 @@ const ListRow = memo(function ListRow({
     { icon: Copy, label: t('accountCard.copyJson'), onClick: handleCopyJson },
     { divider: true },
     { icon: RefreshCw, label: t('accountCard.refresh'), onClick: () => onRefresh(account.id), disabled: isRefreshing },
-    { icon: Repeat, label: t('accountCard.switchAccount'), onClick: () => onSwitch(account), disabled: isSwitching || isBanned },
+    { icon: Repeat, label: t('accountCard.switchAccount'), onClick: () => onSwitch(account), disabled: isSwitching || isUnavailable },
     { divider: true },
     { icon: Trash2, label: t('accountCard.delete'), onClick: () => onDelete(account.id), danger: true },
     ...(account.provider !== 'Enterprise' && !isBanned && onDeleteRemote ? [
       { icon: UserX, label: t('accountCard.deleteRemote'), onClick: () => onDeleteRemote(account), danger: true },
     ] : []),
-  ], [t, account, handleCopyJson, onEdit, onEditLabel, onRefresh, onSwitch, onDelete, onDeleteRemote, isRefreshing, isSwitching, isBanned])
+  ], [t, account, handleCopyJson, onEdit, onEditLabel, onRefresh, onSwitch, onDelete, onDeleteRemote, isRefreshing, isSwitching, isBanned, isUnavailable])
 
   return (
     <div
@@ -80,10 +84,10 @@ const ListRow = memo(function ListRow({
       {/* 提供商 */}
       <span className={`text-xs px-2 py-1 rounded w-20 text-center shrink-0 ${
         account.provider === 'Google' ? colors.badgeWarning
-        : account.provider === 'GitHub' ? colors.badgeDisabled
+        : isGitHubProvider(account.provider) ? colors.badgeDisabled
         : account.provider === 'BuilderId' ? colors.badgeWarning
         : colors.badgeDisabled
-      }`}>{account.provider || 'Unknown'}</span>
+      }`}>{getProviderDisplayName(account.provider) || 'Unknown'}</span>
 
       {/* 订阅类型 */}
       <span className={`text-xs px-2 py-1 rounded w-20 text-center shrink-0 ${
@@ -102,16 +106,16 @@ const ListRow = memo(function ListRow({
       <div className="w-24 shrink-0">
         <div className={`text-xs ${remaining > 0 ? 'text-green-500' : 'text-red-500'}`}>{formatUsage(used)}/{formatUsage(limit)}</div>
         <div className={`h-1 rounded-full ${colors.cardSecondary} mt-1`}>
-          <div className={`h-full rounded-full ${remaining > 0 ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${Math.min((used / limit) * 100, 100)}%` }} />
+          <div className={`h-full rounded-full ${remaining > 0 ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${usagePercent}%` }} />
         </div>
       </div>
 
       {/* 状态 */}
       <span className={`text-xs px-2 py-1 rounded w-12 text-center shrink-0 ${
-        isBanned ? colors.error
-        : isActive ? colors.badgeSuccess
+        statusMeta.tone === 'danger' ? colors.error
+        : statusMeta.tone === 'success' ? colors.badgeSuccess
         : colors.badgeWarning
-      }`}>{isBanned ? t('accounts.banned') : isActive ? t('accounts.active') : account.status}</span>
+      }`}>{statusMeta.label}</span>
 
       {/* 机器码 */}
       <span className="text-xs font-mono w-14 text-center shrink-0 text-red-500">

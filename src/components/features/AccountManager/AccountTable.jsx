@@ -5,6 +5,7 @@ import { Checkbox } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 import { useApp } from '../../../hooks/useApp'
 import { useTheme } from '../../../contexts/ThemeContext'
+import { getAccountStatusMeta, isBannedStatus, isUnavailableStatus } from '../../../utils/accountStatus'
 import AccountCard from './AccountCard'
 import ContextMenu from './ContextMenu'
 
@@ -133,7 +134,9 @@ function AccountTable({
 
   // 生成菜单项
   const getMenuItems = useCallback((account) => {
-    const isBanned = account.status === 'banned' || account.status === '封禁' || account.status === '已封禁'
+    const isBanned = isBannedStatus(account.status)
+    const isUnavailable = isUnavailableStatus(account.status)
+    const statusMeta = getAccountStatusMeta(account.status, t)
     
     const items = [
       { icon: Eye, label: t('accountCard.viewDetails'), onClick: () => onEdit(account) },
@@ -142,7 +145,7 @@ function AccountTable({
       { divider: true },
       { icon: Key, label: t('accountCard.refreshToken'), onClick: () => onRefreshToken?.(account.id), disabled: refreshingTokenId === account.id },
       { icon: BarChart3, label: t('accountCard.refreshQuota'), onClick: () => onRefresh(account.id), disabled: refreshingId === account.id },
-      { icon: Repeat, label: t('accountCard.switchAccount'), onClick: () => onSwitch(account), disabled: switchingId === account.id || isBanned },
+      { icon: Repeat, label: isUnavailable ? `${statusMeta.label}账号不可切换` : t('accountCard.switchAccount'), onClick: () => onSwitch(account), disabled: switchingId === account.id || isUnavailable },
       { divider: true },
       { icon: Trash2, label: t('accountCard.delete'), onClick: () => onDelete(account.id), danger: true },
     ]

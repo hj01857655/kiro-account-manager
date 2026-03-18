@@ -2,6 +2,7 @@ import { Card, Group, Stack, Text, Badge, Progress, ActionIcon, Tooltip } from '
 import { RefreshCw } from 'lucide-react'
 import { getAccountDisplayName } from '../../../utils/accountStats'
 import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getProviderDisplayName, isGitHubProvider } from '../../../utils/accountProvider'
 
 // 当前账号配额详情
 function AccountQuotaDetail({ 
@@ -130,7 +131,7 @@ function AccountHeader({ currentAccount, userInfo, subInfo, daysUntilReset, refr
       <Group gap="md" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md flex-shrink-0 ${
           currentAccount.provider === 'Google' ? 'bg-gradient-to-br from-red-500 to-orange-500' :
-          currentAccount.provider === 'Github' ? 'bg-gradient-to-br from-gray-700 to-gray-900' :
+          isGitHubProvider(currentAccount.provider) ? 'bg-gradient-to-br from-gray-700 to-gray-900' :
           `bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo}`
         }`}>
           {currentAccount.provider?.[0] || 'K'}
@@ -156,7 +157,7 @@ function AccountHeader({ currentAccount, userInfo, subInfo, daysUntilReset, refr
             )}
           </Group>
           <Text size="xs" className={colors.textMuted}>
-            {currentAccount.provider}
+            {getProviderDisplayName(currentAccount.provider)}
             {daysUntilReset != null && ` · ${daysUntilReset === 0 ? t('home.resetToday') : `${daysUntilReset} ${t('home.daysUntilReset')}`}`}
           </Text>
         </Stack>
@@ -301,7 +302,7 @@ function AccountInfo({ currentAccount, userInfo, breakdown, nextDateReset, accen
       <Stack gap={6}>
         <Group justify="space-between">
           <Text size="xs" className={colors.textMuted}>IDP</Text>
-          <Text size="xs" className={colors.text}>{currentAccount.provider || '-'}</Text>
+          <Text size="xs" className={colors.text}>{getProviderDisplayName(currentAccount.provider) || '-'}</Text>
         </Group>
         <Group justify="space-between">
           <Text size="xs" className={colors.textMuted}>{t('home.reset')}</Text>

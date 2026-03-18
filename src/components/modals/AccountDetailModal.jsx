@@ -5,6 +5,8 @@ import { TextInput } from '@mantine/core'
 import { useApp } from '../../hooks/useApp'
 import { useDialog } from '../../contexts/DialogContext'
 import { formatUsage, getAccountDisplayName } from '../../utils/accountStats'
+import { getAccountStatusMeta, isBannedStatus } from '../../utils/accountStatus'
+import { getProviderDisplayName, isGitHubProvider } from '../../utils/accountProvider'
 import { TokenJsonView } from '../features/AccountManager/TokenJsonView'
 import {
   DialogRoot,
@@ -109,7 +111,7 @@ function AccountDetailModal({ account, onClose }) {
       }
       
       // 封禁账号额度为 0
-      const isBanned = updated.status === 'banned' || updated.status === '封禁' || updated.status === '已封禁'
+      const isBanned = isBannedStatus(updated.status)
       const quota = isBanned ? 0 : (updated.usageData?.usageBreakdownList?.[0]?.usageLimit ?? 0)
       const used = updated.usageData?.usageBreakdownList?.[0]?.currentUsage ?? 0
       setForm(prev => ({ ...prev, quota, used, status: updated.status }))
@@ -119,7 +121,7 @@ function AccountDetailModal({ account, onClose }) {
       if (errorMsg.includes('BANNED')) {
         status = 'banned'
       } else if (errorMsg.includes('AUTH_ERROR') || errorMsg.includes('401') || errorMsg.includes('invalid')) {
-        status = 'Token已失效'
+        status = 'invalid'
       }
       setForm(prev => ({ ...prev, status }))
       await showError(t('detail.refreshFailed'), errorMsg)
@@ -162,6 +164,7 @@ function AccountDetailModal({ account, onClose }) {
   const totalQuota = form.quota + freeTrialQuota + bonusQuota
   const totalUsed = form.used + freeTrialUsed + bonusUsed
   const totalPercent = totalQuota > 0 ? Math.min(100, (totalUsed / totalQuota) * 100) : 0
+  const statusMeta = getAccountStatusMeta(form.status, t)
 
   return (
     <DialogRoot open={true} onOpenChange={(open) => !open && onClose()}>
@@ -177,7 +180,7 @@ function AccountDetailModal({ account, onClose }) {
               w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 shadow-md
               ${account.provider === 'Google' 
                 ? 'bg-gradient-to-br from-red-500 to-orange-500' 
-                : account.provider === 'Github' 
+                : isGitHubProvider(account.provider) 
                   ? 'bg-gradient-to-br from-gray-700 to-gray-900' 
                   : 'bg-gradient-to-br from-blue-500 to-indigo-600'
               }`}
@@ -209,12 +212,12 @@ function AccountDetailModal({ account, onClose }) {
               <div className={`flex items-center gap-2 text-xs ${colors.textMuted} mb-2`}>
                 <span className={`flex items-center gap-1 font-medium ${
                   account.provider === 'Google' ? 'text-red-500'
-                    : account.provider === 'GitHub' ? colors.text
+                    : isGitHubProvider(account.provider) ? colors.text
                     : account.provider === 'BuilderId' ? 'text-orange-500'
                     : colors.textMuted
                 }`}>
                   <div className="w-1 h-1 rounded-full bg-current"></div>
-                  {account.provider || t('common.unknown')}
+                  {getProviderDisplayName(account.provider) || t('common.unknown')}
                 </span>
                 <span>·</span>
                 <span>{t('detail.addedAt')} {account.addedAt?.split(' ')[0]}</span>
@@ -487,11 +490,11 @@ function AccountDetailModal({ account, onClose }) {
         {/* Footer */}
         <DialogFooter>
           <div className={`text-sm ${colors.textMuted} flex items-center gap-2`}>
-            {account.status === 'active' || account.status === '正常' || account.status === '有效' 
-              ? <><Shield size={15} className="text-green-500" /><span className="text-green-500 font-medium">{t('detail.accountNormal')}</span></> 
-              : account.status === 'banned' || account.status === '封禁' || account.status === '已封禁'
-                ? <><Shield size={15} className="text-red-500" /><span className="text-red-500 font-medium">{t('detail.accountBanned')}</span></>
-                : <><Shield size={15} className="text-orange-500" /><span className="text-orange-500 font-medium">{account.status}</span></>}
+            {statusMeta.tone === 'success'
+              ? <><Shield size={15} className="text-green-500" /><span className="text-green-500 font-medium">{statusMeta.label}</span></>
+              : statusMeta.tone === 'danger'
+                ? <><Shield size={15} className="text-red-500" /><span className="text-red-500 font-medium">{statusMeta.label}</span></>
+                : <><Shield size={15} className="text-orange-500" /><span className="text-orange-500 font-medium">{statusMeta.label}</span></>}
           </div>
           <Button onClick={onClose}>
             {t('common.close')}

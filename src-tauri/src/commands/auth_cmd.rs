@@ -84,7 +84,7 @@ async fn login_social(
         existing.profile_arn.clone_from(&auth_result.profile_arn);
         existing.label = format!("Kiro {provider_id} 账号");
         existing.usage_data = Some(usage_result.usage_data);
-        existing.status = calc_status(usage_result.is_banned);
+        existing.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
         existing.clone()
     } else {
         let final_email = new_email.ok_or("获取邮箱失败")?;
@@ -97,7 +97,7 @@ async fn login_social(
         account.expires_at = Some(auth_result.expires_at.clone());
         account.profile_arn = auth_result.profile_arn;
         account.usage_data = Some(usage_result.usage_data);
-        account.status = calc_status(usage_result.is_banned);
+        account.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
         store.accounts.insert(0, account.clone());
         account
     };
@@ -160,7 +160,7 @@ async fn login_idc(
         existing.id_token = auth_result.id_token;
         existing.profile_arn = auth_result.profile_arn;
         existing.usage_data = Some(usage_result.usage_data);
-        existing.status = calc_status(usage_result.is_banned);
+        existing.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
         existing.clone()
     } else {
         let mut account = Account::new(final_email.clone(), format!("Kiro {provider_id} 账号"));
@@ -179,7 +179,7 @@ async fn login_idc(
         account.id_token = auth_result.id_token;
         account.profile_arn = auth_result.profile_arn;
         account.usage_data = Some(usage_result.usage_data);
-        account.status = calc_status(usage_result.is_banned);
+        account.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
         store.accounts.insert(0, account.clone());
         account
     };
@@ -253,7 +253,7 @@ pub async fn handle_kiro_social_callback(
         existing.email.clone_from(&new_email);
         existing.user_id.clone_from(&user_id);
         existing.usage_data = Some(usage_result.usage_data);
-        existing.status = calc_status(usage_result.is_banned);
+        existing.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
         existing.clone()
     } else {
         let mut account = Account::new(final_email.clone(), format!("Kiro {} 账号", pending.provider));
@@ -263,7 +263,7 @@ pub async fn handle_kiro_social_callback(
         account.auth_method = Some("social".to_string());
         account.user_id = user_id;
         account.usage_data = Some(usage_result.usage_data);
-        account.status = calc_status(usage_result.is_banned);
+        account.status = calc_status(usage_result.is_banned, usage_result.is_auth_error);
         store.accounts.insert(0, account.clone());
         account
     };
