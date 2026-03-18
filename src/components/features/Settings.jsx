@@ -291,22 +291,45 @@ function Settings() {
     }
 
     const handleTrustedCommandsModeChange = async (mode) => {
+        if (!mode) return
+        if (mode === 'all') {
+            const confirmed = await showConfirm(
+                t('settings.trustedCommandsAllConfirmTitle'),
+                t('settings.trustedCommandsAllConfirmMessage'),
+                { confirmText: t('settings.trustedCommandsAllConfirmAction'), cancelText: t('common.cancel') }
+            )
+            if (!confirmed) {
+                return
+            }
+        }
+        const previousMode = trustedCommandsMode
         setTrustedCommandsMode(mode)
         try {
             await invoke('set_kiro_trusted_commands', { mode, customCommands: customTrustedCommands })
         } catch (err) {
+            setTrustedCommandsMode(previousMode)
             await showError(t('settings.saveFailed'), t('settings.saveFailed') + ': ' + err)
         }
     }
 
     const handleCustomTrustedCommandsChange = async (commands) => {
-        setCustomTrustedCommands(commands)
         if (trustedCommandsMode === 'common') {
+            const hasGlobalWildcard = commands
+                .split('\n')
+                .map(line => line.trim())
+                .some(line => line === '*')
+            if (hasGlobalWildcard) {
+                await showError(t('settings.saveFailed'), t('settings.trustedCommandsWildcardBlocked'))
+                return
+            }
+            setCustomTrustedCommands(commands)
             try {
                 await invoke('set_kiro_trusted_commands', { mode: 'common', customCommands: commands })
             } catch (err) {
-                console.error('Failed to save custom commands:', err)
+                await showError(t('settings.saveFailed'), t('settings.saveFailed') + ': ' + err)
             }
+        } else {
+            setCustomTrustedCommands(commands)
         }
     }
 

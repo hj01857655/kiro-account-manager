@@ -6,6 +6,32 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+const DEFAULT_SAFE_TRUSTED_COMMANDS: &[&str] = &[
+    "npm run *",
+    "npm test *",
+    "pnpm run *",
+    "pnpm test *",
+    "yarn run *",
+    "yarn test *",
+    "bun run *",
+    "bun test *",
+    "cargo check *",
+    "cargo test *",
+    "cargo build *",
+    "cargo clippy *",
+    "cargo fmt *",
+    "git status",
+    "git diff *",
+    "git log *",
+    "git show *",
+    "git branch *",
+    "git rev-parse *",
+    "cat *",
+    "ls *",
+    "dir *",
+    "pwd",
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)] // 设置结构体需要多个布尔字段来表示不同的开关选项
@@ -439,34 +465,23 @@ fn set_kiro_trusted_commands_inner(mode: String, custom_commands: Option<String>
                 // 如果有自定义命令，解析它；否则使用默认列表
                 if let Some(ref custom) = custom_commands {
                     if custom.trim().is_empty() {
-                        // 默认常用命令
-                        serde_json::json!([
-                            "npm *", "pnpm *", "yarn *", "bun *",
-                            "git *", "cargo *", "rustup *",
-                            "python *", "pip *", "uv *", "uvx *",
-                            "node *", "npx *", "deno *",
-                            "cat *", "ls *", "dir *", "cd *", "pwd",
-                            "mkdir *", "touch *", "echo *"
-                        ])
+                        serde_json::json!(DEFAULT_SAFE_TRUSTED_COMMANDS)
                     } else {
                         let cmds: Vec<&str> = custom.lines()
                             .map(str::trim)
                             .filter(|s| !s.is_empty())
                             .collect();
+                        if cmds.iter().any(|cmd| *cmd == "*") {
+                            return Err("common 模式不允许使用 *，如需全部信任请切换到“全部信任”".to_string());
+                        }
                         serde_json::json!(cmds)
                     }
                 } else {
-                    serde_json::json!([
-                        "npm *", "pnpm *", "yarn *", "bun *",
-                        "git *", "cargo *", "rustup *",
-                        "python *", "pip *", "uv *", "uvx *",
-                        "node *", "npx *", "deno *",
-                        "cat *", "ls *", "dir *", "cd *", "pwd",
-                        "mkdir *", "touch *", "echo *"
-                    ])
+                    serde_json::json!(DEFAULT_SAFE_TRUSTED_COMMANDS)
                 }
             },
-            _ => serde_json::json!([]),
+            "none" => serde_json::json!([]),
+            _ => return Err(format!("不支持的 trusted commands 模式: {mode}")),
         };
         obj.insert("kiroAgent.trustedCommands".to_string(), commands);
     }

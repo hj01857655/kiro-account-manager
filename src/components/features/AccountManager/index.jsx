@@ -460,7 +460,7 @@ function AccountManager({ onNavigate }) {
           onDelete={handleDelete}
           onDeleteRemote={handleDeleteRemote}
           onCopy={handleCopy}
-          onAdd={() => setShowAddModal(true)}
+          onAdd={() => setShowImportModal(true)}
           refreshingId={refreshingId}
           refreshingTokenId={refreshingTokenId}
           switchingId={switchingId}
