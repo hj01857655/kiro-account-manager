@@ -66,6 +66,16 @@ pub fn register_waiter(state: &str) -> DeepLinkCallbackWaiter {
     }
 }
 
+/// 取消当前等待中的 deep link 登录
+pub fn cancel_waiter() -> bool {
+    let Some(storage) = PENDING_SENDER.get() else { return false };
+
+    let mut guard = storage.lock().expect("Failed to acquire pending sender lock");
+    let Some((_state, tx)) = guard.take() else { return false };
+    let _ = tx.send(Err("登录已取消".to_string()));
+    true
+}
+
 /// 处理 deep link URL（由 main.rs 调用）
 pub fn handle_deep_link(url: &str) -> bool {
     let Some(storage) = PENDING_SENDER.get() else { return false };

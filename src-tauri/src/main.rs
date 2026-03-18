@@ -51,7 +51,7 @@ use commands::app_settings_cmd::{
     get_app_settings, save_app_settings, get_usage_history, save_usage_history_entry,
     bind_machine_id_to_account, unbind_machine_id_from_account, get_bound_machine_id, get_all_bound_machine_ids
 };
-use commands::auth_cmd::{get_current_user, logout, kiro_login, get_supported_providers, handle_kiro_social_callback};
+use commands::auth_cmd::{cancel_kiro_login, get_current_user, logout, kiro_login, get_supported_providers, handle_kiro_social_callback};
 use commands::kiro_settings_cmd::{
     get_kiro_settings, set_kiro_proxy, set_kiro_model, set_kiro_codebase_indexing, set_kiro_trusted_commands,
     set_kiro_agent_autonomy, set_kiro_tab_autocomplete, set_kiro_usage_summary, set_kiro_code_references,
@@ -245,6 +245,7 @@ fn main() {
             // Auth 命令
             get_current_user,
             logout,
+            cancel_kiro_login,
             kiro_login,
             get_supported_providers,
             handle_kiro_social_callback,

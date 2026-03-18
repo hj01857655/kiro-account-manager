@@ -6,25 +6,68 @@ import { useApp } from '../../hooks/useApp'
 import { Button } from '../ui/button'
 import { getThemeAccent } from './KiroConfig/themeAccent'
 
+const DEFAULT_PROVIDER_ORDER = ['Google', 'Github', 'BuilderId', 'Enterprise']
+
+function getProviderMeta(provider, colors, t) {
+  const providers = {
+    Google: {
+      name: t('login.google'),
+      icon: (
+        <svg width="28" height="28" viewBox="0 0 24 24">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+      ),
+    },
+    Github: {
+      name: t('login.github'),
+      icon: (
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" className={colors.text}>
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+      ),
+    },
+    BuilderId: {
+      name: t('login.builderId'),
+      icon: <span className="text-[#ff9900] font-bold text-xl">aws</span>,
+    },
+    Enterprise: {
+      name: t('login.idc'),
+      icon: <span className="text-[#ff9900] font-bold text-xl">aws</span>,
+    },
+  }
+
+  return providers[provider] || {
+    name: provider,
+    icon: <span className={`text-xl font-bold ${colors.text}`}>{provider[0] || '?'}</span>,
+  }
+}
+
 function Login({ onLogin }) {
   const { t, colors, theme } = useApp()
   const accent = getThemeAccent(theme)
+  const [supportedProviders, setSupportedProviders] = useState(DEFAULT_PROVIDER_ORDER)
   const [loadingProvider, setLoadingProvider] = useState(null)
+  const [loginPending, setLoginPending] = useState(false)
+  const [canceling, setCanceling] = useState(false)
   const [error, setError] = useState('')
   const [showEnterpriseModal, setShowEnterpriseModal] = useState(false)
   const [enterpriseStartUrl, setEnterpriseStartUrl] = useState('')
   const [enterpriseRegion, setEnterpriseRegion] = useState('us-east-1')
   const [showWaitingModal, setShowWaitingModal] = useState(false)
-  const [waitingProviderName, setWaitingProviderName] = useState('')
+  const [waitingProviderName, setWaitingProviderName] = useState(t('login.idc'))
 
   useEffect(() => {
     let unlistenSuccess
 
     const setupListener = async () => {
-      unlistenSuccess = await listen('login-success', (event) => {
+      unlistenSuccess = await listen('login-success', () => {
+        setLoginPending(false)
         setLoadingProvider(null)
         setShowWaitingModal(false)
-        onLogin?.(event.payload)
+        onLogin?.()
       })
     }
 
@@ -35,24 +78,57 @@ function Login({ onLogin }) {
     }
   }, [onLogin])
 
-  // Provider 显示名称映射
-  const providerNames = {
-    'Google': 'Google',
-    'Github': 'Github',
-    'BuilderId': 'Builder ID',
-    'Enterprise': 'IAM Identity Center'
+  useEffect(() => {
+    let mounted = true
+
+    const loadSupportedProviders = async () => {
+      try {
+        const providers = await invoke('get_supported_providers')
+        if (!mounted || !Array.isArray(providers) || providers.length === 0) {
+          return
+        }
+
+        const normalizedProviders = [
+          ...DEFAULT_PROVIDER_ORDER.filter((provider) => providers.includes(provider)),
+          ...providers.filter((provider) => !DEFAULT_PROVIDER_ORDER.includes(provider)),
+        ]
+        setSupportedProviders(normalizedProviders)
+      } catch (e) {
+        console.error('Failed to load supported providers:', e)
+      }
+    }
+
+    loadSupportedProviders()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const getLoginErrorMessage = (e) => {
+    const rawMessage = typeof e === 'string' ? e : e?.message || t('login.failed')
+    if (rawMessage.includes('登录已取消') || rawMessage.toLowerCase().includes('cancel')) {
+      return t('login.cancelled')
+    }
+    return rawMessage
   }
 
   const handleLogin = async (provider) => {
+    if (loginPending) return
+
     // Enterprise 需要用户输入 start_url
     if (provider === 'Enterprise') {
+      setError('')
       setShowEnterpriseModal(true)
       return
     }
 
+    const providerMeta = getProviderMeta(provider, colors, t)
+
     // 显示等待授权弹窗
-    setWaitingProviderName(providerNames[provider] || provider)
+    setWaitingProviderName(providerMeta.name)
     setShowWaitingModal(true)
+    setLoginPending(true)
     setLoadingProvider(provider)
     setError('')
     
@@ -60,81 +136,73 @@ function Login({ onLogin }) {
       await invoke('kiro_login', { provider })
     } catch (e) {
       console.error('Login error:', e)
-      setError(typeof e === 'string' ? e : e.message || t('login.failed'))
+      setError(getLoginErrorMessage(e))
+    } finally {
+      setCanceling(false)
+      setLoginPending(false)
       setLoadingProvider(null)
       setShowWaitingModal(false)
     }
   }
 
-  const handleCancelLogin = () => {
-    setShowWaitingModal(false)
-    setLoadingProvider(null)
-    setError('')
+  const handleCancelLogin = async () => {
+    if (!loginPending || canceling) {
+      setShowWaitingModal(false)
+      return
+    }
+
+    setCanceling(true)
+    try {
+      await invoke('cancel_kiro_login')
+    } catch (e) {
+      console.error('Cancel login error:', e)
+      setCanceling(false)
+      setError(t('login.cancelFailed'))
+    }
   }
 
   const handleEnterpriseLogin = async () => {
-    if (!enterpriseStartUrl.trim()) {
-      setError('请输入 Start URL')
+    const normalizedStartUrl = enterpriseStartUrl.trim()
+    const normalizedRegion = enterpriseRegion.trim() || 'us-east-1'
+
+    if (!normalizedStartUrl) {
+      setError(t('login.startUrlRequired'))
+      return
+    }
+
+    if (!/^https:\/\//i.test(normalizedStartUrl)) {
+      setError(t('login.startUrlInvalid'))
       return
     }
 
     setShowEnterpriseModal(false)
-    setWaitingProviderName(providerNames['Enterprise'])
+    setWaitingProviderName(t('login.idc'))
     setShowWaitingModal(true)
+    setLoginPending(true)
     setLoadingProvider('Enterprise')
     setError('')
     
     try {
       await invoke('kiro_login', { 
         provider: 'Enterprise',
-        startUrl: enterpriseStartUrl.trim(),
-        region: enterpriseRegion
+        startUrl: normalizedStartUrl,
+        region: normalizedRegion
       })
     } catch (e) {
       console.error('Login error:', e)
-      setError(typeof e === 'string' ? e : e.message || t('login.failed'))
+      setError(getLoginErrorMessage(e))
+    } finally {
+      setCanceling(false)
+      setLoginPending(false)
       setLoadingProvider(null)
       setShowWaitingModal(false)
     }
   }
 
-  const providers = [
-    {
-      id: 'Google',
-      name: 'Google',
-      icon: (
-        <svg width="28" height="28" viewBox="0 0 24 24">
-          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'Github',
-      name: 'Github',
-      icon: (
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" className={colors.text}>
-          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'BuilderId',
-      name: 'Builder ID',
-      icon: (
-        <span className="text-[#ff9900] font-bold text-xl">aws</span>
-      ),
-    },
-    {
-      id: 'Enterprise',
-      name: 'IAM Identity Center',
-      icon: (
-        <span className="text-[#ff9900] font-bold text-xl">aws</span>
-      ),
-    },
-  ]
+  const providers = supportedProviders.map((provider) => ({
+    id: provider,
+    ...getProviderMeta(provider, colors, t),
+  }))
 
   return (
     <div className={`h-full flex flex-col items-center justify-center ${colors.main} relative overflow-hidden`}>
@@ -158,7 +226,7 @@ function Login({ onLogin }) {
 
         {/* Title */}
         <h1 className={`text-xl font-normal ${colors.textMuted} text-center`} style={{ marginBottom: '30px' }}>
-          Choose a way to sign in/sign up
+          {t('login.subtitle')}
         </h1>
 
         {/* Error */}
@@ -174,7 +242,7 @@ function Login({ onLogin }) {
             <button
               key={provider.id}
               onClick={() => handleLogin(provider.id)}
-              disabled={!!loadingProvider}
+              disabled={loginPending}
               className={`
                 group w-full h-[68px] px-8 rounded-xl
                 ${colors.card} border-2 ${colors.cardBorder}
@@ -198,10 +266,10 @@ function Login({ onLogin }) {
                 </span>
               </div>
               {loadingProvider === provider.id ? (
-                <span className={`text-sm ${colors.textMuted} absolute right-8`}>Loading...</span>
+                <span className={`text-sm ${colors.textMuted} absolute right-8`}>{t('login.logging')}</span>
               ) : (
                 <div className={`flex items-center gap-2 ${colors.textMuted} opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute right-8`}>
-                  <span className="text-sm">Sign in</span>
+                  <span className="text-sm">{t('login.signIn')}</span>
                   <ArrowRight size={16} />
                 </div>
               )}
@@ -211,23 +279,23 @@ function Login({ onLogin }) {
 
         {/* Footer */}
         <div className={`text-xs ${colors.textMuted} text-center leading-relaxed max-w-[500px]`} style={{ marginTop: '50px' }}>
-          By signing in and using Kiro, you agree to the{' '}
+          {t('login.agreement')}{' '}
           <a href="https://aws.amazon.com/agreement/" target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
-            AWS Customer Agreement
+            {t('login.awsAgreement')}
           </a>
-          {' '}(or other agreement with us governing your use of AWS services),{' '}
+          、{' '}
           <a href="https://aws.amazon.com/service-terms/" target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
-            Service Terms
+            {t('login.serviceTerms')}
           </a>
-          ,{' '}
+          、{' '}
           <a href="https://aws.amazon.com/privacy/" target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
-            Privacy Notice
+            {t('login.privacy')}
           </a>
-          , and{' '}
+          {t('login.and')}{' '}
           <a href="https://aws.amazon.com/legal/aws-ip-license-terms/" target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
-            AWS Intellectual Property License
+            {t('login.ipLicense')}
           </a>
-          .
+          。
         </div>
       </div>
 
@@ -240,14 +308,14 @@ function Login({ onLogin }) {
           >
             {/* Header */}
             <div className="px-6 pt-6 pb-2">
-              <h2 className={`text-xl font-semibold ${colors.text}`}>IAM Identity Center</h2>
-              <p className={`text-sm ${colors.textMuted} mt-2`}>请输入您企业的 AWS IAM Identity Center Start URL</p>
+              <h2 className={`text-xl font-semibold ${colors.text}`}>{t('login.idc')}</h2>
+              <p className={`text-sm ${colors.textMuted} mt-2`}>{t('login.enterprisePrompt')}</p>
             </div>
             
             {/* Content */}
             <div className="px-6 py-4 space-y-4">
               <div>
-                <label className={`block text-sm font-medium ${colors.text} mb-2`}>Start URL</label>
+                <label className={`block text-sm font-medium ${colors.text} mb-2`}>{t('login.startUrl')}</label>
                 <input
                   type="text"
                   value={enterpriseStartUrl}
@@ -261,12 +329,12 @@ function Login({ onLogin }) {
                   }}
                 />
                 <p className={`text-xs ${colors.textMuted} mt-1.5`}>
-                  示例: https://d-90661d346f.awsapps.com/start
+                  {t('login.startUrlExample')}
                 </p>
               </div>
 
               <div>
-                <label className={`block text-sm font-medium ${colors.text} mb-2`}>AWS Region</label>
+                <label className={`block text-sm font-medium ${colors.text} mb-2`}>{t('login.region')}</label>
                 <input
                   type="text"
                   value={enterpriseRegion}
@@ -275,7 +343,7 @@ function Login({ onLogin }) {
                   className={`w-full px-4 py-3 border rounded-xl ${colors.text} ${colors.input} ${colors.inputFocus} focus:ring-2 transition-all`}
                 />
                 <p className={`text-xs ${colors.textMuted} mt-1.5`}>
-                  示例: us-east-1, ap-southeast-2, eu-west-1
+                  {t('login.regionExample')}
                 </p>
               </div>
             </div>
@@ -286,7 +354,7 @@ function Login({ onLogin }) {
                 variant="secondary"
                 onClick={() => setShowEnterpriseModal(false)}
               >
-                取消
+                {t('login.cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -312,17 +380,20 @@ function Login({ onLogin }) {
                 <div className={`w-12 h-12 rounded-2xl ${accent.iconBadgeBg} flex items-center justify-center`}>
                   <Loader size={24} className={`${accent.text} animate-spin`} />
                 </div>
-                <h2 className={`text-lg font-semibold ${colors.text}`}>等待授权</h2>
+                <h2 className={`text-lg font-semibold ${colors.text}`}>{t('login.waitingTitle')}</h2>
               </div>
             </div>
             
             {/* Content */}
             <div className="px-6 py-4">
               <p className={`text-sm ${colors.text} leading-relaxed`}>
-                正在等待您在浏览器中完成 {waitingProviderName} 授权...
+                {t('login.waitingMessage', { provider: waitingProviderName })}
               </p>
               <p className={`text-xs ${colors.textMuted} mt-2`}>
-                如果浏览器未自动打开，请手动打开授权页面
+                {t('login.waitingHint')}
+              </p>
+              <p className={`text-xs ${colors.textMuted} mt-2`}>
+                {t('login.waitingCloseHint')}
               </p>
             </div>
             
@@ -331,8 +402,9 @@ function Login({ onLogin }) {
               <Button
                 variant="secondary"
                 onClick={handleCancelLogin}
+                disabled={canceling}
               >
-                取消
+                {canceling ? t('login.cancelling') : t('login.cancel')}
               </Button>
             </div>
           </div>

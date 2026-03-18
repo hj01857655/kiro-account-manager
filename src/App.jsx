@@ -138,10 +138,7 @@ function App() {
     }
   }
 
-  const handleLogin = (loggedInUser) => {
-    if (loggedInUser) {
-      setUser(loggedInUser)
-    }
+  const handleLogin = () => {
     checkAuth()
   }
 
@@ -156,7 +153,7 @@ function App() {
     // 特殊处理需要 props 的路由
     const routeProps = {
       home: { onNavigate: setActiveMenu },
-      desktopOAuth: { onLogin: (user) => { handleLogin(user); setActiveMenu('accounts') } },
+      desktopOAuth: { onLogin: () => { handleLogin(); setActiveMenu('accounts') } },
       accounts: { onNavigate: setActiveMenu },
     }
     return <RouteComponent {...(routeProps[activeMenu] || {})} />

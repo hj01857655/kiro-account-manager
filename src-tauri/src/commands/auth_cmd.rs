@@ -7,7 +7,7 @@ use crate::state::AppState;
 use crate::account::Account;
 use crate::auth::User;
 use crate::auth_social;
-use crate::providers::{AuthMethod, AuthProvider, get_provider_config, create_social_provider, create_idc_provider};
+use crate::providers::{AuthMethod, AuthProvider, cancel_pending_idc_login, get_provider_config, create_social_provider, create_idc_provider};
 use crate::commands::common::{get_usage_by_provider, extract_user_info, find_existing_account_idx, calc_status};
 
 #[tauri::command]
@@ -19,6 +19,14 @@ pub fn get_current_user(state: State<AppState>) -> Option<User> {
 pub fn logout(state: State<AppState>) {
     *state.auth.user.lock().expect("Failed to acquire lock") = None;
     *state.auth.access_token.lock().expect("Failed to acquire lock") = None;
+}
+
+#[tauri::command]
+pub fn cancel_kiro_login(state: State<'_, AppState>) -> bool {
+    let cancelled_social = crate::deep_link_handler::cancel_waiter();
+    let cancelled_idc = cancel_pending_idc_login();
+    *state.pending_login.lock().expect("Failed to acquire lock") = None;
+    cancelled_social || cancelled_idc
 }
 
 #[tauri::command]

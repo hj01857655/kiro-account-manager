@@ -8,11 +8,51 @@ use sha1::{Sha1, Digest};
 use super::{AuthResult, AuthProvider, RefreshMetadata};
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
 /// 回调发送器类型别名
 type CallbackSender = Arc<std::sync::Mutex<Option<oneshot::Sender<Result<(String, String), String>>>>>;
+
+#[derive(Clone)]
+struct PendingIdcLogin {
+    tx: CallbackSender,
+    cancelled: Arc<AtomicBool>,
+}
+
+static PENDING_IDC_LOGIN: std::sync::OnceLock<std::sync::Mutex<Option<PendingIdcLogin>>> = std::sync::OnceLock::new();
+
+fn set_pending_login(tx: CallbackSender, cancelled: Arc<AtomicBool>) {
+    let storage = PENDING_IDC_LOGIN.get_or_init(|| std::sync::Mutex::new(None));
+    *storage.lock().expect("Failed to acquire pending IdC login lock") = Some(PendingIdcLogin { tx, cancelled });
+}
+
+fn clear_pending_login() {
+    if let Some(storage) = PENDING_IDC_LOGIN.get() {
+        *storage.lock().expect("Failed to acquire pending IdC login lock") = None;
+    }
+}
+
+pub fn cancel_pending_login() -> bool {
+    let Some(storage) = PENDING_IDC_LOGIN.get() else { return false };
+    let mut guard = storage.lock().expect("Failed to acquire pending IdC login lock");
+    let Some(pending) = guard.take() else { return false };
+
+    pending.cancelled.store(true, Ordering::SeqCst);
+    if let Some(tx) = pending.tx.lock().expect("Failed to acquire callback lock").take() {
+        let _ = tx.send(Err("登录已取消".to_string()));
+    }
+    true
+}
+
+struct PendingLoginGuard;
+
+impl Drop for PendingLoginGuard {
+    fn drop(&mut self) {
+        clear_pending_login();
+    }
+}
 
 /// 启动本地 HTTP 服务器并返回端口和重定向 URI
 fn start_local_server() -> Result<(Arc<tiny_http::Server>, u16, String), String> {
@@ -97,6 +137,7 @@ fn spawn_callback_listener(
     server: Arc<tiny_http::Server>,
     state: String,
     tx: CallbackSender,
+    cancelled: Arc<AtomicBool>,
 ) {
     std::thread::spawn(move || {
         // 设置 10 分钟超时
@@ -104,6 +145,10 @@ fn spawn_callback_listener(
         let start = std::time::Instant::now();
         
         loop {
+            if cancelled.load(Ordering::SeqCst) {
+                break;
+            }
+
             if start.elapsed() > timeout {
                 if let Some(tx) = tx.lock().expect("Failed to acquire callback lock").take() {
                     let _ = tx.send(Err("授权超时".to_string()));
@@ -193,6 +238,9 @@ impl AuthProvider for IdcProvider {
         // Step 2: 启动本地 HTTP 服务器接收回调
         let (tx, rx) = oneshot::channel::<Result<(String, String), String>>();
         let tx = Arc::new(std::sync::Mutex::new(Some(tx)));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        set_pending_login(tx.clone(), cancelled.clone());
+        let _pending_login_guard = PendingLoginGuard;
         
         // 生成 state
         let state = Uuid::new_v4().to_string();
@@ -222,7 +270,7 @@ impl AuthProvider for IdcProvider {
         open_browser(&authorize_url)?;
 
         // Step 7: 在后台线程等待回调
-        spawn_callback_listener(server, state, tx);
+        spawn_callback_listener(server, state, tx, cancelled);
 
         // Step 8: 等待回调
         #[cfg(debug_assertions)]
