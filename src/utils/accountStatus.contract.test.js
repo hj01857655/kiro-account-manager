@@ -5,10 +5,10 @@ const autoRefresh = await readFile(new URL('../hooks/useAutoRefresh.js', import.
 const useAccounts = await readFile(new URL('../components/features/AccountManager/hooks/useAccounts.js', import.meta.url), 'utf8')
 const importModal = await readFile(new URL('../components/features/AccountManager/ImportAccountModal.jsx', import.meta.url), 'utf8')
 
-assert.match(autoRefresh, /isBannedStatus/)
+assert.match(autoRefresh, /isUnavailableStatus/)
 assert.doesNotMatch(autoRefresh, /status !== 'banned'/)
 
-assert.match(useAccounts, /isBannedStatus/)
+assert.match(useAccounts, /isUnavailableStatus/)
 assert.doesNotMatch(useAccounts, /status === 'banned'/)
 assert.doesNotMatch(useAccounts, /status !== 'banned'/)
 

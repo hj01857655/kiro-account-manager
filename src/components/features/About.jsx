@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Github, Heart, Coffee, ExternalLink, Sparkles, Code2, Palette, Cpu, RefreshCw, X, BookOpen, MessageCircle } from 'lucide-react'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { check } from '@tauri-apps/plugin-updater'
 import { Card, Stack, Group, Text, Badge, Image, Button, Modal, Transition } from '@mantine/core'
 import { useApp } from '../../hooks/useApp'
@@ -216,7 +217,7 @@ function About() {
 
   const handleContactQQ = useCallback(async () => {
     try {
-      await invoke('open_url', { url: `tencent://message/?uin=${QQ_NUMBER}&Site=&Menu=yes` })
+      await openUrl(`tencent://message/?uin=${QQ_NUMBER}&Site=&Menu=yes`)
     } catch {
       try {
         await navigator.clipboard.writeText(QQ_NUMBER)

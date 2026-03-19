@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { useApp } from '../../../hooks/useApp'
 import { useDialog } from '../../../contexts/DialogContext'
 import { Zap, RefreshCw, Trash2, Server, FileText, Tag, ChevronDown, ChevronRight, ExternalLink, Download, Check, Globe, Loader2 } from 'lucide-react'
@@ -76,7 +77,7 @@ function PowersPanel({ onCountChange }) {
   }
 
   const handleOpenRepo = (url) => {
-    if (url) window.__TAURI__?.shell?.open?.(url) || window.open(url, '_blank')
+    if (url) openUrl(url).catch(() => window.open(url, '_blank'))
   }
 
   const handleInstall = async (rec) => {

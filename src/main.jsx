@@ -62,8 +62,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 )
 
 // 页面加载完成后显示窗口
+const hasCurrentTauriWindow = () => Boolean(window.__TAURI_INTERNALS__?.metadata?.currentWindow)
+
 document.addEventListener('DOMContentLoaded', () => {
+  if (!hasCurrentTauriWindow()) return
+
   setTimeout(() => {
-    getCurrentWindow().show()
+    getCurrentWindow().show().catch?.(() => {})
   }, 100)
 })
