@@ -253,7 +253,6 @@ fn main() {
             get_kiro_local_token,
             switch_kiro_account,
             read_kiro_accounts,
-            read_kiro_accounts,
             // 进程管理命令
             close_kiro_ide,
             start_kiro_ide,
