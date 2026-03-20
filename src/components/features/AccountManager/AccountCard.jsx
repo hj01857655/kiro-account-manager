@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo } from 'react'
-import { Eye, Copy, Check, Clock, Repeat, Key, BarChart3 } from 'lucide-react'
+import { memo, useCallback, useMemo, useState } from 'react'
+import { Eye, Copy, Check, Clock, Repeat, Key, BarChart3, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Checkbox } from '@mantine/core'
 import { useTheme } from '../../../contexts/ThemeContext'
@@ -26,6 +26,10 @@ const AccountCard = memo(function AccountCard({
   isCurrentAccount,
   tagDefinitions = [],
   groupDefinitions = [],
+  availableModels = null,
+  availableModelsLoading = false,
+  availableModelsError = '',
+  onLoadAvailableModels,
   onContextMenuOpen,
   index = 0,
 }) {
@@ -33,6 +37,7 @@ const AccountCard = memo(function AccountCard({
   const { theme, colors } = useTheme()
   const accent = getThemeAccent(theme)
   const { maskEmail } = usePrivacy()
+  const [modelsExpanded, setModelsExpanded] = useState(false)
   
   // 从 Set 中计算是否选中
   const isSelected = selectedIdsSet?.has(account.id) ?? false
@@ -56,12 +61,27 @@ const AccountCard = memo(function AccountCard({
   }, [account, t])
 
   const { quota, used, subType, subPlan, percent, statusMeta, isBanned, isNormal, isUnavailable, isExpired, breakdown, nextDateReset } = cardData
+  const hasLoadedAvailableModels = Array.isArray(availableModels)
 
   // 右键菜单处理
   const handleContextMenu = useCallback((e) => {
     e.preventDefault()
     onContextMenuOpen(e.clientX, e.clientY)
   }, [onContextMenuOpen])
+
+  const handleToggleAvailableModels = useCallback(async () => {
+    if (availableModelsLoading) {
+      return
+    }
+
+    if (!hasLoadedAvailableModels) {
+      setModelsExpanded(true)
+      await onLoadAvailableModels?.(account.id).catch(() => {})
+      return
+    }
+
+    setModelsExpanded(prev => !prev)
+  }, [account.id, availableModelsLoading, hasLoadedAvailableModels, onLoadAvailableModels])
 
   // 状态光环颜色
   const glowColor = isCurrentAccount
@@ -252,6 +272,72 @@ const AccountCard = memo(function AccountCard({
 
         {/* 固定位置的附加信息区域 */}
         <div className="flex flex-col gap-1.5">
+          <div className={`px-2.5 py-2 rounded-lg ${colors.cardSecondary} shadow-sm`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className={`text-[11px] font-medium ${colors.text}`}>
+                {t('accountCard.availableModels')}
+              </span>
+              <button
+                type="button"
+                onClick={handleToggleAvailableModels}
+                disabled={availableModelsLoading}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all ${colors.cardHover} ${colors.textMuted} disabled:opacity-60`}
+                title={hasLoadedAvailableModels ? t('common.details') : t('accountCard.loadModels')}
+              >
+                <span>
+                  {availableModelsLoading
+                    ? t('accountCard.loadingModels')
+                    : hasLoadedAvailableModels
+                      ? `${availableModels.length} ${t('accountCard.modelCountSuffix')}`
+                      : t('accountCard.loadModels')}
+                </span>
+                {hasLoadedAvailableModels ? (
+                  modelsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                ) : null}
+              </button>
+            </div>
+            {availableModelsError && (
+              <div className="mt-2 text-[10px] text-red-400 break-words">
+                {t('accountCard.modelLoadFailed')}: {availableModelsError.slice(0, 120)}
+              </div>
+            )}
+            {modelsExpanded && hasLoadedAvailableModels && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {availableModels.length > 0 ? availableModels.map(model => {
+                  const isDefaultModel = model.isDefault ?? model.is_default ?? false
+                  const promptCaching = model.promptCaching ?? model.prompt_caching
+                  const supportsPromptCaching = promptCaching?.supportsPromptCaching === true
+
+                  return (
+                    <span
+                      key={model.modelId}
+                      className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium ${colors.cardHover} ${colors.text}`}
+                      title={[model.modelName || model.modelId, model.description].filter(Boolean).join('\n')}
+                    >
+                      <span className="max-w-[180px] truncate">
+                        {model.modelName || model.modelId}
+                      </span>
+                      {isDefaultModel && (
+                        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
+                          {t('accountCard.defaultModel')}
+                        </span>
+                      )}
+                      {supportsPromptCaching && (
+                        <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-sky-400">
+                          {t('accountCard.promptCaching')}
+                        </span>
+                      )}
+                    </span>
+                  )
+                }) : (
+                  <span className={`text-[10px] ${colors.textMuted}`}>
+                    {t('accountCard.noAvailableModels')}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Token 过期时间 */}
           {account.expiresAt && (
             <div className={`text-[11px] ${isExpired ? colors.dateExpired : colors.textMuted} flex items-center gap-1 px-2 py-1 rounded-lg ${colors.cardSecondary}`}>
@@ -331,7 +417,11 @@ const AccountCard = memo(function AccountCard({
     prevProps.refreshingTokenId === nextProps.refreshingTokenId &&
     prevProps.switchingId === nextProps.switchingId &&
     prevProps.isCurrentAccount === nextProps.isCurrentAccount &&
-    prevProps.tagDefinitions === nextProps.tagDefinitions
+    prevProps.tagDefinitions === nextProps.tagDefinitions &&
+    prevProps.availableModels === nextProps.availableModels &&
+    prevProps.availableModelsLoading === nextProps.availableModelsLoading &&
+    prevProps.availableModelsError === nextProps.availableModelsError &&
+    prevProps.onLoadAvailableModels === nextProps.onLoadAvailableModels
   )
 })
 

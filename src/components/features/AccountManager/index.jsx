@@ -43,6 +43,9 @@ function AccountManager({ onNavigate }) {
   const [tagDefinitions, setTagDefinitions] = useState([])
   const [groupDefinitions, setGroupDefinitions] = useState([])
   const [selectedGroup, setSelectedGroup] = useState(null)
+  const [availableModelsById, setAvailableModelsById] = useState({})
+  const [availableModelsLoadingById, setAvailableModelsLoadingById] = useState({})
+  const [availableModelsErrorById, setAvailableModelsErrorById] = useState({})
   const [advancedFilters, setAdvancedFilters] = useState({
     subscriptions: [],
     statuses: [],
@@ -115,10 +118,55 @@ function AccountManager({ onNavigate }) {
     handleExport,
   } = useAccounts()
 
+  const clearAvailableModelsState = useCallback((id) => {
+    setAvailableModelsById(prev => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    setAvailableModelsLoadingById(prev => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    setAvailableModelsErrorById(prev => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+  }, [])
+
+  const handleLoadAvailableModels = useCallback(async (id) => {
+    setAvailableModelsLoadingById(prev => ({ ...prev, [id]: true }))
+    setAvailableModelsErrorById(prev => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+
+    try {
+      const response = await invoke('list_available_models', { id })
+      const models = Array.isArray(response?.models) ? response.models : []
+      setAvailableModelsById(prev => ({ ...prev, [id]: models }))
+      return response
+    } catch (e) {
+      const message = String(e)
+      setAvailableModelsErrorById(prev => ({ ...prev, [id]: message }))
+      throw e
+    } finally {
+      setAvailableModelsLoadingById(prev => ({ ...prev, [id]: false }))
+    }
+  }, [])
+
   // 包装刷新函数，添加 toast 通知
   const handleRefreshWithNotify = useCallback(async (id) => {
     const result = await handleRefreshStatus(id)
     if (result.success) {
+      clearAvailableModelsState(id)
       showSuccess(t('accounts.refreshSuccess'))
     } else if (result.error) {
       const errorMsg = result.error
@@ -133,13 +181,14 @@ function AccountManager({ onNavigate }) {
       }
     }
     return result
-  }, [handleRefreshStatus, t])
+  }, [clearAvailableModelsState, handleRefreshStatus, t])
 
   // 刷新 Token
   const handleRefreshToken = useCallback(async (id) => {
     setRefreshingTokenId(id)
     try {
       const account = await invoke('refresh_account_token', { id })
+      clearAvailableModelsState(id)
       showSuccess('Token 刷新成功')
       return { success: true, account }
     } catch (e) {
@@ -158,7 +207,7 @@ function AccountManager({ onNavigate }) {
       await loadAccounts()
       setRefreshingTokenId(null)
     }
-  }, [loadAccounts])
+  }, [clearAvailableModelsState, loadAccounts])
 
   // 获取所有标签（从标签定义中获取）
   const allTags = useMemo(() => {
@@ -301,8 +350,9 @@ function AccountManager({ onNavigate }) {
     }
     
     await invoke('delete_account', { id })
+    clearAvailableModelsState(id)
     loadAccounts()
-  }, [accounts, localToken, showConfirm, loadAccounts, t])
+  }, [accounts, clearAvailableModelsState, localToken, showConfirm, loadAccounts, t])
 
   // 远程删除账号（从 AWS 服务端注销）
   const handleDeleteRemote = useCallback(async (account) => {
@@ -443,6 +493,10 @@ function AccountManager({ onNavigate }) {
           localToken={localToken}
           tagDefinitions={tagDefinitions}
           groupDefinitions={groupDefinitions}
+          availableModelsById={availableModelsById}
+          availableModelsLoadingById={availableModelsLoadingById}
+          availableModelsErrorById={availableModelsErrorById}
+          onLoadAvailableModels={handleLoadAvailableModels}
         />
       ) : (
         <AccountListView
