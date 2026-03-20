@@ -83,6 +83,15 @@ impl AccountTagLink {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableModelsCacheEntry {
+    pub response: serde_json::Value,
+    pub cached_at: i64,
+    #[serde(default)]
+    pub model_provider: Option<String>,
+}
+
 // ============================================================
 // 账号实体
 // ============================================================
@@ -133,6 +142,8 @@ pub struct Account {
     // 绑定的机器码
     #[serde(default)]
     pub machine_id: Option<String>,
+    #[serde(default)]
+    pub available_models_cache: Option<AvailableModelsCacheEntry>,
 }
 
 impl Account {
@@ -163,6 +174,7 @@ impl Account {
             group_id: None,
             tag_links: Vec::new(),
             machine_id: None,
+            available_models_cache: None,
             password: None,
         }
     }
@@ -194,6 +206,7 @@ impl Account {
             group_id: None,
             tag_links: Vec::new(),
             machine_id: None,
+            available_models_cache: None,
             password: None,
         }
     }

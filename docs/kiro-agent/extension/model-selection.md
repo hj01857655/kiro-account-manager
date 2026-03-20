@@ -220,6 +220,31 @@ interface KiroModel {
   解析
 - 请求构造已支持可选 `modelProvider`
 
+### 当前仓库的缓存设计
+
+当前仓库现在不再只依赖前端内存态缓存，而是做了账号级持久化缓存：
+
+- 缓存位置：
+  - `accounts.json` 内每个账号的 `availableModelsCache`
+- 缓存内容：
+  - 完整 `ListAvailableModelsResponse`
+  - `cachedAt` Unix 时间戳
+  - `modelProvider` 维度
+- 命中策略：
+  - `list_available_models` 默认优先返回 30 分钟内的有效缓存
+  - 只有当 `modelProvider` 与当前请求一致时才命中缓存
+  - 超过 TTL 后才重新请求远端
+- 失效策略：
+  - `refresh_account_token` 成功后清空该账号模型缓存
+  - `sync_account` 发生 token 刷新时清空该账号模型缓存
+  - `list_available_models` 自身发生鉴权刷新时也会清空旧缓存并回写新缓存
+
+这套设计的目的很直接：
+
+- 避免同一账号反复点开模型列表就反复打远端
+- 在应用重启后仍保留最近一次已解析的模型列表
+- 当账号凭证或 profile 变化时，自动让缓存失效，避免旧模型集污染新会话
+
 这样做的目的不是做“兼容猜测”，而是把当前真实线上和 Kiro 本体源码已经坐实的结构直接落到类型系统里。
 
 ### 证据边界

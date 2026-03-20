@@ -5,7 +5,7 @@
 
 use tauri::State;
 use crate::state::AppState;
-use crate::account::Account;
+use crate::account::{Account, AvailableModelsCacheEntry};
 use crate::auth::{User, refresh_token_desktop};
 use crate::commands::machine_guid::get_machine_id;
 use crate::providers::{AuthProvider, IdcProvider, RefreshMetadata, KiroPortalClient};
@@ -16,6 +16,8 @@ use crate::commands::common::{
 use crate::http_client::build_http_client_with_user_agent;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
+
+const AVAILABLE_MODELS_CACHE_TTL_SECONDS: i64 = 30 * 60;
 
 #[derive(Serialize)]
 pub struct SyncAccountResult {
@@ -188,6 +190,47 @@ fn build_kiro_models_user_agent(machine_id: &str) -> String {
     format!("KiroIDE-0.6.18-{machine_id}")
 }
 
+fn now_unix_timestamp() -> i64 {
+    chrono::Utc::now().timestamp()
+}
+
+fn is_available_models_cache_fresh(cached_at: i64, now: i64) -> bool {
+    now.saturating_sub(cached_at) <= AVAILABLE_MODELS_CACHE_TTL_SECONDS
+}
+
+fn read_available_models_cache(
+    account: &Account,
+    model_provider: Option<&str>,
+) -> Option<ListAvailableModelsResponse> {
+    let cache = account.available_models_cache.as_ref()?;
+    if !is_available_models_cache_fresh(cache.cached_at, now_unix_timestamp()) {
+        return None;
+    }
+    if cache.model_provider.as_deref() != model_provider {
+        return None;
+    }
+    serde_json::from_value(cache.response.clone()).ok()
+}
+
+fn write_available_models_cache(
+    account: &mut Account,
+    model_provider: Option<&str>,
+    response: &ListAvailableModelsResponse,
+) -> Result<(), String> {
+    let response_value = serde_json::to_value(response)
+        .map_err(|error| format!("序列化模型缓存失败: {error}"))?;
+    account.available_models_cache = Some(AvailableModelsCacheEntry {
+        response: response_value,
+        cached_at: now_unix_timestamp(),
+        model_provider: model_provider.map(str::to_string),
+    });
+    Ok(())
+}
+
+fn clear_available_models_cache(account: &mut Account) {
+    account.available_models_cache = None;
+}
+
 async fn fetch_available_models_page(
     account: &Account,
     access_token: &str,
@@ -307,6 +350,7 @@ fn apply_refreshed_account_tokens(
     account: &mut Account,
     refresh: &RefreshResult,
 ) {
+    clear_available_models_cache(account);
     account.access_token = Some(refresh.access_token.clone());
     if let Some(refresh_token) = refresh.refresh_token.clone() {
         account.refresh_token = Some(refresh_token);
@@ -392,6 +436,7 @@ pub async fn sync_account(state: State<'_, AppState>, id: String) -> Result<Sync
     let result = if let Some(a) = store.accounts.iter_mut().find(|a| a.id == id) {
         // 如果刷新了 token，更新 token 相关字段
         if let Some(result) = refresh_result {
+            clear_available_models_cache(a);
             // 直接移动所有权，避免 clone
             a.access_token = Some(result.access_token);
             a.refresh_token = result.refresh_token;
@@ -475,6 +520,7 @@ pub async fn refresh_account_token(state: State<'_, AppState>, id: String) -> Re
 
     let mut store = state.store.lock().expect("Failed to acquire store lock");
     if let Some(a) = store.accounts.iter_mut().find(|a| a.id == id) {
+        clear_available_models_cache(a);
         // 直接移动所有权，避免 clone
         a.access_token = Some(refresh_result.access_token);
         a.refresh_token = refresh_result.refresh_token;
@@ -1172,13 +1218,24 @@ pub async fn list_available_models(
     }
     .ok_or("账号不存在")?;
 
+    if let Some(cached_response) = read_available_models_cache(&account, model_provider.as_deref()) {
+        return Ok(cached_response);
+    }
+
     let initial_access_token = account
         .access_token
         .clone()
         .ok_or("账号缺少 access_token，请先刷新 Token")?;
 
     match fetch_all_available_models(&account, &initial_access_token, model_provider.as_deref()).await {
-        Ok(response) => Ok(response),
+        Ok(response) => {
+            let mut store = state.store.lock().expect("Failed to acquire store lock");
+            if let Some(stored_account) = store.accounts.iter_mut().find(|item| item.id == id) {
+                write_available_models_cache(stored_account, model_provider.as_deref(), &response)?;
+                store.save_to_file();
+            }
+            Ok(response)
+        }
         Err(error) if is_auth_error_message(&error) => {
             let refresh = refresh_token_by_provider(&account).await?;
             apply_refreshed_account_tokens(&mut account, &refresh);
@@ -1193,7 +1250,16 @@ pub async fn list_available_models(
                 apply_refreshed_account_tokens(stored_account, &refresh);
                 store.save_to_file();
             }
-            fetch_all_available_models(&account, &refresh.access_token, model_provider.as_deref()).await
+            let response =
+                fetch_all_available_models(&account, &refresh.access_token, model_provider.as_deref()).await?;
+            {
+                let mut store = state.store.lock().expect("Failed to acquire store lock");
+                if let Some(stored_account) = store.accounts.iter_mut().find(|item| item.id == id) {
+                    write_available_models_cache(stored_account, model_provider.as_deref(), &response)?;
+                    store.save_to_file();
+                }
+            }
+            Ok(response)
         }
         Err(error) => Err(error),
     }
@@ -1202,10 +1268,12 @@ pub async fn list_available_models(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_list_available_models_url, ensure_default_model_present, mark_default_model,
-        resolve_q_service_endpoint, sort_available_models_for_display, AvailableModel,
-        ListAvailableModelsResponse,
+        build_list_available_models_url, clear_available_models_cache, ensure_default_model_present,
+        is_available_models_cache_fresh, mark_default_model, read_available_models_cache,
+        resolve_q_service_endpoint, sort_available_models_for_display, write_available_models_cache,
+        AvailableModel, ListAvailableModelsResponse, AVAILABLE_MODELS_CACHE_TTL_SECONDS,
     };
+    use crate::account::Account;
 
     #[test]
     fn resolve_q_service_endpoint_matches_upstream_region_rule() {
@@ -1508,5 +1576,92 @@ mod tests {
             response.models.first().map(|model| model.model_id.as_str()),
             Some("auto")
         );
+    }
+
+    #[test]
+    fn available_models_cache_round_trips_response() {
+        let mut account = Account::new("cache@example.com".to_string(), "cache".to_string());
+        let response: ListAvailableModelsResponse = serde_json::from_value(serde_json::json!({
+            "defaultModel": {
+                "modelId": "auto",
+                "modelName": "Auto"
+            },
+            "models": [
+                {
+                    "modelId": "auto",
+                    "modelName": "Auto"
+                },
+                {
+                    "modelId": "claude-sonnet-4.5",
+                    "modelName": "Claude Sonnet 4.5"
+                }
+            ],
+            "nextToken": null
+        }))
+        .expect("response should deserialize");
+
+        write_available_models_cache(&mut account, Some("anthropic"), &response)
+            .expect("cache write should succeed");
+        let cached = read_available_models_cache(&account, Some("anthropic"))
+            .expect("cache should be readable");
+
+        assert_eq!(cached.models.len(), 2);
+        assert_eq!(
+            cached.default_model.as_ref().map(|model| model.model_id.as_str()),
+            Some("auto")
+        );
+    }
+
+    #[test]
+    fn available_models_cache_expires_after_ttl() {
+        assert!(is_available_models_cache_fresh(
+            100,
+            100 + AVAILABLE_MODELS_CACHE_TTL_SECONDS
+        ));
+        assert!(!is_available_models_cache_fresh(
+            100,
+            101 + AVAILABLE_MODELS_CACHE_TTL_SECONDS
+        ));
+    }
+
+    #[test]
+    fn clear_available_models_cache_removes_cached_response() {
+        let mut account = Account::new("cache@example.com".to_string(), "cache".to_string());
+        let response: ListAvailableModelsResponse = serde_json::from_value(serde_json::json!({
+            "defaultModel": {
+                "modelId": "auto",
+                "modelName": "Auto"
+            },
+            "models": [],
+            "nextToken": null
+        }))
+        .expect("response should deserialize");
+
+        write_available_models_cache(&mut account, None, &response)
+            .expect("cache write should succeed");
+        clear_available_models_cache(&mut account);
+
+        assert!(read_available_models_cache(&account, None).is_none());
+    }
+
+    #[test]
+    fn available_models_cache_misses_when_model_provider_differs() {
+        let mut account = Account::new("cache@example.com".to_string(), "cache".to_string());
+        let response: ListAvailableModelsResponse = serde_json::from_value(serde_json::json!({
+            "defaultModel": {
+                "modelId": "auto",
+                "modelName": "Auto"
+            },
+            "models": [],
+            "nextToken": null
+        }))
+        .expect("response should deserialize");
+
+        write_available_models_cache(&mut account, Some("anthropic"), &response)
+            .expect("cache write should succeed");
+
+        assert!(read_available_models_cache(&account, Some("openai")).is_none());
+        assert!(read_available_models_cache(&account, None).is_none());
+        assert!(read_available_models_cache(&account, Some("anthropic")).is_some());
     }
 }
