@@ -12,19 +12,43 @@ import { getThemeAccent, isLightTheme as checkIsLightTheme } from '../KiroConfig
 
 // 单行组件
 const ListRow = memo(function ListRow({
-  account, isSelected, isCurrent, refreshingId, switchingId, tagDefinitions, groupDefinitions, colors, isLightTheme, t, maskEmail,
-  onSelectOne, onSwitch, onRefresh, onEdit, onEditLabel, onDelete, onDeleteRemote, onCopy,
+  account,
+  isSelected,
+  isCurrent,
+  isRefreshing,
+  isSwitching,
+  tagMap,
+  groupMap,
+  colors,
+  isLightTheme,
+  t,
+  maskEmail,
+  onSelectOne,
+  onSwitch,
+  onRefresh,
+  onEdit,
+  onEditLabel,
+  onDelete,
+  onDeleteRemote,
+  onCopy,
 }) {
   const [contextMenu, setContextMenu] = useState(null)
   const used = getUsed(account)
   const limit = getQuota(account)
-  const remaining = limit - used
+  const remaining = Math.max(limit - used, 0)
   const usagePercent = limit > 0 ? Math.min((used / limit) * 100, 100) : 0
   const isBanned = isBannedStatus(account.status)
   const isUnavailable = isUnavailableStatus(account.status)
   const statusMeta = getAccountStatusMeta(account.status, t)
-  const isRefreshing = refreshingId === account.id
-  const isSwitching = switchingId === account.id
+}) {
+  const [contextMenu, setContextMenu] = useState(null)
+  const used = getUsed(account)
+  const limit = getQuota(account)
+  const remaining = Math.max(limit - used, 0)
+  const usagePercent = limit > 0 ? Math.min((used / limit) * 100, 100) : 0
+  const isBanned = isBannedStatus(account.status)
+  const isUnavailable = isUnavailableStatus(account.status)
+  const statusMeta = getAccountStatusMeta(account.status, t)
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault()
@@ -138,7 +162,7 @@ const ListRow = memo(function ListRow({
       {/* 分组 */}
       <div className="w-16 shrink-0">
         {account.groupId ? (() => {
-          const group = groupDefinitions.find(g => g.id === account.groupId)
+          const group = groupMap.get(account.groupId)
           return group ? (
             <span 
               className="text-[10px] px-1.5 py-0.5 rounded font-medium truncate block max-w-full"
@@ -156,7 +180,7 @@ const ListRow = memo(function ListRow({
         {account.tagLinks?.length > 0 ? (
           <div className="flex items-center gap-1 flex-wrap">
             {account.tagLinks.slice(0, 3).map(tagLink => {
-              const tag = tagDefinitions.find(t => t.id === tagLink.tagId)
+              const tag = tagMap.get(tagLink.tagId)
               const linkedAt = tagLink.linkedAt
               // 优先用标签定义的名称，如果标签被删除则用 tagLink 中存储的名称
               const tagName = tag?.name || tagLink.tagName || '未知标签'
@@ -171,7 +195,8 @@ const ListRow = memo(function ListRow({
   )
 }, (prev, next) => (
   prev.account === next.account && prev.isSelected === next.isSelected && prev.isCurrent === next.isCurrent &&
-  prev.refreshingId === next.refreshingId && prev.switchingId === next.switchingId && prev.tagDefinitions === next.tagDefinitions && prev.groupDefinitions === next.groupDefinitions && prev.isLightTheme === next.isLightTheme
+  prev.isRefreshing === next.isRefreshing && prev.isSwitching === next.isSwitching &&
+  prev.tagMap === next.tagMap && prev.groupMap === next.groupMap && prev.isLightTheme === next.isLightTheme
 ))
 
 
@@ -187,6 +212,8 @@ function AccountListView({
   // 优化：如果父组件传递了 selectedIdsSet，直接使用；否则创建
   const _selectedIdsSet = selectedIdsSet || useMemo(() => new Set(selectedIds), [selectedIds])
   const localRefreshToken = localToken?.refreshToken
+  const tagMap = useMemo(() => new Map(tagDefinitions.map(tag => [tag.id, tag])), [tagDefinitions])
+  const groupMap = useMemo(() => new Map(groupDefinitions.map(group => [group.id, group])), [groupDefinitions])
 
   const rowVirtualizer = useVirtualizer({
     count: accounts.length,
@@ -287,10 +314,10 @@ function AccountListView({
                   account={acc}
                   isSelected={_selectedIdsSet.has(acc.id)}
                   isCurrent={localRefreshToken && acc.refreshToken === localRefreshToken}
-                  refreshingId={refreshingId}
-                  switchingId={switchingId}
-                  tagDefinitions={tagDefinitions}
-                  groupDefinitions={groupDefinitions}
+                  isRefreshing={refreshingId === acc.id}
+                  isSwitching={switchingId === acc.id}
+                  tagMap={tagMap}
+                  groupMap={groupMap}
                   colors={colors}
                   isLightTheme={isLightTheme}
                   t={t}
