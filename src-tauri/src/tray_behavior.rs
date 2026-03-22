@@ -1,3 +1,5 @@
+use crate::state::AppState;
+use std::sync::atomic::Ordering;
 use tauri::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
@@ -23,8 +25,15 @@ pub fn tray_menu_action(id: &str) -> Option<TrayMenuAction> {
     }
 }
 
-pub fn should_hide_window_on_close(label: &str) -> bool {
-    label == MAIN_WINDOW_LABEL
+pub fn should_hide_window_on_close(label: &str, tray_ready: bool) -> bool {
+    tray_ready && label == MAIN_WINDOW_LABEL
+}
+
+fn tray_is_ready<R: Runtime>(window: &Window<R>) -> bool {
+    window
+        .state::<AppState>()
+        .tray_ready
+        .load(Ordering::Relaxed)
 }
 
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
@@ -80,7 +89,7 @@ pub fn create_tray_icon<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<TrayIco
 
 pub fn handle_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
-        if should_hide_window_on_close(window.label()) {
+        if should_hide_window_on_close(window.label(), tray_is_ready(window)) {
             api.prevent_close();
             let _ = window.hide();
         }
@@ -102,8 +111,9 @@ mod tests {
     }
 
     #[test]
-    fn tray_behavior_only_hides_main_window_close_requests() {
-        assert!(should_hide_window_on_close("main"));
-        assert!(!should_hide_window_on_close("auth-popup"));
+    fn tray_behavior_only_hides_main_window_when_tray_is_ready() {
+        assert!(should_hide_window_on_close("main", true));
+        assert!(!should_hide_window_on_close("main", false));
+        assert!(!should_hide_window_on_close("auth-popup", true));
     }
 }
