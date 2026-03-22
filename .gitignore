@@ -3,7 +3,6 @@ node_modules/
 
 # Build
 dist/
-docs/
 target/
 
 # IDE
@@ -55,3 +54,4 @@ nul
 
 # Worktrees
 .worktrees/
+.breezell/
