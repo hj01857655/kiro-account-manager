@@ -22,7 +22,7 @@ pub fn decode_cmd_output(bytes: &[u8]) -> String {
             return cow.into_owned();
         }
 
-        return String::from_utf8_lossy(bytes).into_owned();
+        String::from_utf8_lossy(bytes).into_owned()
     }
 
     #[cfg(not(target_os = "windows"))]

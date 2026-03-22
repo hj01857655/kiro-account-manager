@@ -145,7 +145,7 @@ impl PowersManager {
     }
 
     /// 获取 Power 安装目录中的 MCP 服务器名列表
-    fn get_mcp_server_names(power_dir: &PathBuf) -> Vec<String> {
+    fn get_mcp_server_names(power_dir: &Path) -> Vec<String> {
         let mcp_path = power_dir.join("mcp.json");
         if !mcp_path.exists() {
             return vec![];
@@ -165,7 +165,7 @@ impl PowersManager {
     }
 
     /// 获取 steering 目录下的 .md 文件名列表
-    fn get_steering_files(power_dir: &PathBuf) -> Vec<String> {
+    fn get_steering_files(power_dir: &Path) -> Vec<String> {
         let steering_dir = power_dir.join("steering");
         if !steering_dir.exists() {
             return vec![];
@@ -176,8 +176,8 @@ impl PowersManager {
                 entries
                     .filter_map(Result::ok)
                     .filter(|e| e.path().is_file())
-                    .filter(|e| e.path().extension().map_or(false, |ext| ext == "md"))
-                    .filter_map(|e| Some(e.file_name().to_string_lossy().to_string()))
+                    .filter(|e| e.path().extension().is_some_and(|ext| ext == "md"))
+                    .map(|e| e.file_name().to_string_lossy().to_string())
                     .collect()
             })
             .unwrap_or_default()
@@ -332,7 +332,7 @@ impl PowersManager {
                 license: fm.license,
                 keywords: fm.keywords,
                 registry_id: installed_entry.map_or_else(String::new, |e| e.registry_id.clone()),
-                auto_installed: installed_entry.map_or(false, |e| e.auto_installed),
+                auto_installed: installed_entry.is_some_and(|e| e.auto_installed),
                 power_md,
                 mcp_servers: Self::get_mcp_server_names(&path),
                 steering_files: Self::get_steering_files(&path),
@@ -368,7 +368,7 @@ impl PowersManager {
             license: fm.license,
             keywords: fm.keywords,
             registry_id: installed_entry.map_or_else(String::new, |e| e.registry_id.clone()),
-            auto_installed: installed_entry.map_or(false, |e| e.auto_installed),
+            auto_installed: installed_entry.is_some_and(|e| e.auto_installed),
             power_md,
             mcp_servers: Self::get_mcp_server_names(&power_dir),
             steering_files: Self::get_steering_files(&power_dir),
@@ -503,7 +503,7 @@ impl PowersManager {
             }
             if metadata.is_dir() {
                 Self::copy_steering_dir(&src_path, &dst_path)?;
-            } else if metadata.is_file() && src_path.extension().map_or(false, |e| e == "md") {
+            } else if metadata.is_file() && src_path.extension().is_some_and(|e| e == "md") {
                 fs::copy(&src_path, &dst_path).map_err(|e| format!("复制文件失败: {e}"))?;
             }
         }
@@ -546,7 +546,7 @@ impl PowersManager {
         for entry in fs::read_dir(&reg_dir).map_err(|e| format!("读取 registries 目录失败: {e}"))? {
             let entry = entry.map_err(|e| format!("读取条目失败: {e}"))?;
             let path = entry.path();
-            if !path.is_file() || path.extension().map_or(true, |e| e != "json") { continue; }
+            if !path.is_file() || path.extension().is_none_or(|e| e != "json") { continue; }
 
             let file_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
             let id = file_name.trim_end_matches(".json").to_string();

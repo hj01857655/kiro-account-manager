@@ -62,6 +62,10 @@ const AccountCard = memo(function AccountCard({
 
   const { quota, used, subType, subPlan, percent, statusMeta, isBanned, isNormal, isUnavailable, isExpired, breakdown, nextDateReset } = cardData
   const hasLoadedAvailableModels = Array.isArray(availableModels)
+  const availableModelsCache = account.availableModelsCache
+  const availableModelsCachedAtText = availableModelsCache?.cachedAt
+    ? new Date(availableModelsCache.cachedAt * 1000).toLocaleString()
+    : ''
 
   // 右键菜单处理
   const handleContextMenu = useCallback((e) => {
@@ -82,6 +86,15 @@ const AccountCard = memo(function AccountCard({
 
     setModelsExpanded(prev => !prev)
   }, [account.id, availableModelsLoading, hasLoadedAvailableModels, onLoadAvailableModels])
+
+  const handleRefreshAvailableModels = useCallback(async () => {
+    if (availableModelsLoading) {
+      return
+    }
+
+    setModelsExpanded(true)
+    await onLoadAvailableModels?.(account.id, { forceRefresh: true }).catch(() => {})
+  }, [account.id, availableModelsLoading, onLoadAvailableModels])
 
   // 状态光环颜色
   const glowColor = isCurrentAccount
@@ -274,27 +287,46 @@ const AccountCard = memo(function AccountCard({
         <div className="flex flex-col gap-1.5">
           <div className={`px-2.5 py-2 rounded-lg ${colors.cardSecondary} shadow-sm`}>
             <div className="flex items-center justify-between gap-2">
-              <span className={`text-[11px] font-medium ${colors.text}`}>
-                {t('accountCard.availableModels')}
-              </span>
-              <button
-                type="button"
-                onClick={handleToggleAvailableModels}
-                disabled={availableModelsLoading}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all ${colors.cardHover} ${colors.textMuted} disabled:opacity-60`}
-                title={hasLoadedAvailableModels ? t('common.details') : t('accountCard.loadModels')}
-              >
-                <span>
-                  {availableModelsLoading
-                    ? t('accountCard.loadingModels')
-                    : hasLoadedAvailableModels
-                      ? `${availableModels.length} ${t('accountCard.modelCountSuffix')}`
-                      : t('accountCard.loadModels')}
+              <div className="min-w-0">
+                <span className={`text-[11px] font-medium ${colors.text}`}>
+                  {t('accountCard.availableModels')}
                 </span>
-                {hasLoadedAvailableModels ? (
-                  modelsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-                ) : null}
-              </button>
+                {availableModelsCachedAtText && (
+                  <div className={`mt-1 text-[10px] ${colors.textMuted}`}>
+                    {t('accountCard.cachedAt')}: {availableModelsCachedAtText}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleRefreshAvailableModels}
+                  disabled={availableModelsLoading}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all ${colors.cardHover} ${colors.textMuted} disabled:opacity-60`}
+                  title={t('accountCard.refreshModels')}
+                >
+                  <Repeat size={12} className={availableModelsLoading ? 'animate-spin' : ''} />
+                  <span>{t('accountCard.refreshModels')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleAvailableModels}
+                  disabled={availableModelsLoading}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all ${colors.cardHover} ${colors.textMuted} disabled:opacity-60`}
+                  title={hasLoadedAvailableModels ? t('common.details') : t('accountCard.loadModels')}
+                >
+                  <span>
+                    {availableModelsLoading
+                      ? t('accountCard.loadingModels')
+                      : hasLoadedAvailableModels
+                        ? `${availableModels.length} ${t('accountCard.modelCountSuffix')}`
+                        : t('accountCard.loadModels')}
+                  </span>
+                  {hasLoadedAvailableModels ? (
+                    modelsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                  ) : null}
+                </button>
+              </div>
             </div>
             {availableModelsError && (
               <div className="mt-2 text-[10px] text-red-400 break-words">

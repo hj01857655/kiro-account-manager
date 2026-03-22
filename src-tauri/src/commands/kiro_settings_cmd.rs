@@ -471,7 +471,7 @@ fn set_kiro_trusted_commands_inner(mode: String, custom_commands: Option<String>
                             .map(str::trim)
                             .filter(|s| !s.is_empty())
                             .collect();
-                        if cmds.iter().any(|cmd| *cmd == "*") {
+                        if cmds.contains(&"*") {
                             return Err("common 模式不允许使用 *，如需全部信任请切换到“全部信任”".to_string());
                         }
                         serde_json::json!(cmds)

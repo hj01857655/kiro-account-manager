@@ -139,7 +139,8 @@ function AccountManager({ onNavigate }) {
     })
   }, [])
 
-  const handleLoadAvailableModels = useCallback(async (id) => {
+  const handleLoadAvailableModels = useCallback(async (id, options = {}) => {
+    const { forceRefresh = false } = options
     setAvailableModelsLoadingById(prev => ({ ...prev, [id]: true }))
     setAvailableModelsErrorById(prev => {
       if (!(id in prev)) return prev
@@ -149,9 +150,10 @@ function AccountManager({ onNavigate }) {
     })
 
     try {
-      const response = await invoke('list_available_models', { id })
+      const response = await invoke('list_available_models', { id, forceRefresh })
       const models = Array.isArray(response?.models) ? response.models : []
       setAvailableModelsById(prev => ({ ...prev, [id]: models }))
+      loadAccounts()
       return response
     } catch (e) {
       const message = String(e)
@@ -160,7 +162,7 @@ function AccountManager({ onNavigate }) {
     } finally {
       setAvailableModelsLoadingById(prev => ({ ...prev, [id]: false }))
     }
-  }, [])
+  }, [loadAccounts])
 
   // 包装刷新函数，添加 toast 通知
   const handleRefreshWithNotify = useCallback(async (id) => {

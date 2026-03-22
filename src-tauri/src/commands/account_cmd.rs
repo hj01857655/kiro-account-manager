@@ -201,7 +201,11 @@ fn is_available_models_cache_fresh(cached_at: i64, now: i64) -> bool {
 fn read_available_models_cache(
     account: &Account,
     model_provider: Option<&str>,
+    force_refresh: bool,
 ) -> Option<ListAvailableModelsResponse> {
+    if force_refresh {
+        return None;
+    }
     let cache = account.available_models_cache.as_ref()?;
     if !is_available_models_cache_fresh(cache.cached_at, now_unix_timestamp()) {
         return None;
@@ -818,6 +822,7 @@ pub async fn add_local_kiro_account(state: State<'_, AppState>) -> Result<AddAcc
 
 /// 添加 IdC 账号（BuilderId 或 Enterprise）
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Tauri IPC 命令签名需要显式参数，避免前后端调用契约破坏
 pub async fn add_account_by_idc(
     state: State<'_, AppState>,
     provider: Option<String>,
@@ -944,10 +949,10 @@ async fn add_account_by_idc_internal(
         // 计算 client_id_hash（可选）
         let client_id_hash = if let Some(hash) = params.client_id_hash.clone() {
             Some(hash)  // 如果提供了 clientIdHash，直接使用
-        } else if let Some(ref url) = start_url {
-            Some(calculate_client_id_hash(url))  // 如果提取到了 startUrl，计算
         } else {
-            None  // 都没有提供，设置为 None（不影响刷新 token 和获取配额）
+            start_url
+                .as_ref()
+                .map(|url| calculate_client_id_hash(url))  // 如果提取到了 startUrl，计算
         };
         
         let mut store = state.store.lock().expect("Failed to acquire store lock");
@@ -1211,6 +1216,7 @@ pub async fn list_available_models(
     state: State<'_, AppState>,
     id: String,
     model_provider: Option<String>,
+    force_refresh: Option<bool>,
 ) -> Result<ListAvailableModelsResponse, String> {
     let mut account = {
         let store = state.store.lock().expect("Failed to acquire store lock");
@@ -1218,7 +1224,9 @@ pub async fn list_available_models(
     }
     .ok_or("账号不存在")?;
 
-    if let Some(cached_response) = read_available_models_cache(&account, model_provider.as_deref()) {
+    if let Some(cached_response) =
+        read_available_models_cache(&account, model_provider.as_deref(), force_refresh.unwrap_or(false))
+    {
         return Ok(cached_response);
     }
 
@@ -1602,7 +1610,7 @@ mod tests {
 
         write_available_models_cache(&mut account, Some("anthropic"), &response)
             .expect("cache write should succeed");
-        let cached = read_available_models_cache(&account, Some("anthropic"))
+        let cached = read_available_models_cache(&account, Some("anthropic"), false)
             .expect("cache should be readable");
 
         assert_eq!(cached.models.len(), 2);
@@ -1641,7 +1649,7 @@ mod tests {
             .expect("cache write should succeed");
         clear_available_models_cache(&mut account);
 
-        assert!(read_available_models_cache(&account, None).is_none());
+        assert!(read_available_models_cache(&account, None, false).is_none());
     }
 
     #[test]
@@ -1660,8 +1668,27 @@ mod tests {
         write_available_models_cache(&mut account, Some("anthropic"), &response)
             .expect("cache write should succeed");
 
-        assert!(read_available_models_cache(&account, Some("openai")).is_none());
-        assert!(read_available_models_cache(&account, None).is_none());
-        assert!(read_available_models_cache(&account, Some("anthropic")).is_some());
+        assert!(read_available_models_cache(&account, Some("openai"), false).is_none());
+        assert!(read_available_models_cache(&account, None, false).is_none());
+        assert!(read_available_models_cache(&account, Some("anthropic"), false).is_some());
+    }
+
+    #[test]
+    fn available_models_cache_skips_when_force_refresh_enabled() {
+        let mut account = Account::new("cache@example.com".to_string(), "cache".to_string());
+        let response: ListAvailableModelsResponse = serde_json::from_value(serde_json::json!({
+            "defaultModel": {
+                "modelId": "auto",
+                "modelName": "Auto"
+            },
+            "models": [],
+            "nextToken": null
+        }))
+        .expect("response should deserialize");
+
+        write_available_models_cache(&mut account, None, &response)
+            .expect("cache write should succeed");
+
+        assert!(read_available_models_cache(&account, None, true).is_none());
     }
 }

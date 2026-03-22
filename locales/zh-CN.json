@@ -568,6 +568,8 @@
   "accountCard.modelCountSuffix": "个",
   "accountCard.defaultModel": "默认",
   "accountCard.promptCaching": "缓存",
+  "accountCard.refreshModels": "刷新模型",
+  "accountCard.cachedAt": "缓存时间",
 
   "refresh.title": "刷新账号",
   "refresh.progress": "进度",

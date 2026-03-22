@@ -39,6 +39,10 @@ const VirtualRow = memo(function VirtualRow({
   localToken,
   tagDefinitions,
   groupDefinitions,
+  availableModelsById,
+  availableModelsLoadingById,
+  availableModelsErrorById,
+  onLoadAvailableModels,
   colors,
   t,
   onContextMenuOpen,
@@ -67,6 +71,10 @@ const VirtualRow = memo(function VirtualRow({
             isCurrentAccount={localToken?.refreshToken && item.refreshToken === localToken.refreshToken}
             tagDefinitions={tagDefinitions}
             groupDefinitions={groupDefinitions}
+            availableModels={availableModelsById?.[item.id] ?? null}
+            availableModelsLoading={Boolean(availableModelsLoadingById?.[item.id])}
+            availableModelsError={availableModelsErrorById?.[item.id] ?? ''}
+            onLoadAvailableModels={onLoadAvailableModels}
             onContextMenuOpen={(x, y) => onContextMenuOpen(item.id, x, y, item)}
           />
         )
@@ -83,6 +91,10 @@ const VirtualRow = memo(function VirtualRow({
   if (prev.localToken !== next.localToken) return false
   if (prev.tagDefinitions !== next.tagDefinitions) return false
   if (prev.groupDefinitions !== next.groupDefinitions) return false
+  if (prev.availableModelsById !== next.availableModelsById) return false
+  if (prev.availableModelsLoadingById !== next.availableModelsLoadingById) return false
+  if (prev.availableModelsErrorById !== next.availableModelsErrorById) return false
+  if (prev.onLoadAvailableModels !== next.onLoadAvailableModels) return false
   // selectedIdsSet 比较：检查行内账号的选中状态是否变化
   for (const item of prev.row) {
     if (item._isAddButton) continue
@@ -115,6 +127,10 @@ function AccountTable({
   localToken,
   tagDefinitions = [],
   groupDefinitions = [],
+  availableModelsById = {},
+  availableModelsLoadingById = {},
+  availableModelsErrorById = {},
+  onLoadAvailableModels,
 }) {
   const { t, colors } = useApp()
   const containerRef = useRef(null)
@@ -264,13 +280,17 @@ function AccountTable({
                     onAdd={onAdd}
                     refreshingId={refreshingId}
                     refreshingTokenId={refreshingTokenId}
-                    switchingId={switchingId}
-                    localToken={localToken}
-                    tagDefinitions={tagDefinitions}
-                    groupDefinitions={groupDefinitions}
-                    colors={colors}
-                    t={t}
-                    onContextMenuOpen={handleContextMenuOpen}
+            switchingId={switchingId}
+            localToken={localToken}
+            tagDefinitions={tagDefinitions}
+            groupDefinitions={groupDefinitions}
+            availableModelsById={availableModelsById}
+            availableModelsLoadingById={availableModelsLoadingById}
+            availableModelsErrorById={availableModelsErrorById}
+            onLoadAvailableModels={onLoadAvailableModels}
+            colors={colors}
+            t={t}
+            onContextMenuOpen={handleContextMenuOpen}
                   />
                 </div>
               ))}
