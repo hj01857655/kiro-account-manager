@@ -3,6 +3,8 @@
 use std::sync::Mutex;
 use crate::auth::AuthState;
 use crate::account::{AccountStore, GroupTagStore};
+use tauri::tray::TrayIcon;
+use tauri::Wry;
 
 #[derive(Clone)]
 pub struct PendingLogin {
@@ -17,4 +19,5 @@ pub struct AppState {
     pub group_tag_store: Mutex<GroupTagStore>,
     pub auth: AuthState,
     pub pending_login: Mutex<Option<PendingLogin>>,
+    pub tray_icon: Mutex<Option<TrayIcon<Wry>>>,
 }
