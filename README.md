@@ -240,6 +240,16 @@
 - 一键启动 / 关闭
 - 自动同步代理和模型设置
 
+### 🌐 Kiro API 网关
+
+- 提供本地 Kiro API 兼容网关，支持 Anthropic `POST /v1/messages`
+- 支持 OpenAI `POST /v1/responses`（不提供 Chat Completions 兼容入口）
+- 支持 `POST /mcp` 透传，并可代理执行版本化 `web_search_*` 特殊工具
+- 支持 Anthropic `image`、`image_url` 与 OpenAI `input_image`，可转换为 Kiro 上游 `images`
+- 支持将 Kiro 上游 `application/vnd.amazon.eventstream` 流式响应转换为 Anthropic / OpenAI SSE
+- 支持客户端 API Key 鉴权、`localOnly` 本机限制、`allowedIps` 白名单和本地请求日志
+- 已提供网关页面，可直接生成 Anthropic / OpenAI 客户端接入配置
+
 ---
 
 ## 📸 截图
