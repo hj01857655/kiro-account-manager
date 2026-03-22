@@ -120,8 +120,6 @@ pub fn get_kiro_cli_default_path() -> Result<String, String> {
     // 文件不存在，返回空字符串（前端会显示占位符）
     Ok(String::new())
 }
-}
-
 /// 从 kiro-cli 数据库导入账号
 #[tauri::command]
 pub async fn import_from_kiro_cli(
