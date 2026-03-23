@@ -94,8 +94,9 @@ const AVAILABLE_TOOL_TAGS = [
 // Kiro v0.10.32 可用的模型
 const AVAILABLE_MODELS = [
   { value: '', label: '默认（跟随主对话）' },
+  { value: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
   { value: 'claude-sonnet-4', label: 'Claude Sonnet 4' },
-  { value: 'claude-haiku-3.5', label: 'Claude Haiku 3.5' },
+  { value: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
 ]
 
 const normalizeToolTagsSelection = (nextValues, prevValues = []) => {

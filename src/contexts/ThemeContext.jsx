@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { MantineProvider } from '@mantine/core'
 import { isLightTheme as checkIsLightTheme, getMantinePrimaryColor } from '../utils/themeMode'
@@ -437,18 +437,18 @@ export function ThemeProvider({ children }) {
     root.style.setProperty('--toast-text', isLight ? '#000000' : '#ffffff')
   }, [theme])
 
-  const value = {
+  const value = useMemo(() => ({
     theme,
     setTheme,
     colors: themes[theme],
     themes,
-  }
+  }), [theme, setTheme])
 
   // 根据主题动态生成 Mantine 配置
   const isLightTheme = checkIsLightTheme(theme)
   const mantinePrimaryColor = getMantinePrimaryColor(theme)
   const unifiedPlaceholderColor = isLightTheme ? '#9ca3af' : '#c8d4ea'
-  const mantineTheme = {
+  const mantineTheme = useMemo(() => ({
     colorScheme: isLightTheme ? 'light' : 'dark',
     colors: {
       dark: [
@@ -616,7 +616,7 @@ export function ThemeProvider({ children }) {
         },
       },
     },
-  }
+  }), [isLightTheme, mantinePrimaryColor])
 
   return (
     <ThemeContext.Provider value={value}>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 
 const PrivacyContext = createContext()
@@ -55,12 +55,12 @@ export function PrivacyProvider({ children }) {
     return name.slice(0, 2) + '***' + name.slice(-2)
   }, [privacyMode])
 
-  const value = {
+  const value = useMemo(() => ({
     privacyMode,
     setPrivacyMode,
     maskEmail,
     maskNickname,
-  }
+  }), [privacyMode, maskEmail, maskNickname])
 
   return <PrivacyContext.Provider value={value}>{children}</PrivacyContext.Provider>
 }

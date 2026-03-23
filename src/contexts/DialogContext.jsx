@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 import ConfirmModal from '../components/features/AccountManager/ConfirmModal'
 import UpdateDialog from '../components/modals/UpdateDialog'
 
@@ -86,8 +86,10 @@ export function DialogProvider({ children }) {
     setResolveRef(null)
   }, [resolveRef])
 
+  const value = useMemo(() => ({ showConfirm, showSuccess, showError, showInfo, showUpdate, closeUpdate }), [showConfirm, showSuccess, showError, showInfo, showUpdate, closeUpdate])
+
   return (
-    <DialogContext.Provider value={{ showConfirm, showSuccess, showError, showInfo, showUpdate, closeUpdate }}>
+    <DialogContext.Provider value={value}>
       {children}
       {dialog && (
         <ConfirmModal
