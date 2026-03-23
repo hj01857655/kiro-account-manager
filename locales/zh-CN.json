@@ -5,6 +5,7 @@
   "nav.desktopOAuth": "在线登录",
   "nav.socialIdC": "Social/IdC",
   "nav.settings": "设置",
+  "nav.gateway": "Kiro API 网关",
   "nav.about": "关于",
   "nav.kiroConnected": "Kiro IDE 已连接",
   "nav.collapseSidebar": "双击折叠侧边栏",
