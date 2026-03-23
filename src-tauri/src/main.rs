@@ -14,6 +14,7 @@ mod kiro_auth_client;
 mod kiro_portal_client;
 mod kiro_cli_db;
 mod mcp;
+mod gateway;
 
 mod process;
 mod providers;
@@ -64,6 +65,10 @@ use commands::machine_guid::{
 };
 use commands::mcp_cmd::{get_mcp_config, save_mcp_server, delete_mcp_server, toggle_mcp_server, get_mcp_tool_stats};
 use commands::kiro_cli_cmd::{get_kiro_cli_default_path, import_from_kiro_cli};
+use commands::gateway_cmd::{
+    start_gateway, stop_gateway, get_gateway_status, get_gateway_config, save_gateway_config,
+    get_gateway_log_dir, get_gateway_request_logs, open_gateway_log_dir, clear_gateway_request_logs
+};
 
 use commands::proxy_cmd::detect_system_proxy;
 use commands::update_cmd::check_update;
@@ -80,8 +85,18 @@ use process::{close_kiro_ide, is_kiro_ide_running, start_kiro_ide};
 
 /// 配置日志插件
 fn setup_log_plugin() -> tauri_plugin_log::Builder {
+    let log_level = gateway::load_gateway_config()
+        .ok()
+        .map(|config| match config.log_level.as_str() {
+            "info" => log::LevelFilter::Info,
+            "warn" => log::LevelFilter::Warn,
+            "error" => log::LevelFilter::Error,
+            _ => log::LevelFilter::Debug,
+        })
+        .unwrap_or(log::LevelFilter::Debug);
+
     tauri_plugin_log::Builder::new()
-        .level(log::LevelFilter::Debug)
+        .level(log_level)
         // 只显示我们自己的日志，过滤掉第三方库的日志
         .filter(|metadata| {
             let target = metadata.target();
@@ -158,6 +173,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         handle_deep_link_event(&app_handle, event.payload());
     });
     
+    let app_handle = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(err) = gateway::auto_start_if_enabled(&app_handle).await {
+            log::error!("自动启动网关失败: {err}");
+        }
+    });
+
     match tray_behavior::create_tray_icon(app.handle()) {
         Ok(tray_icon) => {
             let state = app.state::<AppState>();
@@ -201,6 +223,7 @@ fn main() {
             group_tag_store: Mutex::new(GroupTagStore::new()),
             auth: AuthState::new(),
             pending_login: Mutex::new(None),
+            gateway: Mutex::new(None),
             tray_ready: AtomicBool::new(false),
             tray_icon: Mutex::new(None),
         })
@@ -304,6 +327,16 @@ fn main() {
             toggle_mcp_server,
             get_mcp_tool_stats,
 
+            // Gateway 命令
+            start_gateway,
+            stop_gateway,
+            get_gateway_status,
+            get_gateway_config,
+            save_gateway_config,
+            get_gateway_log_dir,
+            get_gateway_request_logs,
+            open_gateway_log_dir,
+            clear_gateway_request_logs,
             // 代理检测命令
             detect_system_proxy,
             // 更新检查命令

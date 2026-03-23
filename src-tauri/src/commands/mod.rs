@@ -17,3 +17,4 @@ pub mod custom_agents_cmd;
 pub mod powers_cmd;
 pub mod update_cmd;
 pub mod kiro_cli_cmd;
+pub mod gateway_cmd;
