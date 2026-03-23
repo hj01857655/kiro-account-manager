@@ -238,6 +238,7 @@ export function useAccounts() {
 
   return {
     accounts,
+    setAccounts,
     loading,
     loadAccounts,
     autoRefreshing,

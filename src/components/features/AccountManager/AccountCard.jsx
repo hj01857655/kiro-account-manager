@@ -1,9 +1,10 @@
 import { memo, useCallback, useMemo, useState } from 'react'
-import { Eye, Copy, Check, Clock, Repeat, Key, BarChart3, ChevronDown, ChevronUp } from 'lucide-react'
+import { Layers3, Eye, Copy, Check, Clock, Repeat, Key, BarChart3, Package } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Checkbox } from '@mantine/core'
 import { useTheme } from '../../../contexts/ThemeContext'
 import { usePrivacy } from '../../../contexts/PrivacyContext'
+import { DialogRoot, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../ui/dialog'
 import { getUsagePercent, getProgressBarColor } from './hooks/useAccountStats'
 import { getQuota, getUsed, getSubType, getSubPlan, formatUsage, getAccountDisplayName } from '../../../utils/accountStats'
 import { getAccountStatusMeta, isBannedStatus, isUnavailableStatus } from '../../../utils/accountStatus'
@@ -20,9 +21,9 @@ const AccountCard = memo(function AccountCard({
   onRefresh,
   onRefreshToken,
   onEdit,
-  refreshingId,
-  refreshingTokenId,
-  switchingId,
+  isRefreshing = false,
+  isRefreshingToken = false,
+  isSwitching = false,
   isCurrentAccount,
   tagDefinitions = [],
   groupDefinitions = [],
@@ -37,8 +38,8 @@ const AccountCard = memo(function AccountCard({
   const { theme, colors } = useTheme()
   const accent = getThemeAccent(theme)
   const { maskEmail } = usePrivacy()
-  const [modelsExpanded, setModelsExpanded] = useState(false)
-  
+  const [modelsModalOpen, setModelsModalOpen] = useState(false)
+
   // 从 Set 中计算是否选中
   const isSelected = selectedIdsSet?.has(account.id) ?? false
 
@@ -73,18 +74,16 @@ const AccountCard = memo(function AccountCard({
     onContextMenuOpen(e.clientX, e.clientY)
   }, [onContextMenuOpen])
 
-  const handleToggleAvailableModels = useCallback(async () => {
+  const handleOpenAvailableModels = useCallback(async () => {
     if (availableModelsLoading) {
       return
     }
 
-    if (!hasLoadedAvailableModels) {
-      setModelsExpanded(true)
-      await onLoadAvailableModels?.(account.id).catch(() => {})
-      return
-    }
+    setModelsModalOpen(true)
 
-    setModelsExpanded(prev => !prev)
+    if (!hasLoadedAvailableModels) {
+      await onLoadAvailableModels?.(account.id).catch(() => {})
+    }
   }, [account.id, availableModelsLoading, hasLoadedAvailableModels, onLoadAvailableModels])
 
   const handleRefreshAvailableModels = useCallback(async () => {
@@ -92,9 +91,12 @@ const AccountCard = memo(function AccountCard({
       return
     }
 
-    setModelsExpanded(true)
+    if (!modelsModalOpen) {
+      setModelsModalOpen(true)
+    }
+
     await onLoadAvailableModels?.(account.id, { forceRefresh: true }).catch(() => {})
-  }, [account.id, availableModelsLoading, onLoadAvailableModels])
+  }, [account.id, availableModelsLoading, modelsModalOpen, onLoadAvailableModels])
 
   // 状态光环颜色
   const glowColor = isCurrentAccount
@@ -297,34 +299,28 @@ const AccountCard = memo(function AccountCard({
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={handleRefreshAvailableModels}
+                  onClick={handleOpenAvailableModels}
                   disabled={availableModelsLoading}
-                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all ${colors.cardHover} ${colors.textMuted} disabled:opacity-60`}
-                  title={t('accountCard.refreshModels')}
+                  className={`inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border transition-colors duration-200 ${colors.cardBorder} ${colors.cardHover} ${colors.text} disabled:cursor-not-allowed disabled:opacity-60`}
+                  title={availableModelsLoading
+                    ? t('accountCard.loadingModels')
+                    : hasLoadedAvailableModels
+                      ? `${availableModels.length} ${t('accountCard.modelCountSuffix')}`
+                      : t('accountCard.loadModels')}
+                  aria-label={availableModelsLoading
+                    ? t('accountCard.loadingModels')
+                    : hasLoadedAvailableModels
+                      ? `${availableModels.length} ${t('accountCard.modelCountSuffix')}`
+                      : t('accountCard.loadModels')}
                 >
-                  <Repeat size={12} className={availableModelsLoading ? 'animate-spin' : ''} />
-                  <span>{t('accountCard.refreshModels')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleAvailableModels}
-                  disabled={availableModelsLoading}
-                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all ${colors.cardHover} ${colors.textMuted} disabled:opacity-60`}
-                  title={hasLoadedAvailableModels ? t('common.details') : t('accountCard.loadModels')}
-                >
-                  <span>
-                    {availableModelsLoading
-                      ? t('accountCard.loadingModels')
-                      : hasLoadedAvailableModels
-                        ? `${availableModels.length} ${t('accountCard.modelCountSuffix')}`
-                        : t('accountCard.loadModels')}
-                  </span>
-                  {hasLoadedAvailableModels ? (
-                    modelsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-                  ) : null}
+                  {availableModelsLoading ? (
+                    <Repeat size={15} className="animate-spin" />
+                  ) : (
+                    <Layers3 size={15} />
+                  )}
                 </button>
               </div>
             </div>
@@ -333,42 +329,103 @@ const AccountCard = memo(function AccountCard({
                 {t('accountCard.modelLoadFailed')}: {availableModelsError.slice(0, 120)}
               </div>
             )}
-            {modelsExpanded && hasLoadedAvailableModels && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {availableModels.length > 0 ? availableModels.map(model => {
-                  const isDefaultModel = model.isDefault ?? model.is_default ?? false
-                  const promptCaching = model.promptCaching ?? model.prompt_caching
-                  const supportsPromptCaching = promptCaching?.supportsPromptCaching === true
-
-                  return (
-                    <span
-                      key={model.modelId}
-                      className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium ${colors.cardHover} ${colors.text}`}
-                      title={[model.modelName || model.modelId, model.description].filter(Boolean).join('\n')}
-                    >
-                      <span className="max-w-[180px] truncate">
-                        {model.modelName || model.modelId}
-                      </span>
-                      {isDefaultModel && (
-                        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
-                          {t('accountCard.defaultModel')}
-                        </span>
-                      )}
-                      {supportsPromptCaching && (
-                        <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-sky-400">
-                          {t('accountCard.promptCaching')}
-                        </span>
-                      )}
-                    </span>
-                  )
-                }) : (
-                  <span className={`text-[10px] ${colors.textMuted}`}>
-                    {t('accountCard.noAvailableModels')}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
+
+          <DialogRoot open={modelsModalOpen} onOpenChange={setModelsModalOpen}>
+            <DialogContent maxWidth="720px" className="overflow-hidden">
+              <DialogHeader
+                icon={Package}
+                iconColor={accent.text}
+                iconBg={accent.iconBadgeBg}
+                className="border-b pb-4"
+              >
+                <div className="pr-12">
+                  <DialogTitle>{t('accountCard.availableModels')}</DialogTitle>
+                  <DialogDescription>
+                    {account.label || getAccountDisplayName(account)}
+                  </DialogDescription>
+                </div>
+              </DialogHeader>
+
+              <DialogBody className="space-y-4">
+                <div className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3">
+                  <div className={`min-w-0 text-sm ${colors.textMuted}`}>
+                    <div className={`font-medium ${colors.text}`}>
+                      {hasLoadedAvailableModels
+                        ? `${availableModels.length} ${t('accountCard.modelCountSuffix')}`
+                        : t('accountCard.loadModels')}
+                    </div>
+                    {availableModelsCachedAtText && (
+                      <div className="mt-1 text-xs">
+                        {t('accountCard.cachedAt')}: {availableModelsCachedAtText}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRefreshAvailableModels}
+                    disabled={availableModelsLoading}
+                    className={`inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border transition-colors duration-200 ${colors.cardBorder} ${colors.cardHover} ${colors.text} disabled:cursor-not-allowed disabled:opacity-60`}
+                    title={t('accountCard.refreshModels')}
+                    aria-label={t('accountCard.refreshModels')}
+                  >
+                    <Repeat size={16} className={availableModelsLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+
+                {availableModelsError && (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400 break-words">
+                    {t('accountCard.modelLoadFailed')}: {availableModelsError}
+                  </div>
+                )}
+
+                {availableModelsLoading && !hasLoadedAvailableModels ? (
+                  <div className={`flex min-h-40 items-center justify-center rounded-xl border ${colors.cardBorder} ${colors.cardSecondary}`}>
+                    <div className={`flex items-center gap-2 text-sm ${colors.textMuted}`}>
+                      <Repeat size={16} className="animate-spin" />
+                      <span>{t('accountCard.loadingModels')}</span>
+                    </div>
+                  </div>
+                ) : hasLoadedAvailableModels && availableModels.length > 0 ? (
+                  <div className={`max-h-[380px] overflow-y-auto rounded-xl border p-4 ${colors.cardSecondary}`}>
+                    <div className="flex flex-wrap gap-2">
+                      {availableModels.map(model => {
+                        const isDefaultModel = model.isDefault ?? model.is_default ?? false
+                        const promptCaching = model.promptCaching ?? model.prompt_caching
+                        const supportsPromptCaching = promptCaching?.supportsPromptCaching === true
+
+                        return (
+                          <span
+                            key={model.modelId}
+                            className={`inline-flex max-w-full items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${colors.cardHover} ${colors.text}`}
+                            title={[model.modelName || model.modelId, model.description].filter(Boolean).join('\n')}
+                          >
+                            <span className="max-w-[260px] truncate">
+                              {model.modelName || model.modelId}
+                            </span>
+                            {isDefaultModel && (
+                              <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                                {t('accountCard.defaultModel')}
+                              </span>
+                            )}
+                            {supportsPromptCaching && (
+                              <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-400">
+                                {t('accountCard.promptCaching')}
+                              </span>
+                            )}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`rounded-xl border px-4 py-10 text-center text-sm ${colors.cardBorder} ${colors.textMuted}`}>
+                    {t('accountCard.noAvailableModels')}
+                  </div>
+                )}
+              </DialogBody>
+            </DialogContent>
+          </DialogRoot>
 
           {/* Token 过期时间 */}
           {account.expiresAt && (
@@ -403,32 +460,32 @@ const AccountCard = memo(function AccountCard({
               className={`p-2 rounded-lg ${colors.cardHover} ${colors.actionView} transition-all hover:scale-110 shadow-sm`}
               title={t('accountCard.viewDetails')}
             >
-              <Eye size={16} />
+<Layers3 size={16} />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onRefreshToken?.(account.id) }}
-              disabled={refreshingTokenId === account.id}
+              disabled={isRefreshingToken}
               className={`p-2 rounded-lg ${colors.cardHover} ${colors.actionRefresh} disabled:opacity-50 transition-all hover:scale-110 shadow-sm`}
               title={t('accountCard.refreshToken')}
             >
-              <Key size={16} className={refreshingTokenId === account.id ? 'animate-spin' : ''} />
+              <Key size={16} className={isRefreshingToken ? 'animate-spin' : ''} />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onRefresh(account.id) }}
-              disabled={refreshingId === account.id}
+              disabled={isRefreshing}
               className={`p-2 rounded-lg ${colors.cardHover} ${colors.actionRefresh} disabled:opacity-50 transition-all hover:scale-110 shadow-sm`}
               title={t('accountCard.refreshQuota')}
             >
-              <BarChart3 size={16} className={refreshingId === account.id ? 'animate-spin' : ''} />
+              <BarChart3 size={16} className={isRefreshing ? 'animate-spin' : ''} />
             </button>
             {!isCurrentAccount && (
               <button
                 onClick={(e) => { e.stopPropagation(); onSwitch(account) }}
-                disabled={switchingId === account.id || isUnavailable}
+                disabled={isSwitching || isUnavailable}
                 className={`p-2 rounded-lg ${colors.cardHover} ${colors.actionSwitch} disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-110 shadow-sm`}
                 title={isUnavailable ? `${statusMeta.label}账号不可切换` : t('accountCard.switchAccount')}
               >
-                <Repeat size={16} className={switchingId === account.id ? 'animate-spin' : ''} />
+                <Repeat size={16} className={isSwitching ? 'animate-spin' : ''} />
               </button>
             )}
           </div>
@@ -445,9 +502,9 @@ const AccountCard = memo(function AccountCard({
     prevProps.account === nextProps.account &&
     prevSelected === nextSelected &&
     prevProps.copiedId === nextProps.copiedId &&
-    prevProps.refreshingId === nextProps.refreshingId &&
-    prevProps.refreshingTokenId === nextProps.refreshingTokenId &&
-    prevProps.switchingId === nextProps.switchingId &&
+    prevProps.isRefreshing === nextProps.isRefreshing &&
+    prevProps.isRefreshingToken === nextProps.isRefreshingToken &&
+    prevProps.isSwitching === nextProps.isSwitching &&
     prevProps.isCurrentAccount === nextProps.isCurrentAccount &&
     prevProps.tagDefinitions === nextProps.tagDefinitions &&
     prevProps.availableModels === nextProps.availableModels &&

@@ -101,7 +101,7 @@ function GroupSelector({ groups, value, onChange, onGroupsChange }) {
 }
 
 function EditAccountModal({ account, onClose, onSuccess }) {
-  const { t, colors, theme } = useApp()
+
   const accent = getThemeAccent(theme)
   const { showError } = useDialog()
   const isIdCAccount = account.provider === 'BuilderId' || account.provider === 'Enterprise'
@@ -137,11 +137,11 @@ function EditAccountModal({ account, onClose, onSuccess }) {
         params.clientId = form.clientId || null
         params.clientSecret = form.clientSecret || null
       }
-      await invoke('update_account', params)
+      const updatedAccount = await invoke('update_account', params)
       await setAccountGroup(account.id, selectedGroupId || null)
       await setAccountTags(account.id, selectedTagIds)
-      onSuccess?.()
-      onClose()
+      onSuccess?.(updatedAccount)
+
     } catch (e) {
       await showError(t('editAccount.saveFailed'), e.toString())
     } finally {

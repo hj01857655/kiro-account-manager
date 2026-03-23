@@ -33,15 +33,10 @@ const VirtualRow = memo(function VirtualRow({
   onDelete,
   onDeleteRemote,
   onAdd,
-  refreshingId,
-  refreshingTokenId,
-  switchingId,
   localToken,
   tagDefinitions,
   groupDefinitions,
-  availableModelsById,
-  availableModelsLoadingById,
-  availableModelsErrorById,
+  accountRowStateById,
   onLoadAvailableModels,
   colors,
   t,
@@ -65,15 +60,15 @@ const VirtualRow = memo(function VirtualRow({
             onRefresh={onRefresh}
             onRefreshToken={onRefreshToken}
             onEdit={onEdit}
-            refreshingId={refreshingId}
-            refreshingTokenId={refreshingTokenId}
-            switchingId={switchingId}
+            isRefreshing={Boolean(accountRowStateById?.[item.id]?.isRefreshing)}
+            isRefreshingToken={Boolean(accountRowStateById?.[item.id]?.isRefreshingToken)}
+            isSwitching={Boolean(accountRowStateById?.[item.id]?.isSwitching)}
             isCurrentAccount={localToken?.refreshToken && item.refreshToken === localToken.refreshToken}
             tagDefinitions={tagDefinitions}
             groupDefinitions={groupDefinitions}
-            availableModels={availableModelsById?.[item.id] ?? null}
-            availableModelsLoading={Boolean(availableModelsLoadingById?.[item.id])}
-            availableModelsError={availableModelsErrorById?.[item.id] ?? ''}
+            availableModels={accountRowStateById?.[item.id]?.availableModels ?? null}
+            availableModelsLoading={Boolean(accountRowStateById?.[item.id]?.availableModelsLoading)}
+            availableModelsError={accountRowStateById?.[item.id]?.availableModelsError ?? ''}
             onLoadAvailableModels={onLoadAvailableModels}
             onContextMenuOpen={(x, y) => onContextMenuOpen(item.id, x, y, item)}
           />
@@ -82,20 +77,13 @@ const VirtualRow = memo(function VirtualRow({
     </div>
   )
 }, (prev, next) => {
-  // 只在行数据或关键状态变化时重渲染
   if (prev.row !== next.row || prev.columns !== next.columns) return false
   if (prev.copiedId !== next.copiedId) return false
-  if (prev.refreshingId !== next.refreshingId) return false
-  if (prev.refreshingTokenId !== next.refreshingTokenId) return false
-  if (prev.switchingId !== next.switchingId) return false
   if (prev.localToken !== next.localToken) return false
   if (prev.tagDefinitions !== next.tagDefinitions) return false
   if (prev.groupDefinitions !== next.groupDefinitions) return false
-  if (prev.availableModelsById !== next.availableModelsById) return false
-  if (prev.availableModelsLoadingById !== next.availableModelsLoadingById) return false
-  if (prev.availableModelsErrorById !== next.availableModelsErrorById) return false
+  if (prev.accountRowStateById !== next.accountRowStateById) return false
   if (prev.onLoadAvailableModels !== next.onLoadAvailableModels) return false
-  // selectedIdsSet 比较：检查行内账号的选中状态是否变化
   for (const item of prev.row) {
     if (item._isAddButton) continue
     const prevSelected = prev.selectedIdsSet?.has(item.id)
@@ -121,15 +109,10 @@ function AccountTable({
   onDelete,
   onDeleteRemote,
   onAdd,
-  refreshingId,
-  refreshingTokenId,
-  switchingId,
   localToken,
   tagDefinitions = [],
   groupDefinitions = [],
-  availableModelsById = {},
-  availableModelsLoadingById = {},
-  availableModelsErrorById = {},
+  accountRowStateById = {},
   onLoadAvailableModels,
 }) {
   const { t, colors } = useApp()
@@ -153,26 +136,26 @@ function AccountTable({
     const isBanned = isBannedStatus(account.status)
     const isUnavailable = isUnavailableStatus(account.status)
     const statusMeta = getAccountStatusMeta(account.status, t)
-    
+    const rowState = accountRowStateById?.[account.id] ?? {}
+
     const items = [
       { icon: Eye, label: t('accountCard.viewDetails'), onClick: () => onEdit(account) },
       { icon: Edit2, label: t('accountCard.editRemark'), onClick: () => onEditLabel(account) },
       { icon: Copy, label: t('accountCard.copyJson'), onClick: () => onCopy(JSON.stringify(account, null, 2), account.id) },
       { divider: true },
-      { icon: Key, label: t('accountCard.refreshToken'), onClick: () => onRefreshToken?.(account.id), disabled: refreshingTokenId === account.id },
-      { icon: BarChart3, label: t('accountCard.refreshQuota'), onClick: () => onRefresh(account.id), disabled: refreshingId === account.id },
-      { icon: Repeat, label: isUnavailable ? `${statusMeta.label}账号不可切换` : t('accountCard.switchAccount'), onClick: () => onSwitch(account), disabled: switchingId === account.id || isUnavailable },
+      { icon: Key, label: t('accountCard.refreshToken'), onClick: () => onRefreshToken?.(account.id), disabled: Boolean(rowState.isRefreshingToken) },
+      { icon: BarChart3, label: t('accountCard.refreshQuota'), onClick: () => onRefresh(account.id), disabled: Boolean(rowState.isRefreshing) },
+      { icon: Repeat, label: isUnavailable ? `${statusMeta.label}账号不可切换` : t('accountCard.switchAccount'), onClick: () => onSwitch(account), disabled: Boolean(rowState.isSwitching) || isUnavailable },
       { divider: true },
       { icon: Trash2, label: t('accountCard.delete'), onClick: () => onDelete(account.id), danger: true },
     ]
-    
-    // Enterprise 账号或已封禁账号不显示远程删除
+
     if (account.provider !== 'Enterprise' && !isBanned && onDeleteRemote) {
       items.push({ icon: UserX, label: t('accountCard.deleteRemote'), onClick: () => onDeleteRemote(account), danger: true })
     }
-    
+
     return items
-  }, [t, onEdit, onEditLabel, onCopy, onRefreshToken, onRefresh, onSwitch, onDelete, onDeleteRemote, refreshingTokenId, refreshingId, switchingId])
+  }, [t, onEdit, onEditLabel, onCopy, onRefreshToken, onRefresh, onSwitch, onDelete, onDeleteRemote, accountRowStateById])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -278,19 +261,14 @@ function AccountTable({
                     onDelete={onDelete}
                     onDeleteRemote={onDeleteRemote}
                     onAdd={onAdd}
-                    refreshingId={refreshingId}
-                    refreshingTokenId={refreshingTokenId}
-            switchingId={switchingId}
-            localToken={localToken}
-            tagDefinitions={tagDefinitions}
-            groupDefinitions={groupDefinitions}
-            availableModelsById={availableModelsById}
-            availableModelsLoadingById={availableModelsLoadingById}
-            availableModelsErrorById={availableModelsErrorById}
-            onLoadAvailableModels={onLoadAvailableModels}
-            colors={colors}
-            t={t}
-            onContextMenuOpen={handleContextMenuOpen}
+                    localToken={localToken}
+                    tagDefinitions={tagDefinitions}
+                    groupDefinitions={groupDefinitions}
+                    accountRowStateById={accountRowStateById}
+                    onLoadAvailableModels={onLoadAvailableModels}
+                    colors={colors}
+                    t={t}
+                    onContextMenuOpen={handleContextMenuOpen}
                   />
                 </div>
               ))}

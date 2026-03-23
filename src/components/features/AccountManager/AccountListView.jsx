@@ -10,7 +10,7 @@ import { getProviderDisplayName, isGitHubProvider } from '../../../utils/account
 import ContextMenu from './ContextMenu'
 import { getThemeAccent, isLightTheme as checkIsLightTheme } from '../KiroConfig/themeAccent'
 
-// 单行组件
+
 const ListRow = memo(function ListRow({
   account,
   isSelected,
@@ -40,6 +40,7 @@ const ListRow = memo(function ListRow({
   const isBanned = isBannedStatus(account.status)
   const isUnavailable = isUnavailableStatus(account.status)
   const statusMeta = getAccountStatusMeta(account.status, t)
+
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault()
@@ -73,19 +74,18 @@ const ListRow = memo(function ListRow({
       {contextMenu && (
         <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)} items={getMenuItems()} isLightTheme={isLightTheme} />
       )}
-      <Checkbox 
-        checked={isSelected} 
-        onChange={(e) => onSelectOne(account.id, e.currentTarget.checked)} 
+      <Checkbox
+        checked={isSelected}
+        onChange={(e) => onSelectOne(account.id, e.currentTarget.checked)}
         onClick={(e) => e.stopPropagation()}
         className="shrink-0"
         styles={{
           input: {
             cursor: 'pointer',
-          }
+          },
         }}
       />
-      
-      {/* 邮箱/用户ID */}
+
       <div className="w-48 shrink-0">
         <div className="flex items-center gap-2">
           <span className={`text-sm font-medium truncate ${colors.text}`}>
@@ -96,15 +96,13 @@ const ListRow = memo(function ListRow({
         {account.label && <span className={`text-xs ${colors.textMuted} truncate block mt-0.5`}>{account.label}</span>}
       </div>
 
-      {/* 提供商 */}
       <span className={`text-xs px-2 py-1 rounded w-20 text-center shrink-0 ${
         account.provider === 'Google' ? colors.badgeWarning
-        : isGitHubProvider(account.provider) ? colors.badgeDisabled
-        : account.provider === 'BuilderId' ? colors.badgeWarning
-        : colors.badgeDisabled
+          : isGitHubProvider(account.provider) ? colors.badgeDisabled
+            : account.provider === 'BuilderId' ? colors.badgeWarning
+              : colors.badgeDisabled
       }`}>{getProviderDisplayName(account.provider) || 'Unknown'}</span>
 
-      {/* 订阅类型 */}
       <span className={`text-xs px-2 py-1 rounded w-20 text-center shrink-0 ${
         account.usageData?.subscriptionInfo?.subscriptionTitle?.toUpperCase()?.includes('ENTERPRISE')
           ? colors.badgeWarning
@@ -117,7 +115,6 @@ const ListRow = memo(function ListRow({
                 : colors.badgeDisabled
       }`}>{account.usageData?.subscriptionInfo?.subscriptionTitle || 'Free'}</span>
 
-      {/* 配额 */}
       <div className="w-24 shrink-0">
         <div className={`text-xs ${remaining > 0 ? 'text-green-500' : 'text-red-500'}`}>{formatUsage(used)}/{formatUsage(limit)}</div>
         <div className={`h-1 rounded-full ${colors.cardSecondary} mt-1`}>
@@ -125,19 +122,14 @@ const ListRow = memo(function ListRow({
         </div>
       </div>
 
-      {/* 状态 */}
-      <span className={`text-xs px-2 py-1 rounded w-12 text-center shrink-0 ${
-        statusMeta.tone === 'danger' ? colors.error
-        : statusMeta.tone === 'success' ? colors.badgeSuccess
-        : colors.badgeWarning
-      }`}>{statusMeta.label}</span>
+      <span className={`text-xs px-2 py-1 rounded w-12 text-center shrink-0 ${statusMeta.className}`}>
+        {statusMeta.label}
+      </span>
 
-      {/* 机器码 */}
       <span className="text-xs font-mono w-14 text-center shrink-0 text-red-500">
         {account.machineId?.slice(0, 6) || '-'}
       </span>
 
-      {/* Token|试用到期时间 */}
       <div className="w-28 shrink-0 text-[11px]">
         <span className={colors.textMuted} title="Token 过期">{account.expiresAt?.slice(11, 16) || '-'}</span>
         {account.usageData?.usageBreakdownList?.[0]?.freeTrialInfo?.freeTrialExpiry && (
@@ -150,12 +142,11 @@ const ListRow = memo(function ListRow({
         )}
       </div>
 
-      {/* 分组 */}
       <div className="w-16 shrink-0">
         {account.groupId ? (() => {
-          const group = groupMap.get(account.groupId)
+const group = groupMap.get(account.groupId)
           return group ? (
-            <span 
+            <span
               className="text-[10px] px-1.5 py-0.5 rounded font-medium truncate block max-w-full"
               style={{ backgroundColor: `${group.color}20`, color: group.color }}
               title={group.name}
@@ -166,17 +157,24 @@ const ListRow = memo(function ListRow({
         })() : <span className={`text-xs ${colors.textMuted}`}>-</span>}
       </div>
 
-      {/* 标签 */}
       <div className="flex-1 min-w-0">
         {account.tagLinks?.length > 0 ? (
           <div className="flex items-center gap-1 flex-wrap">
             {account.tagLinks.slice(0, 3).map(tagLink => {
-              const tag = tagMap.get(tagLink.tagId)
-              const linkedAt = tagLink.linkedAt
-              // 优先用标签定义的名称，如果标签被删除则用 tagLink 中存储的名称
+const tag = tagMap.get(tagLink.tagId)
               const tagName = tag?.name || tagLink.tagName || '未知标签'
               const tagColor = tag?.color || '#888888'
-              return <span key={tagLink.tagId} className="text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]" style={{ backgroundColor: `${tagColor}20`, color: tagColor }} title={linkedAt ? `${tagName} (关联于 ${linkedAt})` : tagName}>{tagName}</span>
+              const linkedAt = tagLink.linkedAt
+              return (
+                <span
+                  key={tagLink.tagId}
+                  className="text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]"
+                  style={{ backgroundColor: `${tagColor}20`, color: tagColor }}
+                  title={linkedAt ? `${tagName} (关联于 ${linkedAt})` : tagName}
+                >
+                  {tagName}
+                </span>
+              )
             })}
             {account.tagLinks.length > 3 && <span className={`text-[10px] ${colors.textMuted}`}>+{account.tagLinks.length - 3}</span>}
           </div>
@@ -185,14 +183,37 @@ const ListRow = memo(function ListRow({
     </div>
   )
 }, (prev, next) => (
-  prev.account === next.account && prev.isSelected === next.isSelected && prev.isCurrent === next.isCurrent &&
-  prev.isRefreshing === next.isRefreshing && prev.isSwitching === next.isSwitching &&
-  prev.tagMap === next.tagMap && prev.groupMap === next.groupMap && prev.isLightTheme === next.isLightTheme
+  prev.account === next.account &&
+  prev.isSelected === next.isSelected &&
+  prev.isCurrent === next.isCurrent &&
+  prev.isRefreshing === next.isRefreshing &&
+  prev.isSwitching === next.isSwitching &&
+  prev.tagMap === next.tagMap &&
+  prev.groupMap === next.groupMap &&
+  prev.isLightTheme === next.isLightTheme
 ))
 
-
 function AccountListView({
-  accounts, totalCount, selectedIds, selectedIdsSet, onSelectAll, onSelectOne, onSwitch, onRefresh, onEdit, onEditLabel, onDelete, onDeleteRemote, onCopy, onAdd, refreshingId, switchingId, localToken, tagDefinitions = [], groupDefinitions = [], copiedId, sortBy, onSortChange,
+  accounts,
+  totalCount,
+  selectedIds,
+  selectedIdsSet,
+  onSelectAll,
+  onSelectOne,
+  onSwitch,
+  onRefresh,
+  onEdit,
+  onEditLabel,
+  onDelete,
+  onDeleteRemote,
+  onCopy,
+  onAdd,
+  accountRowStateById = {},
+  localToken,
+  tagDefinitions = [],
+  groupDefinitions = [],
+  sortBy,
+  onSortChange,
 }) {
   const { t, theme, colors } = useApp()
   const accent = getThemeAccent(theme)
@@ -203,8 +224,6 @@ function AccountListView({
   // 优化：如果父组件传递了 selectedIdsSet，直接使用；否则创建
   const _selectedIdsSet = selectedIdsSet || useMemo(() => new Set(selectedIds), [selectedIds])
   const localRefreshToken = localToken?.refreshToken
-  const tagMap = useMemo(() => new Map(tagDefinitions.map(tag => [tag.id, tag])), [tagDefinitions])
-  const groupMap = useMemo(() => new Map(groupDefinitions.map(group => [group.id, group])), [groupDefinitions])
 
   const rowVirtualizer = useVirtualizer({
     count: accounts.length,
@@ -305,13 +324,12 @@ function AccountListView({
                   account={acc}
                   isSelected={_selectedIdsSet.has(acc.id)}
                   isCurrent={localRefreshToken && acc.refreshToken === localRefreshToken}
-                  isRefreshing={refreshingId === acc.id}
-                  isSwitching={switchingId === acc.id}
+                  isRefreshing={accountRowStateById[acc.id]?.isRefreshing ?? false}
+                  isSwitching={accountRowStateById[acc.id]?.isSwitching ?? false}
                   tagMap={tagMap}
                   groupMap={groupMap}
                   colors={colors}
-                  isLightTheme={isLightTheme}
-                  t={t}
+
                   maskEmail={maskEmail}
                   onSelectOne={onSelectOne}
                   onSwitch={onSwitch}

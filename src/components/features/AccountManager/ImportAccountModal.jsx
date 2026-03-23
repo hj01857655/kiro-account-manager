@@ -273,9 +273,9 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
 
         const account = result.account
         if (isBannedStatus(account.status)) {
-          return { success: true, index: item._index + 1, email: getAccountDisplayName(account), isNew: result.isNew, banned: true }
+          return { success: true, index: item._index + 1, email: getAccountDisplayName(account), account, isNew: result.isNew, banned: true }
         }
-        return { success: true, index: item._index + 1, email: getAccountDisplayName(account), isNew: result.isNew }
+        return { success: true, index: item._index + 1, email: getAccountDisplayName(account), account, isNew: result.isNew }
       } catch (e) {
         const errorMsg = String(e)
         if (errorMsg.includes('BANNED')) {
@@ -294,9 +294,9 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
     results.forEach(r => {
       if (r.success) {
         if (r.isNew) {
-          added.push({ index: r.index, email: r.email })
+          added.push({ index: r.index, email: r.email, account: r.account })
         } else {
-          updated.push({ index: r.index, email: r.email })
+          updated.push({ index: r.index, email: r.email, account: r.account })
         }
       } else {
         failed.push({ index: r.index, error: r.error })
@@ -305,7 +305,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
 
     setImportResult({ added, updated, failed })
     setImporting(false)
-    if (added.length > 0 || updated.length > 0) onSuccess?.()
+    if (added.length > 0 || updated.length > 0) onSuccess?.({ added, updated })
   }
 
   const handleKiroImport = async () => {
@@ -348,9 +348,9 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
 
         const acc = result.account
         if (isBannedStatus(acc.status)) {
-          return { success: true, email: acc.email, isNew: result.isNew, banned: true }
+          return { success: true, email: acc.email, account: acc, isNew: result.isNew, banned: true }
         }
-        return { success: true, email: acc.email, isNew: result.isNew }
+        return { success: true, email: acc.email, account: acc, isNew: result.isNew }
       } catch (e) {
         const errorMsg = String(e)
         if (errorMsg.includes('BANNED')) {
@@ -369,9 +369,9 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
     results.forEach(r => {
       if (r.success) {
         if (r.isNew) {
-          added.push({ email: r.email })
+          added.push({ email: r.email, account: r.account })
         } else {
-          updated.push({ email: r.email })
+          updated.push({ email: r.email, account: r.account })
         }
       } else {
         failed.push({ error: r.error })
@@ -382,7 +382,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
     setKiroImporting(false)
 
     if (added.length > 0 || updated.length > 0) {
-      onSuccess?.()
+      onSuccess?.({ added, updated })
     }
   }
 
@@ -404,14 +404,17 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }) {
           email: result.account?.email || result.account?.user_id || '未知账号'
         })
 
-        onSuccess?.()
+        onSuccess?.({
+          added: result.is_new ? [{ email: result.account?.email || result.account?.user_id || '未知账号', account: result.account }] : [],
+          updated: result.is_new ? [] : [{ email: result.account?.email || result.account?.user_id || '未知账号', account: result.account }],
+        })
       } else {
         setKiroCliResult({
           success: false,
           error: result.error || '导入失败'
         })
       }
-    } catch (e) {
+
       setKiroCliResult({
         success: false,
         error: String(e)
@@ -904,7 +907,7 @@ return (
       </DialogFooter>
     </DialogContent>
   </DialogRoot>
-  )
+)
 }
 
 export default ImportAccountModal

@@ -101,8 +101,8 @@ function BatchTagModal({ accountIds, accounts = [], onClose, onSuccess }) {
     setLoading(true)
     try {
       await Promise.all(accountIds.map(id => setAccountTags(id, selectedTagIds)))
-      onSuccess?.()
-      onClose()
+      onSuccess?.({ accountIds, selectedTagIds })
+
     } catch (e) {
       await showError(t('common.error'), e.toString())
     } finally {

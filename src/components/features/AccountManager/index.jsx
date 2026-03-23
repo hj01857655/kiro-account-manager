@@ -107,6 +107,7 @@ function AccountManager({ onNavigate }) {
 
   const {
     accounts,
+    setAccounts,
     loading,
     loadAccounts,
     autoRefreshing,
@@ -139,6 +140,18 @@ function AccountManager({ onNavigate }) {
     })
   }, [])
 
+  const removeAccountsLocally = useCallback((ids) => {
+    const idSet = new Set(ids)
+    setAccounts(prev => prev.filter(account => !idSet.has(account.id)))
+    setSelectedIds(prev => prev.filter(id => !idSet.has(id)))
+    ids.forEach(clearAvailableModelsState)
+  }, [clearAvailableModelsState, setAccounts])
+
+  const patchAccountLocally = useCallback((updatedAccount) => {
+    if (!updatedAccount?.id) return
+    setAccounts(prev => prev.map(account => account.id === updatedAccount.id ? updatedAccount : account))
+  }, [setAccounts])
+
   const handleLoadAvailableModels = useCallback(async (id, options = {}) => {
     const { forceRefresh = false } = options
     setAvailableModelsLoadingById(prev => ({ ...prev, [id]: true }))
@@ -153,7 +166,6 @@ function AccountManager({ onNavigate }) {
       const response = await invoke('list_available_models', { id, forceRefresh })
       const models = Array.isArray(response?.models) ? response.models : []
       setAvailableModelsById(prev => ({ ...prev, [id]: models }))
-      loadAccounts()
       return response
     } catch (e) {
       const message = String(e)
@@ -162,7 +174,7 @@ function AccountManager({ onNavigate }) {
     } finally {
       setAvailableModelsLoadingById(prev => ({ ...prev, [id]: false }))
     }
-  }, [loadAccounts])
+  }, [])
 
   // 包装刷新函数，添加 toast 通知
   const handleRefreshWithNotify = useCallback(async (id) => {
@@ -190,6 +202,7 @@ function AccountManager({ onNavigate }) {
     setRefreshingTokenId(id)
     try {
       const account = await invoke('refresh_account_token', { id })
+      patchAccountLocally(account)
       clearAvailableModelsState(id)
       showSuccess('Token 刷新成功')
       return { success: true, account }
@@ -206,10 +219,9 @@ function AccountManager({ onNavigate }) {
       }
       return { success: false, error: errorMsg }
     } finally {
-      await loadAccounts()
       setRefreshingTokenId(null)
     }
-  }, [clearAvailableModelsState, loadAccounts])
+  }, [clearAvailableModelsState, patchAccountLocally])
 
   // 获取所有标签（从标签定义中获取）
   const allTags = useMemo(() => {
@@ -229,86 +241,130 @@ function AccountManager({ onNavigate }) {
     }
   }, [allTags, selectedTag])
 
-  // 获取试用到期时间戳（使用 useCallback 缓存）
-  const getTrialExpiry = useCallback((account) => {
-    const expiry = account.usageData?.usageBreakdownList?.[0]?.freeTrialInfo?.freeTrialExpiry
-    if (!expiry) return Infinity // 没有试用的排最后
-    return expiry
-  }, [])
-
-  // 获取使用量（已用绝对值）（使用 useCallback 缓存）
-  const getUsageAmount = useCallback((account) => {
-    const breakdown = account.usageData?.usageBreakdownList?.[0]
-    if (!breakdown) return 0
-    const mainUsed = breakdown.currentUsage || 0
-    const trialUsed = breakdown.freeTrialInfo?.currentUsage || 0
-    const bonusUsed = (breakdown.bonuses || []).reduce((sum, b) => sum + (b.currentUsage || 0), 0)
-    return mainUsed + trialUsed + bonusUsed
-  }, [])
 
   // 优化：将 tagDefinitions 转为 Map，提升查找性能
   const tagDefinitionsMap = useMemo(() => {
     return new Map(tagDefinitions.map(t => [t.id, t]))
   }, [tagDefinitions])
 
+  const normalizedAccounts = useMemo(() => accounts.map((account) => {
+    const tagIds = (account.tagLinks || []).map(link => link.tagId)
+    const displayName = getAccountDisplayName(account).toLowerCase()
+    const label = String(account.label || '').toLowerCase()
+    const tagNames = tagIds
+      .map(tagId => String(tagDefinitionsMap.get(tagId)?.name || ''))
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+
+    return {
+      account,
+      tagIds,
+      tagNames,
+      label,
+      displayName,
+    }
+  }), [accounts, tagDefinitionsMap])
+
+  const getTrialExpiry = useCallback((account) => {
+    const expiry = account.usageData?.usageBreakdownList?.[0]?.freeTrialInfo?.freeTrialExpiry
+    if (!expiry) return Number.POSITIVE_INFINITY
+    return Number(expiry)
+  }, [])
+
+  const getUsagePercent = useCallback((account) => {
+    const breakdown = account.usageData?.usageBreakdownList?.[0]
+    if (!breakdown) return 0
+
+    const mainUsed = Number(breakdown.currentUsage || 0)
+    const mainLimit = Number(breakdown.usageLimit || 0)
+    const trialUsed = Number(breakdown.freeTrialInfo?.currentUsage || 0)
+    const trialLimit = Number(breakdown.freeTrialInfo?.usageLimit || 0)
+    const bonusTotals = (breakdown.bonuses || []).reduce((sum, bonus) => ({
+      used: sum.used + Number(bonus.currentUsage || 0),
+      limit: sum.limit + Number(bonus.usageLimit || 0),
+    }), { used: 0, limit: 0 })
+
+    const used = mainUsed + trialUsed + bonusTotals.used
+    const limit = mainLimit + trialLimit + bonusTotals.limit
+    return limit > 0 ? (used / limit) * 100 : 0
+  }, [])
+
   const filteredAccounts = useMemo(() => {
-    let result = accounts.filter(a => {
-      const term = searchTerm.toLowerCase()
-      // 搜索过滤：邮箱/用户ID、备注、标签名称（从 tagLinks 中提取）
-      const displayName = getAccountDisplayName(a).toLowerCase()
-      // 优化：使用 Map 查找标签名称，避免多次 find
-      const tagNames = (a.tagLinks || [])
-        .map(link => tagDefinitionsMap.get(link.tagId)?.name || '')
-        .join(' ')
-        .toLowerCase()
-      const matchSearch = displayName.includes(term) ||
-        a.label.toLowerCase().includes(term) ||
-        tagNames.includes(term)
-      // 分组过滤（__none__ 表示无分组，__has__ 表示有分组）
+    const term = searchTerm.toLowerCase().trim()
+    let result = normalizedAccounts.filter(({ account, tagIds, tagNames, label, displayName }) => {
+      const matchSearch = !term || displayName.includes(term) || label.includes(term) || tagNames.includes(term)
       const matchGroup = !selectedGroup ||
-        (selectedGroup === '__none__' ? !a.groupId :
-         selectedGroup === '__has__' ? !!a.groupId :
-         a.groupId === selectedGroup)
-      // 标签过滤（按 ID，__none__ 表示筛选无标签账号，__has__ 表示筛选有标签账号）
-      const tagIds = (a.tagLinks || []).map(link => link.tagId)
-      const matchTag = !selectedTag || 
-        (selectedTag === '__none__' ? tagIds.length === 0 : 
+        (selectedGroup === '__none__' ? !account.groupId :
+         selectedGroup === '__has__' ? !!account.groupId :
+         account.groupId === selectedGroup)
+      const matchTag = !selectedTag ||
+        (selectedTag === '__none__' ? tagIds.length === 0 :
          selectedTag === '__has__' ? tagIds.length > 0 :
          tagIds.includes(selectedTag))
-      // 状态过滤
-      const matchStatus = !selectedStatus || 
-        (selectedStatus === 'active' && isActiveStatus(a.status)) ||
-        (selectedStatus === 'banned' && isBannedStatus(a.status)) ||
-        (selectedStatus === 'invalid' && isInvalidStatus(a.status)) ||
-        (selectedStatus === 'expired' && isExpiredStatus(a.status))
+      const matchStatus = !selectedStatus ||
+        (selectedStatus === 'active' && isActiveStatus(account.status)) ||
+        (selectedStatus === 'banned' && isBannedStatus(account.status)) ||
+        (selectedStatus === 'invalid' && isInvalidStatus(account.status)) ||
+        (selectedStatus === 'expired' && isExpiredStatus(account.status))
       return matchSearch && matchGroup && matchTag && matchStatus
     })
-    // 应用高级筛选
-    result = applyFilters(result, advancedFilters)
-    
-    // 排序
-    if (sortBy !== 'default') {
-      result = [...result].sort((a, b) => {
-        switch (sortBy) {
-          case 'trialAsc':
-            return getTrialExpiry(a) - getTrialExpiry(b)
-          case 'trialDesc':
-            return getTrialExpiry(b) - getTrialExpiry(a)
-          case 'usageAsc':
-            return getUsageAmount(a) - getUsageAmount(b)
-          case 'usageDesc':
-            return getUsageAmount(b) - getUsageAmount(a)
-          case 'addedAsc':
-            return new Date(a.addedAt || 0) - new Date(b.addedAt || 0)
-          case 'addedDesc':
-            return new Date(b.addedAt || 0) - new Date(a.addedAt || 0)
-          default:
-            return 0
-        }
-      })
+
+    const hasAdvancedFilters = Boolean(
+      advancedFilters?.usageRange ||
+      advancedFilters?.subscriptions?.length ||
+      advancedFilters?.statuses?.length ||
+      advancedFilters?.providers?.length
+    )
+
+    if (hasAdvancedFilters) {
+      const filteredIds = new Set(
+        applyFilters(result.map(({ account }) => account), advancedFilters).map(account => account.id)
+      )
+      result = result.filter(({ account }) => filteredIds.has(account.id))
+    }
+
+    const sorted = [...result].sort((a, b) => {
+      const accountA = a.account
+      const accountB = b.account
+      switch (sortBy) {
+        case 'usageAsc':
+          return getUsagePercent(accountA) - getUsagePercent(accountB)
+        case 'usageDesc':
+          return getUsagePercent(accountB) - getUsagePercent(accountA)
+        case 'trialAsc':
+          return getTrialExpiry(accountA) - getTrialExpiry(accountB)
+        case 'trialDesc':
+          return getTrialExpiry(accountB) - getTrialExpiry(accountA)
+        case 'addedAsc':
+          return new Date(accountA.addedAt || 0) - new Date(accountB.addedAt || 0)
+        case 'addedDesc':
+          return new Date(accountB.addedAt || 0) - new Date(accountA.addedAt || 0)
+        default:
+          return 0
+      }
+    })
+
+    return sorted.map(({ account }) => account)
+  }, [advancedFilters, getTrialExpiry, getUsagePercent, normalizedAccounts, searchTerm, selectedGroup, selectedStatus, selectedTag, sortBy])
+
+  const accountRowStateById = useMemo(() => {
+    const result = {}
+    for (const account of filteredAccounts) {
+      const id = account.id
+      result[id] = {
+        isRefreshing: refreshingId === id,
+        isRefreshingToken: refreshingTokenId === id,
+        isSwitching: switchingId === id,
+        isCopied: copiedId === id,
+        availableModels: availableModelsById[id] ?? null,
+        availableModelsLoading: Boolean(availableModelsLoadingById[id]),
+        availableModelsError: availableModelsErrorById[id] ?? '',
+      }
     }
     return result
-  }, [accounts, searchTerm, selectedGroup, selectedTag, selectedStatus, tagDefinitionsMap, advancedFilters, sortBy, getTrialExpiry, getUsageAmount])
+  }, [filteredAccounts, refreshingId, refreshingTokenId, switchingId, copiedId, availableModelsById, availableModelsLoadingById, availableModelsErrorById])
+
 
   const handleSearchChange = useCallback((term) => { setSearchTerm(term) }, [])
   const handleGroupFilter = useCallback((group) => { setSelectedGroup(group) }, [])
@@ -352,9 +408,8 @@ function AccountManager({ onNavigate }) {
     }
     
     await invoke('delete_account', { id })
-    clearAvailableModelsState(id)
-    loadAccounts()
-  }, [accounts, clearAvailableModelsState, localToken, showConfirm, loadAccounts, t])
+    removeAccountsLocally([id])
+  }, [accounts, localToken, removeAccountsLocally, showConfirm, t])
 
   // 远程删除账号（从 AWS 服务端注销）
   const handleDeleteRemote = useCallback(async (account) => {
@@ -365,12 +420,12 @@ function AccountManager({ onNavigate }) {
     if (confirmed) {
       try {
         await invoke('delete_account_remote', { id: account.id, deleteLocal: true })
-        loadAccounts()
+        removeAccountsLocally([account.id])
       } catch (e) {
         // 错误已通过 showError 显示
       }
     }
-  }, [showConfirm, loadAccounts, t])
+  }, [removeAccountsLocally, showConfirm, t])
 
   // 批量删除
   const onBatchDelete = useCallback(async () => {
@@ -392,9 +447,8 @@ function AccountManager({ onNavigate }) {
     }
     
     await invoke('delete_accounts', { ids: selectedIds })
-    setSelectedIds([])
-    loadAccounts()
-  }, [accounts, selectedIds, localToken, showConfirm, loadAccounts, t])
+    removeAccountsLocally(selectedIds)
+  }, [accounts, selectedIds, localToken, removeAccountsLocally, showConfirm, t])
 
   return (
     <div className={cn('h-full flex flex-col', colors.main)}>
@@ -489,15 +543,7 @@ function AccountManager({ onNavigate }) {
           onDelete={handleDelete}
           onDeleteRemote={handleDeleteRemote}
           onAdd={() => setShowImportModal(true)}
-          refreshingId={refreshingId}
-          refreshingTokenId={refreshingTokenId}
-          switchingId={switchingId}
-          localToken={localToken}
-          tagDefinitions={tagDefinitions}
-          groupDefinitions={groupDefinitions}
-          availableModelsById={availableModelsById}
-          availableModelsLoadingById={availableModelsLoadingById}
-          availableModelsErrorById={availableModelsErrorById}
+          accountRowStateById={accountRowStateById}
           onLoadAvailableModels={handleLoadAvailableModels}
         />
       ) : (
@@ -508,6 +554,7 @@ function AccountManager({ onNavigate }) {
           selectedIdsSet={selectedIdsSet}
           onSelectAll={handleSelectAll}
           onSelectOne={handleSelectOne}
+          onCopy={handleCopy}
           onSwitch={handleSwitchAccount}
           onRefresh={handleRefreshWithNotify}
           onRefreshToken={handleRefreshToken}
@@ -515,30 +562,80 @@ function AccountManager({ onNavigate }) {
           onEditLabel={setEditingLabelAccount}
           onDelete={handleDelete}
           onDeleteRemote={handleDeleteRemote}
-          onCopy={handleCopy}
           onAdd={() => setShowImportModal(true)}
-          refreshingId={refreshingId}
-          refreshingTokenId={refreshingTokenId}
-          switchingId={switchingId}
           localToken={localToken}
           tagDefinitions={tagDefinitions}
           groupDefinitions={groupDefinitions}
-          copiedId={copiedId}
+          accountRowStateById={accountRowStateById}
+          onLoadAvailableModels={handleLoadAvailableModels}
           sortBy={sortBy}
           onSortChange={setSortBy}
         />
+
       )}
       </div>
       {editingAccount && (
         <AccountDetailModal
           account={editingAccount}
-          onClose={() => { setEditingAccount(null); loadAccounts() }}
+          onClose={() => setEditingAccount(null)}
         />
       )}
-      {editingLabelAccount && (<EditAccountModal account={editingLabelAccount} onClose={() => setEditingLabelAccount(null)} onSuccess={() => { loadAccounts(); loadTagDefinitions(); loadGroupDefinitions() }} />)}
-      {showImportModal && (<ImportAccountModal onClose={() => setShowImportModal(false)} onSuccess={loadAccounts} onNavigate={onNavigate} />)}
-      {showBatchTagModal && (<BatchTagModal accountIds={selectedIds} accounts={accounts} onClose={() => setShowBatchTagModal(false)} onSuccess={() => { loadAccounts(); loadTagDefinitions(); setSelectedIds([]) }} />)}
-      {autoRefreshing && (<RefreshProgressModal refreshProgress={refreshProgress} />)}
+      {editingLabelAccount && (
+        <EditAccountModal
+          account={editingLabelAccount}
+          onClose={() => setEditingLabelAccount(null)}
+          onSuccess={(updatedAccount) => {
+            setEditingLabelAccount(null)
+            if (updatedAccount) {
+              patchAccountLocally(updatedAccount)
+            }
+            loadTagDefinitions()
+            loadGroupDefinitions()
+          }}
+        />
+      )}
+      {showImportModal && (
+        <ImportAccountModal
+          onClose={() => setShowImportModal(false)}
+          onSuccess={({ added = [], updated = [] }) => {
+            setShowImportModal(false)
+            setAccounts(prev => {
+              const next = [...prev]
+              const upsert = (entry) => {
+                const account = entry?.account
+                if (!account?.id) return
+                const index = next.findIndex(item => item.id === account.id)
+                if (index >= 0) next[index] = account
+                else next.unshift(account)
+              }
+              added.forEach(upsert)
+              updated.forEach(upsert)
+              return next
+            })
+          }}
+          onNavigate={onNavigate}
+        />
+      )}
+      {showBatchTagModal && (
+        <BatchTagModal
+          accountIds={selectedIds}
+          accounts={accounts}
+          onClose={() => setShowBatchTagModal(false)}
+          onSuccess={({ accountIds: updatedIds, selectedTagIds }) => {
+            setShowBatchTagModal(false)
+            setAccounts(prev => prev.map(account => {
+              if (!updatedIds.includes(account.id)) return account
+              const nextTagLinks = Array.isArray(selectedTagIds)
+                ? selectedTagIds.map(tagId => ({ tagId }))
+                : account.tagLinks
+              return { ...account, tagLinks: nextTagLinks }
+            }))
+            loadTagDefinitions()
+            setSelectedIds([])
+          }}
+        />
+      )}
+
       
       {/* 切换账号弹窗 */}
       {switchDialog && (
