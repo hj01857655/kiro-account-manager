@@ -141,12 +141,34 @@ export function useAccounts() {
       const errorMsg = String(e)
       if (errorMsg.includes('BANNED')) {
         try {
-          await invoke('update_account', { params: { id, status: 'banned' } })
+          await invoke('update_account', {
+            params: {
+              id,
+              label: null,
+              status: 'banned',
+              accessToken: null,
+              refreshToken: null,
+              clientId: null,
+              clientSecret: null,
+              machineId: null,
+            }
+          })
           setAccounts(prev => prev.map(a => a.id === id ? { ...a, status: 'banned' } : a))
         } catch (updateErr) {}
       } else if (errorMsg.includes('AUTH_ERROR') || errorMsg.includes('401') || errorMsg.includes('invalid')) {
         try {
-          await invoke('update_account', { params: { id, status: 'invalid' } })
+          await invoke('update_account', {
+            params: {
+              id,
+              label: null,
+              status: 'invalid',
+              accessToken: null,
+              refreshToken: null,
+              clientId: null,
+              clientSecret: null,
+              machineId: null,
+            }
+          })
           setAccounts(prev => prev.map(a => a.id === id ? { ...a, status: 'invalid' } : a))
         } catch (updateErr) {}
       }

@@ -355,7 +355,7 @@ fn request_endpoint(format: ResponseFormat) -> &'static str {
     match format {
         ResponseFormat::Anthropic => "messages",
         ResponseFormat::Responses => "responses",
-        ResponseFormat::OpenAI => "chat_completions",
+        ResponseFormat::OpenAI => "chat/completions",
     }
 }
 

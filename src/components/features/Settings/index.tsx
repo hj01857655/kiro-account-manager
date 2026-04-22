@@ -359,8 +359,24 @@ function Settings() {
         try {
             const proxyInfo = await invoke<any>('detect_system_proxy')
             if (proxyInfo.enabled && proxyInfo.httpProxy) {
-                setHttpProxy(proxyInfo.httpProxy)
-                await showSuccess(t('settings.detectSuccess'), `${t('settings.systemProxyDetected')}: ${proxyInfo.httpProxy}`)
+                const detectedProxy = proxyInfo.httpProxy.startsWith('http://')
+                    || proxyInfo.httpProxy.startsWith('https://')
+                    || proxyInfo.httpProxy.startsWith('socks5://')
+                    ? proxyInfo.httpProxy
+                    : `http://${proxyInfo.httpProxy}`
+
+                if (httpProxy.trim()) {
+                    const replace = await showConfirm(
+                        t('settings.detectSuccess'),
+                        `${t('settings.systemProxyDetected')}: ${detectedProxy}\n\n当前已有代理配置，是否替换？`
+                    )
+                    if (replace) {
+                        setHttpProxy(detectedProxy)
+                    }
+                } else {
+                    setHttpProxy(detectedProxy)
+                    await showSuccess(t('settings.detectSuccess'), `${t('settings.systemProxyDetected')}: ${detectedProxy}`)
+                }
             } else {
                 await showError(t('settings.noProxyDetected'), t('settings.noProxyConfigured'))
             }
