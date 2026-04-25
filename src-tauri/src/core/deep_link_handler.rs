@@ -1,12 +1,12 @@
 // Deep Link 回调处理
-// 处理 kiro-account-manager://kiro.kiroAgent/authenticate-success?code=xxx&state=xxx 格式的 OAuth 回调
+// 处理 kiro://kiro.kiroAgent/authenticate-success?code=xxx&state=xxx 格式的 OAuth 回调
 
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-const DEEP_LINK_SCHEME: &str = "kiro-account-manager";
-const DEEP_LINK_REDIRECT_URI: &str = "kiro-account-manager://kiro.kiroAgent/authenticate-success";
+const DEEP_LINK_SCHEME: &str = "kiro";
+const DEEP_LINK_REDIRECT_URI: &str = "kiro://kiro.kiroAgent/authenticate-success";
 
 /// OAuth 回调结果（state 已在 `handle_deep_link` 中验证）
 #[derive(Debug, Clone)]
@@ -93,7 +93,7 @@ pub fn cancel_waiter() -> bool {
     true
 }
 
-/// 将 deep link 中的 `/app/callback` 映射到应用内的 `/callback`
+/// 将 deep link 中的 OAuth 回调路径映射到应用内的 `/callback`
 pub fn get_app_callback_route(url: &str) -> Option<String> {
     let parsed = url::Url::parse(url).ok()?;
 
@@ -101,7 +101,7 @@ pub fn get_app_callback_route(url: &str) -> Option<String> {
         return None;
     }
 
-    if parsed.path() != "/app/callback" {
+    if parsed.path() != "/app/callback" && parsed.path() != "/authenticate-success" {
         return None;
     }
 
@@ -224,7 +224,7 @@ mod tests {
         ));
 
         let handled =
-            handle_deep_link("kiro-account-manager://kiro.kiroAgent/authenticate-success?code=ok&state=expected-state");
+            handle_deep_link("kiro://kiro.kiroAgent/authenticate-success?code=ok&state=expected-state");
         assert!(handled);
         assert_eq!(
             waiter
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn app_callback_deep_link_maps_to_internal_callback_route() {
         let route = get_app_callback_route(
-            "kiro-account-manager://kiro.kiroAgent/app/callback?code=ok&state=expected-state",
+            "kiro://kiro.kiroAgent/app/callback?code=ok&state=expected-state",
         )
         .expect("app callback route should be extracted");
 
@@ -246,12 +246,12 @@ mod tests {
     }
 
     #[test]
-    fn authenticate_success_deep_link_does_not_map_to_internal_callback_route() {
-        assert!(
-            get_app_callback_route(
-                "kiro-account-manager://kiro.kiroAgent/authenticate-success?code=ok&state=expected-state",
-            )
-            .is_none()
-        );
+    fn authenticate_success_deep_link_maps_to_internal_callback_route() {
+        let route = get_app_callback_route(
+            "kiro://kiro.kiroAgent/authenticate-success?code=ok&state=expected-state",
+        )
+        .expect("authenticate-success callback route should be extracted");
+
+        assert_eq!(route, "/callback?code=ok&state=expected-state");
     }
 }

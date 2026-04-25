@@ -30,7 +30,9 @@ use commands::account_cmd::{
 };
 use commands::app_settings_cmd::{
     bind_machine_id_to_account, get_all_bound_machine_ids, get_app_settings, get_bound_machine_id,
-    get_usage_history, save_app_settings, save_usage_history_entry, unbind_machine_id_from_account,
+    get_kiro_protocol_command, get_usage_history, reset_kiro_protocol_to_current_exe,
+    save_app_settings, save_usage_history_entry, set_kiro_protocol_executable,
+    unbind_machine_id_from_account,
 };
 use commands::auth_cmd::{
     cancel_kiro_login, get_current_user, get_supported_providers, handle_kiro_social_callback,
@@ -89,6 +91,70 @@ use kiro::ide::{
     check_ide_installation, get_kiro_local_token, read_kiro_accounts, switch_kiro_account,
 };
 use kiro::process::{close_kiro_ide, is_kiro_ide_running, start_kiro_ide};
+
+const COMPAT_DEEP_LINK_SCHEMES: [&str; 2] = ["kiro", "kiro-account-manager"];
+
+fn is_supported_deep_link(url: &str) -> bool {
+    COMPAT_DEEP_LINK_SCHEMES
+        .iter()
+        .any(|scheme| url.starts_with(&format!("{scheme}://")))
+}
+
+#[cfg(windows)]
+fn ensure_windows_protocol_association() -> Result<(), String> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+
+    fn extract_executable(command: &str) -> Option<String> {
+        let trimmed = command.trim();
+        if let Some(rest) = trimmed.strip_prefix('"') {
+            let end = rest.find('"')?;
+            return Some(rest[..end].to_string());
+        }
+        trimmed.split_whitespace().next().map(ToString::to_string)
+    }
+
+    let exe_path = std::env::current_exe()
+        .map_err(|e| format!("Failed to resolve current exe path: {e}"))?
+        .display()
+        .to_string();
+    let command = format!("\"{exe_path}\" \"%1\"");
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    for scheme in COMPAT_DEEP_LINK_SCHEMES {
+        let class_path = format!("Software\\Classes\\{scheme}");
+        let (class_key, _) = hkcu
+            .create_subkey(&class_path)
+            .map_err(|e| format!("Failed to create protocol key `{scheme}`: {e}"))?;
+        class_key
+            .set_value("", &format!("URL:{scheme} Protocol"))
+            .map_err(|e| format!("Failed to set protocol title `{scheme}`: {e}"))?;
+        class_key
+            .set_value("URL Protocol", &"")
+            .map_err(|e| format!("Failed to set URL Protocol flag `{scheme}`: {e}"))?;
+
+        let (cmd_key, _) = hkcu
+            .create_subkey(format!("{class_path}\\shell\\open\\command"))
+            .map_err(|e| format!("Failed to create command key `{scheme}`: {e}"))?;
+        let existing_command: String = cmd_key.get_value("").unwrap_or_default();
+        let should_repair = match extract_executable(&existing_command) {
+            Some(existing_exe) => {
+                let existing_lower = existing_exe.to_ascii_lowercase();
+                existing_lower.contains("electron.exe")
+                    || !std::path::Path::new(&existing_exe).exists()
+            }
+            None => true,
+        };
+
+        if should_repair {
+            cmd_key
+                .set_value("", &command)
+                .map_err(|e| format!("Failed to set protocol command `{scheme}`: {e}"))?;
+        }
+    }
+
+    Ok(())
+}
 
 /// 配置日志插件
 fn setup_log_plugin() -> tauri_plugin_log::Builder {
@@ -152,12 +218,8 @@ fn handle_incoming_deep_link(app_handle: &tauri::AppHandle, url: &str) {
 #[allow(clippy::needless_pass_by_value)] // Tauri 框架要求回调签名为 Vec<String>
 fn setup_single_instance_callback(app: &tauri::AppHandle, argv: Vec<String>, _cwd: String) {
     // 当第二个实例尝试启动时，处理传入的参数（deep-link 回调）
-    let protocol_prefix = format!(
-        "{}://",
-        core::deep_link_handler::DeepLinkCallbackWaiter::get_protocol_scheme()
-    );
     for arg in &argv {
-        if arg.starts_with(&protocol_prefix) {
+        if is_supported_deep_link(arg) {
             handle_incoming_deep_link(app, arg);
         }
     }
@@ -179,12 +241,8 @@ fn handle_deep_link_event(app_handle: &tauri::AppHandle, payload: &str) {
         payload.to_string()
     };
 
-    // 只处理当前环境的协议
-    let protocol_prefix = format!(
-        "{}://",
-        core::deep_link_handler::DeepLinkCallbackWaiter::get_protocol_scheme()
-    );
-    if !url.starts_with(&protocol_prefix) {
+    // 只处理支持的协议（兼容历史版本）
+    if !is_supported_deep_link(&url) {
         return;
     }
 
@@ -193,25 +251,35 @@ fn handle_deep_link_event(app_handle: &tauri::AppHandle, payload: &str) {
 
 /// 应用 setup 回调
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    if let Err(err) = ensure_windows_protocol_association() {
+        log::warn!("Failed to repair deep-link protocol association: {err}");
+    }
+
     // 首次启动时检查命令行参数中的 deep link（Windows/Linux）
-    let protocol_prefix = format!(
-        "{}://",
-        core::deep_link_handler::DeepLinkCallbackWaiter::get_protocol_scheme()
-    );
     for arg in std::env::args() {
-        if arg.starts_with(&protocol_prefix) {
+        if is_supported_deep_link(&arg) {
             handle_incoming_deep_link(app.handle(), &arg);
         }
     }
 
-    // 监听 deep link 事件（根据环境自动选择协议）
-    #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+    // 监听 deep link 事件（Windows/Linux 下都尝试注册，避免旧协议关联残留）
+    #[cfg(any(target_os = "linux", windows))]
     {
         use tauri_plugin_deep_link::DeepLinkExt;
-        let scheme = core::deep_link_handler::DeepLinkCallbackWaiter::get_protocol_scheme();
-        app.deep_link()
-            .register(scheme)
-            .map_err(|e| format!("Failed to register deep link: {e}"))?;
+        let primary_scheme = core::deep_link_handler::DeepLinkCallbackWaiter::get_protocol_scheme();
+
+        // 主协议（当前登录流程使用）
+        if let Err(err) = app.deep_link().register(primary_scheme) {
+            log::warn!("Failed to register deep link scheme `{primary_scheme}`: {err}");
+        }
+
+        // 兼容协议（历史版本）
+        if primary_scheme != "kiro-account-manager" {
+            if let Err(err) = app.deep_link().register("kiro-account-manager") {
+                log::warn!("Failed to register deep link scheme `kiro-account-manager`: {err}");
+            }
+        }
     }
 
     // 监听 deep link URL
@@ -366,6 +434,9 @@ fn main() {
             // 应用设置命令
             get_app_settings,
             save_app_settings,
+            get_kiro_protocol_command,
+            set_kiro_protocol_executable,
+            reset_kiro_protocol_to_current_exe,
             // 使用量历史记录命令
             get_usage_history,
             save_usage_history_entry,

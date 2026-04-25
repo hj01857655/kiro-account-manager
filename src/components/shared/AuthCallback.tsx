@@ -7,6 +7,24 @@ export default function AuthCallback() {
   const [status, setStatus] = useState('loading')
   const [message, setMessage] = useState('')
 
+  const closeCurrentPage = async () => {
+    // 优先关闭 Tauri 窗口；若当前在外部浏览器，window.close 可能被浏览器拦截
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      await getCurrentWindow().close()
+      return
+    } catch (_) {
+      // ignore, fallback below
+    }
+
+    window.close()
+    setTimeout(() => {
+      if (!document.hidden) {
+        setMessage('如果窗口未自动关闭，请手动关闭此页并返回应用。')
+      }
+    }, 500)
+  }
+
   useEffect(() => {
     setMessage(t('callback.processing'))
     
@@ -31,7 +49,7 @@ export default function AuthCallback() {
         setMessage(t('callback.success'))
 
         setTimeout(() => {
-          window.close()
+          closeCurrentPage()
         }, 3000)
 
       } catch (error) {
@@ -104,7 +122,7 @@ export default function AuthCallback() {
               {t('callback.autoCloseHint')}
             </p>
             <button
-              onClick={() => window.close()}
+              onClick={closeCurrentPage}
               className={`px-6 py-2 bg-primary text-primary-foreground rounded-lg transition-colors`}
             >
               {t('callback.closeWindow')}
@@ -115,7 +133,7 @@ export default function AuthCallback() {
         {status === 'error' && (
           <div className="text-center">
             <button
-              onClick={() => window.close()}
+              onClick={closeCurrentPage}
               className={`px-6 py-2 bg-secondary text-secondary-foreground rounded-lg transition-colors`}
             >
               {t('callback.closeWindow')}

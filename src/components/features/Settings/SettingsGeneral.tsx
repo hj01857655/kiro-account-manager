@@ -1,4 +1,4 @@
-import { Clock, Globe, Search, Shield, Shuffle, AlertTriangle, Eye, EyeOff, Repeat, RefreshCw, Check, Copy } from 'lucide-react'
+import { Clock, Globe, Search, Shield, Shuffle, AlertTriangle, Eye, EyeOff, Repeat, RefreshCw, Check, Copy, Link2 } from 'lucide-react'
 import { Card, CardContent } from '../../ui/card'
 import { Input } from '../../ui/input'
 import { Switch } from '../../ui/switch'
@@ -33,6 +33,10 @@ interface SettingsGeneralProps {
   setBrowserPath: (path: string) => void;
   originalBrowserPath: string;
   savingBrowser: boolean;
+  kiroProtocolPath: string;
+  setKiroProtocolPath: (path: string) => void;
+  originalKiroProtocolPath: string;
+  savingKiroProtocol: boolean;
   detectedBrowsers: BrowserInfo[];
   showBrowserList: boolean;
   setShowBrowserList: (show: boolean) => void;
@@ -41,6 +45,8 @@ interface SettingsGeneralProps {
   handleResetSystemMachineGuid: () => void;
   handleDetectBrowsers: () => void;
   handleApplyBrowser: () => void;
+  handleApplyKiroProtocolPath: () => void;
+  handleResetKiroProtocolPath: () => void;
   handleAutoRefreshChange: (checked: boolean) => void;
   handleAutoRefreshIntervalChange: (value: string) => void;
   handleAutoChangeMachineIdChange: (checked: boolean) => void;
@@ -65,6 +71,10 @@ function SettingsGeneral({
   setBrowserPath, 
   originalBrowserPath, 
   savingBrowser, 
+  kiroProtocolPath,
+  setKiroProtocolPath,
+  originalKiroProtocolPath,
+  savingKiroProtocol,
   detectedBrowsers, 
   showBrowserList, 
   setShowBrowserList, 
@@ -73,6 +83,8 @@ function SettingsGeneral({
   handleResetSystemMachineGuid, 
   handleDetectBrowsers, 
   handleApplyBrowser, 
+  handleApplyKiroProtocolPath,
+  handleResetKiroProtocolPath,
   handleAutoRefreshChange, 
   handleAutoRefreshIntervalChange, 
   handleAutoChangeMachineIdChange, 
@@ -84,6 +96,7 @@ function SettingsGeneral({
 }: SettingsGeneralProps) {
   const accountToggleContainerClass = "bg-card hover:bg-muted/50 border border-border text-foreground"
   const browserChanged = browserPath !== originalBrowserPath
+  const kiroProtocolChanged = kiroProtocolPath !== originalKiroProtocolPath
 
   const [copiedField, setCopiedField] = React.useState<string | null>(null)
   const copiedTimerRef = React.useRef<NodeJS.Timeout | null>(null)
@@ -285,6 +298,52 @@ function SettingsGeneral({
           )}
 
           <p className="text-xs text-muted-foreground mt-3">{t('settings.browserTip')}</p>
+        </CardContent>
+      </Card>
+
+      {/* Kiro 协议映射 */}
+      <Card className="card-glow animate-slide-in-left delay-280 mb-6">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <Link2 size={18} className="text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">Kiro 协议映射</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            管理 <code>kiro://</code> 与 <code>kiro-account-manager://</code> 的本机执行路径。安装路径变更后可在此修复。
+          </p>
+
+          <label className="block text-sm text-muted-foreground mb-2">协议执行文件路径</label>
+          <div className="flex gap-3">
+            <Input
+              value={kiroProtocolPath}
+              onChange={(e) => setKiroProtocolPath(e.target.value)}
+              placeholder="例如：C:\\Program Files\\Kiro Account Manager\\kiro-account-manager.exe"
+              className="text-foreground bg-background border-border flex-1"
+            />
+            <button
+              onClick={handleApplyKiroProtocolPath}
+              disabled={savingKiroProtocol || !kiroProtocolChanged}
+              className={`px-5 py-3 rounded-xl flex items-center gap-2 font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed border ${kiroProtocolChanged
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-muted text-muted-foreground border-border"
+                }`}
+            >
+              {savingKiroProtocol ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
+              {savingKiroProtocol ? '保存中' : '应用'}
+            </button>
+            <button
+              onClick={handleResetKiroProtocolPath}
+              disabled={savingKiroProtocol}
+              className="px-4 py-3 border rounded-xl bg-card hover:bg-muted/50 border-border text-foreground flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={16} />
+              恢复当前程序
+            </button>
+          </div>
+
+          <p className="text-xs text-muted-foreground mt-3">
+            仅 Windows 需要此映射。若浏览器提示“打开 Electron”或找不到应用，通常是这里被旧软件占用。
+          </p>
         </CardContent>
       </Card>
 

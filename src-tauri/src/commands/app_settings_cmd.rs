@@ -202,6 +202,114 @@ pub fn get_browser_path() -> Option<String> {
         .filter(|p| !p.is_empty())
 }
 
+#[cfg(windows)]
+fn write_protocol_mapping(exe_path: &str) -> Result<String, String> {
+    use std::path::Path;
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+
+    let normalized = exe_path.trim().trim_matches('"');
+    if normalized.is_empty() {
+        return Err("协议映射路径不能为空".to_string());
+    }
+    if !Path::new(normalized).exists() {
+        return Err(format!("目标文件不存在: {normalized}"));
+    }
+
+    let command = format!("\"{normalized}\" \"%1\"");
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    for scheme in ["kiro", "kiro-account-manager"] {
+        let class_path = format!("Software\\Classes\\{scheme}");
+        let (class_key, _) = hkcu
+            .create_subkey(&class_path)
+            .map_err(|e| format!("创建协议键失败（{scheme}）: {e}"))?;
+        class_key
+            .set_value("", &format!("URL:{scheme} Protocol"))
+            .map_err(|e| format!("设置协议标题失败（{scheme}）: {e}"))?;
+        class_key
+            .set_value("URL Protocol", &"")
+            .map_err(|e| format!("设置 URL Protocol 失败（{scheme}）: {e}"))?;
+
+        let (cmd_key, _) = hkcu
+            .create_subkey(format!("{class_path}\\shell\\open\\command"))
+            .map_err(|e| format!("创建命令键失败（{scheme}）: {e}"))?;
+        cmd_key
+            .set_value("", &command)
+            .map_err(|e| format!("写入命令失败（{scheme}）: {e}"))?;
+    }
+
+    Ok(command)
+}
+
+#[cfg(windows)]
+fn get_protocol_command_inner() -> Result<String, String> {
+    use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER};
+    use winreg::RegKey;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(cmd_key) = hkcu.open_subkey("Software\\Classes\\kiro\\shell\\open\\command") {
+        let command: String = cmd_key.get_value("").unwrap_or_default();
+        if !command.trim().is_empty() {
+            return Ok(command);
+        }
+    }
+
+    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+    if let Ok(cmd_key) = hkcr.open_subkey("kiro\\shell\\open\\command") {
+        let command: String = cmd_key.get_value("").unwrap_or_default();
+        if !command.trim().is_empty() {
+            return Ok(command);
+        }
+    }
+
+    Err("未找到 kiro 协议映射".to_string())
+}
+
+#[cfg(not(windows))]
+fn get_protocol_command_inner() -> Result<String, String> {
+    Err("当前平台不支持 kiro 协议映射设置".to_string())
+}
+
+#[tauri::command]
+pub async fn get_kiro_protocol_command() -> Result<String, String> {
+    run_blocking_io(get_protocol_command_inner).await
+}
+
+#[tauri::command]
+pub async fn set_kiro_protocol_executable(path: String) -> Result<String, String> {
+    run_blocking_io(move || {
+        #[cfg(windows)]
+        {
+            write_protocol_mapping(&path)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = path;
+            Err("当前平台不支持 kiro 协议映射设置".to_string())
+        }
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn reset_kiro_protocol_to_current_exe() -> Result<String, String> {
+    run_blocking_io(|| {
+        #[cfg(windows)]
+        {
+            let exe_path = std::env::current_exe()
+                .map_err(|e| format!("无法获取当前程序路径: {e}"))?
+                .display()
+                .to_string();
+            write_protocol_mapping(&exe_path)
+        }
+        #[cfg(not(windows))]
+        {
+            Err("当前平台不支持 kiro 协议映射设置".to_string())
+        }
+    })
+    .await
+}
+
 // ============================================================
 // 账号绑定机器码功能（已废弃，保留空实现兼容旧调用）
 // ============================================================

@@ -37,6 +37,9 @@ function Settings() {
     const [browserPath, setBrowserPath] = useState('')
     const [originalBrowserPath, setOriginalBrowserPath] = useState('')
     const [savingBrowser, setSavingBrowser] = useState(false)
+    const [kiroProtocolPath, setKiroProtocolPath] = useState('')
+    const [originalKiroProtocolPath, setOriginalKiroProtocolPath] = useState('')
+    const [savingKiroProtocol, setSavingKiroProtocol] = useState(false)
     const [detectedBrowsers, setDetectedBrowsers] = useState<any[]>([])
     const [showBrowserList, setShowBrowserList] = useState(false)
     const [detectingProxy, setDetectingProxy] = useState(false)
@@ -79,16 +82,30 @@ function Settings() {
     const [machineGuidAction, setMachineGuidAction] = useState<string | null>(null) // 'reset'
 
     // 加载设置（指纹延迟加载，不阻塞页面）
+    const extractExecutablePath = (command: string) => {
+        const trimmed = String(command || '').trim()
+        if (!trimmed) return ''
+        if (trimmed.startsWith('"')) {
+            const secondQuote = trimmed.indexOf('"', 1)
+            if (secondQuote > 1) return trimmed.slice(1, secondQuote)
+        }
+        return trimmed.split(/\s+/)[0] || ''
+    }
+
     const loadSettings = useCallback(async () => {
         setLoading(true)
         try {
             // 先加载核心设置（快速）
-            const [kiroSettings, appSettings, sysMachine] = await Promise.all([
+            const [kiroSettings, appSettings, sysMachine, protocolCommand] = await Promise.all([
                 invoke<any>('get_kiro_settings').catch(() => null),
                 invoke<any>('get_app_settings').catch(() => null),
-                invoke<any>('get_system_machine_guid').catch(() => null)
+                invoke<any>('get_system_machine_guid').catch(() => null),
+                invoke<string>('get_kiro_protocol_command').catch(() => '')
             ])
             setSystemMachineInfo(sysMachine)
+            const protocolExePath = extractExecutablePath(protocolCommand || '')
+            setKiroProtocolPath(protocolExePath)
+            setOriginalKiroProtocolPath(protocolExePath)
 
             // 从 Kiro IDE 设置读取
             if (kiroSettings) {
@@ -354,6 +371,42 @@ function Settings() {
         }
     }
 
+    const handleApplyKiroProtocolPath = async () => {
+        const normalized = kiroProtocolPath.trim()
+        if (!normalized) {
+            await showError('保存失败', '协议路径不能为空')
+            return
+        }
+
+        setSavingKiroProtocol(true)
+        try {
+            const command = await invoke<string>('set_kiro_protocol_executable', { path: normalized })
+            const exePath = extractExecutablePath(command || '')
+            setKiroProtocolPath(exePath || normalized)
+            setOriginalKiroProtocolPath(exePath || normalized)
+            await showSuccess('保存成功', 'Kiro 协议映射已更新')
+        } catch (err: any) {
+            await showError('保存失败', String(err))
+        } finally {
+            setSavingKiroProtocol(false)
+        }
+    }
+
+    const handleResetKiroProtocolPath = async () => {
+        setSavingKiroProtocol(true)
+        try {
+            const command = await invoke<string>('reset_kiro_protocol_to_current_exe')
+            const exePath = extractExecutablePath(command || '')
+            setKiroProtocolPath(exePath)
+            setOriginalKiroProtocolPath(exePath)
+            await showSuccess('已恢复', '协议映射已恢复为当前程序路径')
+        } catch (err: any) {
+            await showError('恢复失败', String(err))
+        } finally {
+            setSavingKiroProtocol(false)
+        }
+    }
+
     const handleDetectProxy = async () => {
         setDetectingProxy(true)
         try {
@@ -449,6 +502,10 @@ function Settings() {
                             setBrowserPath={setBrowserPath}
                             originalBrowserPath={originalBrowserPath}
                             savingBrowser={savingBrowser}
+                            kiroProtocolPath={kiroProtocolPath}
+                            setKiroProtocolPath={setKiroProtocolPath}
+                            originalKiroProtocolPath={originalKiroProtocolPath}
+                            savingKiroProtocol={savingKiroProtocol}
                             detectedBrowsers={detectedBrowsers}
                             showBrowserList={showBrowserList}
                             setShowBrowserList={setShowBrowserList}
@@ -457,6 +514,8 @@ function Settings() {
                             handleResetSystemMachineGuid={handleResetSystemMachineGuid}
                             handleDetectBrowsers={handleDetectBrowsers}
                             handleApplyBrowser={handleApplyBrowser}
+                            handleApplyKiroProtocolPath={handleApplyKiroProtocolPath}
+                            handleResetKiroProtocolPath={handleResetKiroProtocolPath}
                             handleAutoRefreshChange={handleAutoRefreshChange}
                             handleAutoRefreshIntervalChange={handleAutoRefreshIntervalChange}
                             handleAutoChangeMachineIdChange={handleAutoChangeMachineIdChange}
