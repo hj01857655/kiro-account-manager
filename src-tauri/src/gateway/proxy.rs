@@ -301,7 +301,6 @@ type UpstreamRequestError = (StatusCode, &'static str, String, Option<String>);
 const STREAMING_RESPONSE_PLACEHOLDER: &str = "[streaming response omitted from request log]";
 const MAX_SERVER_WEB_SEARCH_ITERATIONS: usize = 8;
 const MAX_LOGGED_BODY_CHARS: usize = 16000;
-const MAX_RESPONSES_EVENT_TRACE_ITEMS: usize = 40;
 
 #[derive(Debug, Clone)]
 struct RequestLogContext<'a> {
@@ -543,7 +542,7 @@ fn write_request_log(
         outcome: outcome.to_string(),
         duration_ms,
         error: error.map(str::to_string),
-        request_body: truncate_log_body(context.request_body),
+        request_body: None,
         response_body: truncate_log_body(response_body),
     };
     let _ = append_gateway_request_log(&entry);
@@ -582,40 +581,19 @@ fn write_stream_error_log(
 fn write_stream_completed_log(
     meta: &StreamLogMeta,
     aggregated: &stream::AggregatedKiroResponse,
-    responses_event_trace: Option<&[String]>,
-    responses_event_delta_count: Option<usize>,
 ) {
     let duration_ms = meta
         .started_at
         .elapsed()
         .as_millis()
         .min(u128::from(u64::MAX)) as u64;
-    let text_preview: String = aggregated.text.chars().take(200).collect();
-    let tool_names: Vec<String> = aggregated
-        .tool_calls
-        .iter()
-        .map(|(_, name, _)| name.clone())
-        .collect();
-    let mut summary = json!({
+    let summary = json!({
         "tool_calls": aggregated.tool_calls.len(),
-        "tool_names": tool_names,
         "input_tokens": aggregated.input_tokens,
         "output_tokens": aggregated.output_tokens,
         "text_chars": aggregated.text.chars().count(),
-        "text_preview": text_preview,
-    });
-    if let Some(trace) = responses_event_trace {
-        summary["responses_event_trace"] = Value::Array(
-            trace
-                .iter()
-                .map(|item| Value::String(item.clone()))
-                .collect(),
-        );
-    }
-    if let Some(delta_count) = responses_event_delta_count {
-        summary["responses_event_delta_count"] = Value::Number(delta_count.into());
-    }
-    let summary = summary.to_string();
+    })
+    .to_string();
     let entry = GatewayRequestLogEntry {
         occurred_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         request_index: meta.request_index,
@@ -2752,8 +2730,6 @@ fn stream_proxy_response(
         let mut responses_tool_output_indexes: HashMap<String, usize> = HashMap::new();
         let mut responses_tool_added_emitted: HashSet<String> = HashSet::new();
         let mut responses_tool_done_emitted: HashSet<String> = HashSet::new();
-        let mut responses_event_trace: Vec<String> = Vec::new();
-        let mut responses_event_delta_count = 0usize;
         let mut stream_failed = false;
 
         if matches!(format, ResponseFormat::Responses) {
@@ -2768,9 +2744,6 @@ fn stream_proxy_response(
                     "output": []
                 }
             });
-            if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
-                responses_event_trace.push("response.created".to_string());
-            }
             if !send_data(&tx, &created.to_string()).await {
                 return;
             }
@@ -2787,9 +2760,6 @@ fn stream_proxy_response(
                     "content": []
                 }
             });
-            if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
-                responses_event_trace.push("response.output_item.added:message".to_string());
-            }
             if !send_data(&tx, &output_item_added.to_string()).await {
                 return;
             }
@@ -3070,14 +3040,6 @@ fn stream_proxy_response(
                                                                 "arguments": ""
                                                             }
                                                         });
-                                                        if responses_event_trace.len()
-                                                            < MAX_RESPONSES_EVENT_TRACE_ITEMS
-                                                        {
-                                                            responses_event_trace.push(format!(
-                                                                "response.output_item.added:function_call:{}",
-                                                                id
-                                                            ));
-                                                        }
                                                         send_data(&tx, &data.to_string()).await;
                                                     }
                                                 }
@@ -3149,7 +3111,6 @@ fn stream_proxy_response(
                                                             "call_id": id,
                                                             "delta": input_delta
                                                         });
-                                                        responses_event_delta_count += 1;
                                                         send_data(&tx, &data.to_string()).await;
                                                     }
                                                 }
@@ -3208,14 +3169,6 @@ fn stream_proxy_response(
                                                             &id,
                                                             &input,
                                                         );
-                                                        if responses_event_trace.len()
-                                                            < MAX_RESPONSES_EVENT_TRACE_ITEMS
-                                                        {
-                                                            responses_event_trace.push(format!(
-                                                                "response.function_call_arguments.done:{}",
-                                                                id
-                                                            ));
-                                                        }
                                                         send_data(&tx, &done_args.to_string()).await;
                                                         let data = json!({
                                                             "type": "response.output_item.done",
@@ -3230,14 +3183,6 @@ fn stream_proxy_response(
                                                                 "arguments": input
                                                             }
                                                         });
-                                                        if responses_event_trace.len()
-                                                            < MAX_RESPONSES_EVENT_TRACE_ITEMS
-                                                        {
-                                                            responses_event_trace.push(format!(
-                                                                "response.output_item.done:function_call:{}",
-                                                                id
-                                                            ));
-                                                        }
                                                         send_data(&tx, &data.to_string()).await;
                                                     }
                                                 }
@@ -3495,9 +3440,6 @@ fn stream_proxy_response(
                         &response_id,
                         &output_text.text,
                     );
-                    if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
-                        responses_event_trace.push("response.output_text.done".to_string());
-                    }
                     send_data(&tx, &text_done.to_string()).await;
                 }
                 if !aggregated.thinking.is_empty() {
@@ -3505,9 +3447,6 @@ fn stream_proxy_response(
                         &response_id,
                         &aggregated.thinking,
                     );
-                    if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
-                        responses_event_trace.push("response.reasoning.done".to_string());
-                    }
                     send_data(&tx, &reasoning_done.to_string()).await;
                 }
                 let content = build_responses_message_content(&aggregated, &server_tool_calls);
@@ -3523,9 +3462,6 @@ fn stream_proxy_response(
                         "content": content
                     }
                 });
-                if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
-                    responses_event_trace.push("response.output_item.done:message".to_string());
-                }
                 send_data(&tx, &output_item_done.to_string()).await;
 
                 let completed = build_stream_responses_completed_event(
@@ -3537,9 +3473,6 @@ fn stream_proxy_response(
                     created_at,
                     previous_response_id.as_deref(),
                 );
-                if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
-                    responses_event_trace.push("response.completed".to_string());
-                }
                 send_data(&tx, &completed.to_string()).await;
                 persist_responses_session_entry(
                     &state,
@@ -3624,20 +3557,7 @@ fn stream_proxy_response(
             }
         }
 
-        write_stream_completed_log(
-            &stream_log_meta,
-            &aggregated,
-            if matches!(format, ResponseFormat::Responses) {
-                Some(&responses_event_trace)
-            } else {
-                None
-            },
-            if matches!(format, ResponseFormat::Responses) {
-                Some(responses_event_delta_count)
-            } else {
-                None
-            },
-        );
+        write_stream_completed_log(&stream_log_meta, &aggregated);
     });
 
     Response::builder()
