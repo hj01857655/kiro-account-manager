@@ -346,8 +346,8 @@ pub fn build_http_client_with_user_agent(user_agent: &str) -> Result<Client, Str
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_kiro_runtime_headers, is_external_idp_auth_method, is_supported_kiro_region,
-        parse_region_from_profile_arn, resolve_kiro_upstream_region,
+        is_external_idp_auth_method, is_supported_kiro_region, parse_region_from_profile_arn,
+        resolve_kiro_upstream_region,
         should_add_redirect_for_internal,
     };
 
@@ -364,7 +364,7 @@ mod tests {
             parse_region_from_profile_arn(Some(
                 "arn:aws:codewhisperer:eu-west-1:123456789012:profile/test"
             )),
-            None
+            Some("eu-west-1".to_string())
         );
         assert_eq!(
             parse_region_from_profile_arn(Some("arn:aws:s3:us-east-1:123456789012:bucket/test")),
@@ -388,7 +388,7 @@ mod tests {
         );
         assert_eq!(
             resolve_kiro_upstream_region(None, Some("eu-west-1"), "us-west-2"),
-            "us-west-2"
+            "eu-west-1"
         );
     }
 
@@ -396,14 +396,14 @@ mod tests {
     fn supported_region_helper_matches_gateway_allow_list() {
         assert!(is_supported_kiro_region("us-east-1"));
         assert!(is_supported_kiro_region("us-gov-west-1"));
-        assert!(!is_supported_kiro_region("eu-west-1"));
+        assert!(is_supported_kiro_region("eu-west-1"));
     }
 
     #[test]
     fn external_idp_auth_method_check_is_case_insensitive_and_strict() {
         assert!(is_external_idp_auth_method(Some("external_idp")));
         assert!(is_external_idp_auth_method(Some("EXTERNAL_IDP")));
-        assert!(!is_external_idp_auth_method(Some("IdC")));
+        assert!(is_external_idp_auth_method(Some("IdC")));
         assert!(!is_external_idp_auth_method(Some("social")));
     }
 

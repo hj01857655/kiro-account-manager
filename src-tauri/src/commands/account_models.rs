@@ -1,7 +1,7 @@
 use crate::core::account::{Account, AvailableModelsCacheEntry};
 use crate::commands::machine_guid::get_machine_id;
 use crate::clients::http_client::{
-    build_http_client_with_user_agent, build_kiro_custom_user_agent,
+    build_http_client_with_user_agent, build_kiro_custom_user_agent, is_external_idp_auth_method,
     build_q_service_url, resolve_kiro_upstream_region,
 };
 use serde::{Deserialize, Serialize};
@@ -107,6 +107,10 @@ fn build_list_available_models_runtime_request(
         .header("amz-sdk-request", "attempt=1; max=1");
 
     // 只为 Internal provider 添加 redirect header
+    if is_external_idp_auth_method(account.auth_method.as_deref()) {
+        builder = builder.header("TokenType", "EXTERNAL_IDP");
+    }
+
     if account.provider.as_deref() == Some("Internal") {
         builder = builder.header("redirect-for-internal", "true");
     }

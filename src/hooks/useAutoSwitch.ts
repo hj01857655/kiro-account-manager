@@ -64,7 +64,13 @@ export function useAutoSwitch(appSettings: AppSettings | null, settingsLoading: 
             await invoke('update_account', {
               params: {
                 id: currentAccount.id,
-                status: 'banned'
+                label: null,
+                status: 'banned',
+                accessToken: null,
+                refreshToken: null,
+                clientId: null,
+                clientSecret: null,
+                machineId: null,
               }
             })
             emit('accounts-updated')
@@ -77,7 +83,13 @@ export function useAutoSwitch(appSettings: AppSettings | null, settingsLoading: 
             await invoke('update_account', {
               params: {
                 id: currentAccount.id,
-                status: 'invalid'
+                label: null,
+                status: 'invalid',
+                accessToken: null,
+                refreshToken: null,
+                clientId: null,
+                clientSecret: null,
+                machineId: null,
               }
             })
             emit('accounts-updated')

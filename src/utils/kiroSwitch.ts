@@ -13,10 +13,16 @@ export async function applyMachineGuid(account, settings = {}) {
       if (!machineId) {
         machineId = await invoke('generate_machine_guid')
         await invoke('update_account', {
-            params: {
-                id: account.id,
-                machine_id: machineId
-            }
+          params: {
+            id: account.id,
+            label: null,
+            status: null,
+            accessToken: null,
+            refreshToken: null,
+            clientId: null,
+            clientSecret: null,
+            machineId,
+          }
         })
         return await setCustomMachineGuid(account, machineId)
       }
