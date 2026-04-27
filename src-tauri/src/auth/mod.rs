@@ -2,6 +2,8 @@
 
 #[allow(clippy::module_inception)]
 mod auth;
+#[allow(clippy::module_inception)]
+mod auth;
 pub mod auth_social;
 pub mod providers;
 

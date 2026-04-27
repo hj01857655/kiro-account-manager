@@ -4,3 +4,4 @@ pub mod account;
 pub mod auto_switch;
 pub mod deep_link_handler;
 pub mod protocol_registry;
+pub mod protocol_registry;

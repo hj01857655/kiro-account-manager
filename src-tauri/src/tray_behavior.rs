@@ -95,8 +95,11 @@ pub fn handle_window_event<R: Runtime>(_window: &Window<R>, event: &WindowEvent)
     #[cfg(debug_assertions)]
     {
         let _ = event;
+        let _ = event;
         return;
     }
+
+    // Release 模式下隐藏到托盘
 
     // Release 模式下隐藏到托盘
     #[cfg(not(debug_assertions))]
