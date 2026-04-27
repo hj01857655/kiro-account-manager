@@ -45,7 +45,7 @@ use super::{
     effective_client_api_keys,
     models::{
         AnthropicContentBlock, AnthropicMessagesRequest, AnthropicMessagesResponse, AnthropicUsage,
-        ModelsResponse, NormalizedMessage, NormalizedRequest, OpenAIChatRequest, ToolCall,
+        ModelsResponse, NormalizedMessage, NormalizedRequest, OpenAIChatRequest, Tool, ToolCall,
         ToolCallFunction, WebSearchToolOptions,
     },
     stream::{self, aggregate_kiro_response, parse_kiro_event_full, KiroEvent},
@@ -105,18 +105,48 @@ async fn restore_responses_session_messages(
         return request.messages.clone();
     }
 
+    let current_tool_result_ids: HashSet<String> = request
+        .messages
+        .iter()
+        .filter(|message| message.role == "tool")
+        .filter_map(|message| message.tool_call_id.clone())
+        .collect();
+
     chain.reverse();
     let mut merged = Vec::new();
-    for entry in chain {
+    let chain_len = chain.len();
+    for (index, entry) in chain.into_iter().enumerate() {
+        let is_latest_entry = index + 1 == chain_len;
+        let filtered_tool_calls: Vec<(String, String, String)> = if is_latest_entry
+            && !current_tool_result_ids.is_empty()
+        {
+            entry
+                .tool_calls
+                .iter()
+                .filter(|(id, _, _)| current_tool_result_ids.contains(id))
+                .cloned()
+                .collect()
+        } else {
+            entry.tool_calls.clone()
+        };
+        let effective_tool_calls = if is_latest_entry
+            && !current_tool_result_ids.is_empty()
+            && filtered_tool_calls.is_empty()
+        {
+            entry.tool_calls.clone()
+        } else {
+            filtered_tool_calls
+        };
+
         merged.extend(entry.request_messages.clone());
         merged.push(NormalizedMessage {
             role: "assistant".to_string(),
             content: Some(Value::String(entry.response_text.clone())),
-            tool_calls: if entry.tool_calls.is_empty() {
+            tool_calls: if effective_tool_calls.is_empty() {
                 None
             } else {
                 Some(
-                    entry.tool_calls
+                    effective_tool_calls
                         .iter()
                         .map(|(id, name, arguments)| ToolCall {
                             id: id.clone(),
@@ -140,7 +170,10 @@ async fn restore_responses_session_messages(
 async fn persist_responses_session_entry(
     state: &RouterState,
     response_id: &str,
+    upstream_conversation_id: Option<String>,
     request_messages: Vec<NormalizedMessage>,
+    request_tools: Option<Vec<Tool>>,
+    request_tool_choice: Option<Value>,
     previous_response_id: Option<String>,
     aggregated: &stream::AggregatedKiroResponse,
 ) {
@@ -150,13 +183,105 @@ async fn persist_responses_session_entry(
         response_id.to_string(),
         ResponsesSessionEntry {
             response_id: response_id.to_string(),
+            upstream_conversation_id,
             previous_response_id,
             request_messages,
+            request_tools,
+            request_tool_choice,
             response_text: aggregated.text.clone(),
             tool_calls: aggregated.tool_calls.clone(),
             updated_at: Instant::now(),
         },
     );
+}
+
+async fn restore_responses_session_request_options(
+    state: &RouterState,
+    request: &NormalizedRequest,
+) -> (Option<Vec<Tool>>, Option<Value>) {
+    let Some(mut current_response_id) = request.previous_response_id.clone() else {
+        return (None, None);
+    };
+
+    let sessions = state.responses_sessions.lock().await;
+    let mut inherited_tools = None;
+    let mut inherited_tool_choice = None;
+
+    while let Some(entry) = sessions.get(&current_response_id) {
+        if inherited_tools.is_none() {
+            inherited_tools = entry.request_tools.clone();
+        }
+        if inherited_tool_choice.is_none() {
+            inherited_tool_choice = entry.request_tool_choice.clone();
+        }
+        if inherited_tools.is_some() && inherited_tool_choice.is_some() {
+            break;
+        }
+        let Some(previous) = entry.previous_response_id.clone() else {
+            break;
+        };
+        current_response_id = previous;
+    }
+
+    (inherited_tools, inherited_tool_choice)
+}
+
+async fn resolve_upstream_conversation_id_from_response_id(
+    state: &RouterState,
+    previous_response_id: &str,
+) -> Option<String> {
+    let sessions = state.responses_sessions.lock().await;
+    sessions
+        .get(previous_response_id)
+        .and_then(|entry| entry.upstream_conversation_id.clone())
+}
+
+fn extract_tool_result_ids_from_request(request: &NormalizedRequest) -> HashSet<String> {
+    request
+        .messages
+        .iter()
+        .filter(|message| message.role == "tool")
+        .filter_map(|message| message.tool_call_id.clone())
+        .collect()
+}
+
+async fn infer_responses_upstream_conversation_id(
+    state: &RouterState,
+    request: &NormalizedRequest,
+) -> Option<String> {
+    let tool_result_ids = extract_tool_result_ids_from_request(request);
+    if tool_result_ids.is_empty() {
+        return None;
+    }
+
+    let sessions = state.responses_sessions.lock().await;
+    let mut best_match: Option<(Duration, String)> = None;
+
+    for entry in sessions.values() {
+        let Some(conversation_id) = entry.upstream_conversation_id.clone() else {
+            continue;
+        };
+        let all_ids_match = tool_result_ids.iter().all(|tool_id| {
+            entry
+                .tool_calls
+                .iter()
+                .any(|(call_id, _, _)| call_id == tool_id)
+        });
+        if !all_ids_match {
+            continue;
+        }
+
+        let age = entry.updated_at.elapsed();
+        match &best_match {
+            None => best_match = Some((age, conversation_id)),
+            Some((current_best_age, _)) if age < *current_best_age => {
+                best_match = Some((age, conversation_id))
+            }
+            _ => {}
+        }
+    }
+
+    best_match.map(|(_, conversation_id)| conversation_id)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -175,6 +300,8 @@ type UpstreamRequestError = (StatusCode, &'static str, String, Option<String>);
 
 const STREAMING_RESPONSE_PLACEHOLDER: &str = "[streaming response omitted from request log]";
 const MAX_SERVER_WEB_SEARCH_ITERATIONS: usize = 8;
+const MAX_LOGGED_BODY_CHARS: usize = 16000;
+const MAX_RESPONSES_EVENT_TRACE_ITEMS: usize = 40;
 
 #[derive(Debug, Clone)]
 struct RequestLogContext<'a> {
@@ -186,6 +313,17 @@ struct RequestLogContext<'a> {
     started_at: Instant,
     #[allow(dead_code)]
     request_body: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
+struct StreamLogMeta {
+    request_index: u64,
+    endpoint: String,
+    client_ip: String,
+    model: String,
+    upstream_source: Option<String>,
+    region: Option<String>,
+    started_at: Instant,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -365,12 +503,27 @@ fn serialize_logged_value(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
 
+fn truncate_log_body(value: Option<&str>) -> Option<String> {
+    value.map(|text| {
+        let mut iter = text.chars();
+        let truncated: String = iter.by_ref().take(MAX_LOGGED_BODY_CHARS).collect();
+        if iter.next().is_some() {
+            format!(
+                "{truncated}\n...[truncated, total_chars>{}]",
+                MAX_LOGGED_BODY_CHARS
+            )
+        } else {
+            truncated
+        }
+    })
+}
+
 fn write_request_log(
     context: &RequestLogContext<'_>,
     status: StatusCode,
     outcome: &str,
     error: Option<&str>,
-    _response_body: Option<&str>,
+    response_body: Option<&str>,
 ) {
     let duration_ms = context
         .started_at
@@ -390,8 +543,94 @@ fn write_request_log(
         outcome: outcome.to_string(),
         duration_ms,
         error: error.map(str::to_string),
+        request_body: truncate_log_body(context.request_body),
+        response_body: truncate_log_body(response_body),
+    };
+    let _ = append_gateway_request_log(&entry);
+}
+
+fn write_stream_error_log(
+    meta: &StreamLogMeta,
+    status: StatusCode,
+    message: &str,
+    response_body: Option<&str>,
+) {
+    let duration_ms = meta
+        .started_at
+        .elapsed()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64;
+    let entry = GatewayRequestLogEntry {
+        occurred_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        request_index: meta.request_index,
+        endpoint: meta.endpoint.clone(),
+        client_ip: meta.client_ip.clone(),
+        model: Some(meta.model.clone()),
+        stream: true,
+        upstream_source: meta.upstream_source.clone(),
+        region: meta.region.clone(),
+        status_code: status.as_u16(),
+        outcome: "error".to_string(),
+        duration_ms,
+        error: Some(message.to_string()),
         request_body: None,
-        response_body: None,
+        response_body: truncate_log_body(response_body),
+    };
+    let _ = append_gateway_request_log(&entry);
+}
+
+fn write_stream_completed_log(
+    meta: &StreamLogMeta,
+    aggregated: &stream::AggregatedKiroResponse,
+    responses_event_trace: Option<&[String]>,
+    responses_event_delta_count: Option<usize>,
+) {
+    let duration_ms = meta
+        .started_at
+        .elapsed()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64;
+    let text_preview: String = aggregated.text.chars().take(200).collect();
+    let tool_names: Vec<String> = aggregated
+        .tool_calls
+        .iter()
+        .map(|(_, name, _)| name.clone())
+        .collect();
+    let mut summary = json!({
+        "tool_calls": aggregated.tool_calls.len(),
+        "tool_names": tool_names,
+        "input_tokens": aggregated.input_tokens,
+        "output_tokens": aggregated.output_tokens,
+        "text_chars": aggregated.text.chars().count(),
+        "text_preview": text_preview,
+    });
+    if let Some(trace) = responses_event_trace {
+        summary["responses_event_trace"] = Value::Array(
+            trace
+                .iter()
+                .map(|item| Value::String(item.clone()))
+                .collect(),
+        );
+    }
+    if let Some(delta_count) = responses_event_delta_count {
+        summary["responses_event_delta_count"] = Value::Number(delta_count.into());
+    }
+    let summary = summary.to_string();
+    let entry = GatewayRequestLogEntry {
+        occurred_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        request_index: meta.request_index,
+        endpoint: meta.endpoint.clone(),
+        client_ip: meta.client_ip.clone(),
+        model: Some(meta.model.clone()),
+        stream: true,
+        upstream_source: meta.upstream_source.clone(),
+        region: meta.region.clone(),
+        status_code: StatusCode::OK.as_u16(),
+        outcome: "stream_completed".to_string(),
+        duration_ms,
+        error: None,
+        request_body: None,
+        response_body: Some(summary),
     };
     let _ = append_gateway_request_log(&entry);
 }
@@ -525,7 +764,7 @@ pub async fn proxy_handler(
         .await;
     }
 
-    let request = match normalize_request(format, &payload) {
+    let incoming_request = match normalize_request(format, &payload) {
         Ok(request) => request,
         Err(message) => {
             let sanitized = sanitize_error(&message);
@@ -543,12 +782,43 @@ pub async fn proxy_handler(
             .await;
         }
     };
+    let mut resolved_upstream_conversation_id: Option<String> = None;
     let request = if matches!(format, ResponseFormat::Responses) {
-        let mut resumed = request.clone();
-        resumed.messages = restore_responses_session_messages(&state, &request).await;
+        let mut resumed = incoming_request.clone();
+        if let Some(previous_response_id) = incoming_request.previous_response_id.as_deref() {
+            resolved_upstream_conversation_id =
+                resolve_upstream_conversation_id_from_response_id(&state, previous_response_id)
+                    .await;
+            // Continuation turns should send only current delta input.
+            resumed.messages = incoming_request.messages.clone();
+        } else {
+            resolved_upstream_conversation_id =
+                infer_responses_upstream_conversation_id(&state, &incoming_request).await;
+            if resolved_upstream_conversation_id.is_some() {
+                // Tool result follow-up should also avoid replaying merged history.
+                resumed.messages = incoming_request.messages.clone();
+            } else {
+                resumed.messages = restore_responses_session_messages(&state, &incoming_request).await;
+            }
+        }
+        let tools_missing = resumed
+            .tools
+            .as_ref()
+            .map(|tools| tools.is_empty())
+            .unwrap_or(true);
+        if tools_missing || resumed.tool_choice.is_none() {
+            let (inherited_tools, inherited_tool_choice) =
+                restore_responses_session_request_options(&state, &incoming_request).await;
+            if tools_missing {
+                resumed.tools = inherited_tools;
+            }
+            if resumed.tool_choice.is_none() {
+                resumed.tool_choice = inherited_tool_choice;
+            }
+        }
         resumed
     } else {
-        request
+        incoming_request.clone()
     };
 
     let request_log_context = RequestLogContext {
@@ -661,8 +931,11 @@ pub async fn proxy_handler(
             persist_responses_session_entry(
                 &state,
                 &response_id,
-                request.messages.clone(),
-                request.previous_response_id.clone(),
+                None,
+                incoming_request.messages.clone(),
+                request.tools.clone(),
+                request.tool_choice.clone(),
+                incoming_request.previous_response_id.clone(),
                 &outcome.aggregated,
             )
             .await;
@@ -677,7 +950,7 @@ pub async fn proxy_handler(
         return Json(response).into_response();
     }
 
-    let upstream_payload =
+    let mut upstream_payload =
         match build_kiro_payload(&state.http, &request, upstream.profile_arn.clone()).await {
             Ok(payload) => payload,
             Err(message) => {
@@ -696,6 +969,12 @@ pub async fn proxy_handler(
                 .await;
             }
         };
+    if matches!(format, ResponseFormat::Responses) {
+        if let Some(conversation_id) = resolved_upstream_conversation_id.clone() {
+            upstream_payload.conversation_state.conversation_id = conversation_id;
+        }
+    }
+    let upstream_conversation_id = upstream_payload.conversation_state.conversation_id.clone();
     let upstream_request_body = serde_json::to_string_pretty(&upstream_payload)
         .unwrap_or_else(|_| "[failed to serialize upstream payload]".to_string());
     let upstream_payload_log_context = RequestLogContext {
@@ -735,9 +1014,25 @@ pub async fn proxy_handler(
             upstream_resp,
             format,
             request.model.clone(),
-            request.messages.clone(),
-            request.previous_response_id.clone(),
+            incoming_request.messages.clone(),
+            request.tools.clone(),
+            request.tool_choice.clone(),
+            incoming_request.previous_response_id.clone(),
             Vec::new(),
+            Some(upstream_conversation_id.clone()),
+            StreamLogMeta {
+                request_index: upstream_payload_log_context.request_index,
+                endpoint: upstream_payload_log_context.endpoint.to_string(),
+                client_ip: upstream_payload_log_context.client_addr.ip().to_string(),
+                model: request.model.clone(),
+                upstream_source: upstream_payload_log_context
+                    .upstream
+                    .map(|item| item.source_label.clone()),
+                region: upstream_payload_log_context
+                    .upstream
+                    .map(|item| item.region.clone()),
+                started_at: upstream_payload_log_context.started_at,
+            },
         );
     }
 
@@ -796,8 +1091,11 @@ pub async fn proxy_handler(
         persist_responses_session_entry(
             &state,
             &response_id,
-            request.messages.clone(),
-            request.previous_response_id.clone(),
+            Some(upstream_conversation_id),
+            incoming_request.messages.clone(),
+            request.tools.clone(),
+            request.tool_choice.clone(),
+            incoming_request.previous_response_id.clone(),
             &aggregated,
         )
         .await;
@@ -2191,6 +2489,16 @@ fn build_responses_response_with_ids(
         "role": "assistant",
         "content": content
     }));
+    output.extend(aggregated.tool_calls.iter().map(|(id, name, arguments)| {
+        json!({
+            "id": id,
+            "type": "function_call",
+            "status": "completed",
+            "call_id": id,
+            "name": name,
+            "arguments": arguments
+        })
+    }));
 
     json!({
         "id": response_id,
@@ -2234,12 +2542,16 @@ fn build_stream_responses_completed_event(
 
 fn build_stream_responses_function_call_arguments_done_event(
     response_id: &str,
+    item_id: &str,
+    output_index: usize,
     call_id: &str,
     arguments: &str,
 ) -> Value {
     json!({
         "type": "response.function_call_arguments.done",
         "response_id": response_id,
+        "item_id": item_id,
+        "output_index": output_index,
         "call_id": call_id,
         "arguments": arguments
     })
@@ -2409,8 +2721,12 @@ fn stream_proxy_response(
     format: ResponseFormat,
     model: String,
     request_messages: Vec<NormalizedMessage>,
+    request_tools: Option<Vec<Tool>>,
+    request_tool_choice: Option<Value>,
     previous_response_id: Option<String>,
     server_tool_calls: Vec<ServerToolCall>,
+    upstream_conversation_id: Option<String>,
+    stream_log_meta: StreamLogMeta,
 ) -> Response {
     let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(2048);
     tokio::spawn(async move {
@@ -2434,6 +2750,11 @@ fn stream_proxy_response(
         let mut responses_sequence_number = 0usize;
         let mut responses_next_output_index = 1usize;
         let mut responses_tool_output_indexes: HashMap<String, usize> = HashMap::new();
+        let mut responses_tool_added_emitted: HashSet<String> = HashSet::new();
+        let mut responses_tool_done_emitted: HashSet<String> = HashSet::new();
+        let mut responses_event_trace: Vec<String> = Vec::new();
+        let mut responses_event_delta_count = 0usize;
+        let mut stream_failed = false;
 
         if matches!(format, ResponseFormat::Responses) {
             let created = json!({
@@ -2447,6 +2768,9 @@ fn stream_proxy_response(
                     "output": []
                 }
             });
+            if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
+                responses_event_trace.push("response.created".to_string());
+            }
             if !send_data(&tx, &created.to_string()).await {
                 return;
             }
@@ -2463,6 +2787,9 @@ fn stream_proxy_response(
                     "content": []
                 }
             });
+            if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
+                responses_event_trace.push("response.output_item.added:message".to_string());
+            }
             if !send_data(&tx, &output_item_added.to_string()).await {
                 return;
             }
@@ -2502,15 +2829,24 @@ fn stream_proxy_response(
                 Ok(Some(result)) => result,
                 Ok(None) => break,
                 Err(_) => {
-                    log::error!("流式响应超时: 5分钟内未收到数据");
+                    let timeout_message = "streaming upstream timeout: no data in 5 minutes";
+                    log::error!("{}", timeout_message);
+                    write_stream_error_log(
+                        &stream_log_meta,
+                        StatusCode::BAD_GATEWAY,
+                        timeout_message,
+                        None,
+                    );
+                    *state.last_error.lock().await = Some(timeout_message.to_string());
                     let data = json!({
                         "type": "error",
-                        "message": "流式响应超时: 5分钟内未收到数据"
+                        "message": timeout_message
                     });
                     send_data(&tx, &data.to_string()).await;
+                    stream_failed = true;
                     break;
                 }
-            };
+            }; 
 
             match chunk_result {
                 Ok(bytes) => {
@@ -2526,17 +2862,26 @@ fn stream_proxy_response(
 
                                 if matches!(message_type, Some("error") | Some("exception")) {
                                     let error_text = String::from_utf8_lossy(&msg.payload);
+                                    let sanitized_error = sanitize_error(error_text.as_ref());
                                     log::error!(
-                                        "EventStream 上游错误: message_type={:?}, event_type={:?}, payload={}",
+                                        "EventStream upstream error: message_type={:?}, event_type={:?}, payload={}",
                                         message_type,
                                         event_type,
                                         error_text
                                     );
+                                    write_stream_error_log(
+                                        &stream_log_meta,
+                                        StatusCode::BAD_GATEWAY,
+                                        &sanitized_error,
+                                        Some(error_text.as_ref()),
+                                    );
+                                    *state.last_error.lock().await = Some(sanitized_error.clone());
                                     let data = json!({
                                         "type": "error",
-                                        "message": sanitize_error(error_text.as_ref())
+                                        "message": sanitized_error
                                     });
                                     send_data(&tx, &data.to_string()).await;
+                                    stream_failed = true;
                                     raw_buffer.drain(..consumed_bytes);
                                     break;
                                 }
@@ -2548,6 +2893,53 @@ fn stream_proxy_response(
 
                                 // 将 payload 转换为文本
                                 let json_text = String::from_utf8_lossy(&msg.payload);
+                                let json_text_lower = json_text.to_ascii_lowercase();
+                                if json_text_lower.contains("tool invocation is not enabled")
+                                    || json_text_lower.contains("agent_mode_agent")
+                                {
+                                    let sanitized_error = sanitize_error(json_text.as_ref());
+                                    write_stream_error_log(
+                                        &stream_log_meta,
+                                        StatusCode::BAD_GATEWAY,
+                                        &sanitized_error,
+                                        Some(json_text.as_ref()),
+                                    );
+                                    *state.last_error.lock().await = Some(sanitized_error.clone());
+                                    let data = json!({
+                                        "type": "error",
+                                        "message": sanitized_error
+                                    });
+                                    send_data(&tx, &data.to_string()).await;
+                                    stream_failed = true;
+                                    raw_buffer.drain(..consumed_bytes);
+                                    break;
+                                }
+                                if let Some((_, _, mapped_message)) =
+                                    detect_upstream_error_body(json_text.as_ref())
+                                {
+                                    let sanitized_error = sanitize_error(&mapped_message);
+                                    log::error!(
+                                        "EventStream upstream error event: message_type={:?}, event_type={:?}, payload={}",
+                                        message_type,
+                                        event_type,
+                                        json_text
+                                    );
+                                    write_stream_error_log(
+                                        &stream_log_meta,
+                                        StatusCode::BAD_GATEWAY,
+                                        &sanitized_error,
+                                        Some(json_text.as_ref()),
+                                    );
+                                    *state.last_error.lock().await = Some(sanitized_error.clone());
+                                    let data = json!({
+                                        "type": "error",
+                                        "message": sanitized_error
+                                    });
+                                    send_data(&tx, &data.to_string()).await;
+                                    stream_failed = true;
+                                    raw_buffer.drain(..consumed_bytes);
+                                    break;
+                                }
 
                                 // 解析 JSON 事件
                                 if let Some(event) = parse_kiro_event_full(&json_text) {
@@ -2658,24 +3050,36 @@ fn stream_proxy_response(
                                                     .await;
                                                 }
                                                 ResponseFormat::Responses => {
-                                                    let output_index = responses_next_output_index;
-                                                    responses_next_output_index += 1;
-                                                    responses_tool_output_indexes
-                                                        .insert(id.clone(), output_index);
-                                                    let data = json!({
-                                                        "type": "response.output_item.added",
-                                                        "response_id": response_id,
-                                                        "output_index": output_index,
-                                                        "item": {
-                                                            "id": id,
-                                                            "type": "function_call",
-                                                            "status": "in_progress",
-                                                            "call_id": id,
-                                                            "name": name,
-                                                            "arguments": ""
+                                                    if responses_tool_added_emitted
+                                                        .insert(id.clone())
+                                                    {
+                                                        let output_index = responses_next_output_index;
+                                                        responses_next_output_index += 1;
+                                                        responses_tool_output_indexes
+                                                            .insert(id.clone(), output_index);
+                                                        let data = json!({
+                                                            "type": "response.output_item.added",
+                                                            "response_id": response_id,
+                                                            "output_index": output_index,
+                                                            "item": {
+                                                                "id": id,
+                                                                "type": "function_call",
+                                                                "status": "in_progress",
+                                                                "call_id": id,
+                                                                "name": name,
+                                                                "arguments": ""
+                                                            }
+                                                        });
+                                                        if responses_event_trace.len()
+                                                            < MAX_RESPONSES_EVENT_TRACE_ITEMS
+                                                        {
+                                                            responses_event_trace.push(format!(
+                                                                "response.output_item.added:function_call:{}",
+                                                                id
+                                                            ));
                                                         }
-                                                    });
-                                                    send_data(&tx, &data.to_string()).await;
+                                                        send_data(&tx, &data.to_string()).await;
+                                                    }
                                                 }
                                                 ResponseFormat::OpenAI => {
                                                     let output_index = responses_next_output_index;
@@ -2732,13 +3136,22 @@ fn stream_proxy_response(
                                                     }
                                                 }
                                                 ResponseFormat::Responses => {
-                                                    let data = json!({
-                                                        "type": "response.function_call_arguments.delta",
-                                                        "response_id": response_id,
-                                                        "call_id": id,
-                                                        "delta": input_delta
-                                                    });
-                                                    send_data(&tx, &data.to_string()).await;
+                                                    if let Some(output_index) =
+                                                        responses_tool_output_indexes
+                                                            .get(&id)
+                                                            .copied()
+                                                    {
+                                                        let data = json!({
+                                                            "type": "response.function_call_arguments.delta",
+                                                            "response_id": response_id,
+                                                            "item_id": id,
+                                                            "output_index": output_index,
+                                                            "call_id": id,
+                                                            "delta": input_delta
+                                                        });
+                                                        responses_event_delta_count += 1;
+                                                        send_data(&tx, &data.to_string()).await;
+                                                    }
                                                 }
                                                 ResponseFormat::OpenAI => {
                                                     let data = json!({
@@ -2780,33 +3193,53 @@ fn stream_proxy_response(
                                                         name.clone(),
                                                         input.clone(),
                                                     ));
-                                                    let done = build_stream_responses_function_call_arguments_done_event(
-                                                        &response_id,
-                                                        &id,
-                                                        &input,
-                                                    );
-                                                    send_data(&tx, &done.to_string()).await;
-                                                    let output_index = responses_tool_output_indexes
-                                                        .remove(&id)
-                                                        .unwrap_or_else(|| {
-                                                            let idx = responses_next_output_index;
-                                                            responses_next_output_index += 1;
-                                                            idx
-                                                        });
-                                                    let data = json!({
-                                                        "type": "response.output_item.done",
-                                                        "response_id": response_id,
-                                                        "output_index": output_index,
-                                                        "item": {
-                                                            "id": id,
-                                                            "type": "function_call",
-                                                            "status": "completed",
-                                                            "call_id": id,
-                                                            "name": name,
-                                                            "arguments": input
+                                                    if responses_tool_done_emitted.insert(id.clone()) {
+                                                        let output_index = responses_tool_output_indexes
+                                                            .remove(&id)
+                                                            .unwrap_or_else(|| {
+                                                                let idx = responses_next_output_index;
+                                                                responses_next_output_index += 1;
+                                                                idx
+                                                            });
+                                                        let done_args = build_stream_responses_function_call_arguments_done_event(
+                                                            &response_id,
+                                                            &id,
+                                                            output_index,
+                                                            &id,
+                                                            &input,
+                                                        );
+                                                        if responses_event_trace.len()
+                                                            < MAX_RESPONSES_EVENT_TRACE_ITEMS
+                                                        {
+                                                            responses_event_trace.push(format!(
+                                                                "response.function_call_arguments.done:{}",
+                                                                id
+                                                            ));
                                                         }
-                                                    });
-                                                    send_data(&tx, &data.to_string()).await;
+                                                        send_data(&tx, &done_args.to_string()).await;
+                                                        let data = json!({
+                                                            "type": "response.output_item.done",
+                                                            "response_id": response_id,
+                                                            "output_index": output_index,
+                                                            "item": {
+                                                                "id": id,
+                                                                "type": "function_call",
+                                                                "status": "completed",
+                                                                "call_id": id,
+                                                                "name": name,
+                                                                "arguments": input
+                                                            }
+                                                        });
+                                                        if responses_event_trace.len()
+                                                            < MAX_RESPONSES_EVENT_TRACE_ITEMS
+                                                        {
+                                                            responses_event_trace.push(format!(
+                                                                "response.output_item.done:function_call:{}",
+                                                                id
+                                                            ));
+                                                        }
+                                                        send_data(&tx, &data.to_string()).await;
+                                                    }
                                                 }
                                             }
                                             ResponseFormat::OpenAI => {
@@ -2818,33 +3251,59 @@ fn stream_proxy_response(
                                                         name.clone(),
                                                         input.clone(),
                                                     ));
-                                                    let done = build_stream_responses_function_call_arguments_done_event(
-                                                        &response_id,
-                                                        &id,
-                                                        &input,
-                                                    );
-                                                    send_data(&tx, &done.to_string()).await;
-                                                    let output_index = responses_tool_output_indexes
-                                                        .remove(&id)
-                                                        .unwrap_or_else(|| {
-                                                            let idx = responses_next_output_index;
-                                                            responses_next_output_index += 1;
-                                                            idx
-                                                        });
-                                                    let data = json!({
-                                                        "type": "response.output_item.done",
-                                                        "response_id": response_id,
-                                                        "output_index": output_index,
-                                                        "item": {
-                                                            "id": id,
-                                                            "type": "function_call",
-                                                            "status": "completed",
-                                                            "call_id": id,
-                                                            "name": name,
-                                                            "arguments": input
+                                                    if responses_tool_done_emitted.insert(id.clone()) {
+                                                        let output_index = responses_tool_output_indexes
+                                                            .remove(&id)
+                                                            .unwrap_or_else(|| {
+                                                                let idx = responses_next_output_index;
+                                                                responses_next_output_index += 1;
+                                                                idx
+                                                            });
+                                                        let done_args = build_stream_responses_function_call_arguments_done_event(
+                                                            &response_id,
+                                                            &id,
+                                                            output_index,
+                                                            &id,
+                                                            &input,
+                                                        );
+                                                        if responses_event_trace.len()
+                                                            < MAX_RESPONSES_EVENT_TRACE_ITEMS
+                                                        {
+                                                            responses_event_trace.push(format!(
+                                                                "response.function_call_arguments.done:{}",
+                                                                id
+                                                            ));
                                                         }
-                                                    });
-                                                    send_data(&tx, &data.to_string()).await;
+                                                        send_data(&tx, &done_args.to_string()).await;
+                                                        let data = json!({
+                                                            "type": "response.output_item.done",
+                                                            "response_id": response_id,
+                                                            "output_index": output_index,
+                                                            "item": {
+                                                                "id": id,
+                                                                "type": "function_call",
+                                                                "status": "completed",
+                                                                "call_id": id,
+                                                                "name": name,
+                                                                "arguments": input
+                                                            }
+                                                        });
+                                                        if responses_event_trace.len()
+                                                            < MAX_RESPONSES_EVENT_TRACE_ITEMS
+                                                        {
+                                                            responses_event_trace.push(format!(
+                                                                "response.output_item.done:function_call:{}",
+                                                                id
+                                                            ));
+                                                        }
+                                                        send_data(&tx, &data.to_string()).await;
+                                                    }
+                                                }
+                                            }
+                                            ResponseFormat::OpenAI => {
+                                                if let Some((name, input)) = tool_accumulators.remove(&id)
+                                                {
+                                                    aggregated.tool_calls.push((id.clone(), name, input));
                                                 }
                                             }
                                         },
@@ -2964,16 +3423,32 @@ fn stream_proxy_response(
                             }
                         }
                     }
+                    if stream_failed {
+                        break;
+                    }
                 }
                 Err(error) => {
-                    log::error!("流式读取错误: {:?}", error);
-                    let error_msg = format!("流式读取失败: {error}");
-                    log::error!("错误详情: {}", error_msg);
-                    let data = json!({"type":"error","message":sanitize_error(&error_msg)});
+                    log::error!("stream read error: {:?}", error);
+                    let error_msg = format!("stream read failed: {error}");
+                    log::error!("{}", error_msg);
+                    let sanitized_error = sanitize_error(&error_msg);
+                    write_stream_error_log(
+                        &stream_log_meta,
+                        StatusCode::BAD_GATEWAY,
+                        &sanitized_error,
+                        None,
+                    );
+                    *state.last_error.lock().await = Some(sanitized_error.clone());
+                    let data = json!({"type":"error","message":sanitized_error});
                     send_data(&tx, &data.to_string()).await;
+                    stream_failed = true;
                     break;
                 }
             }
+        }
+
+        if stream_failed {
+            return;
         }
 
         for segment in parser.flush() {
@@ -3020,6 +3495,9 @@ fn stream_proxy_response(
                         &response_id,
                         &output_text.text,
                     );
+                    if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
+                        responses_event_trace.push("response.output_text.done".to_string());
+                    }
                     send_data(&tx, &text_done.to_string()).await;
                 }
                 if !aggregated.thinking.is_empty() {
@@ -3027,6 +3505,9 @@ fn stream_proxy_response(
                         &response_id,
                         &aggregated.thinking,
                     );
+                    if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
+                        responses_event_trace.push("response.reasoning.done".to_string());
+                    }
                     send_data(&tx, &reasoning_done.to_string()).await;
                 }
                 let content = build_responses_message_content(&aggregated, &server_tool_calls);
@@ -3042,6 +3523,9 @@ fn stream_proxy_response(
                         "content": content
                     }
                 });
+                if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
+                    responses_event_trace.push("response.output_item.done:message".to_string());
+                }
                 send_data(&tx, &output_item_done.to_string()).await;
 
                 let completed = build_stream_responses_completed_event(
@@ -3053,11 +3537,17 @@ fn stream_proxy_response(
                     created_at,
                     previous_response_id.as_deref(),
                 );
+                if responses_event_trace.len() < MAX_RESPONSES_EVENT_TRACE_ITEMS {
+                    responses_event_trace.push("response.completed".to_string());
+                }
                 send_data(&tx, &completed.to_string()).await;
                 persist_responses_session_entry(
                     &state,
                     &response_id,
+                    upstream_conversation_id.clone(),
                     request_messages.clone(),
+                    request_tools.clone(),
+                    request_tool_choice.clone(),
                     previous_response_id.clone(),
                     &aggregated,
                 )
@@ -3133,7 +3623,22 @@ fn stream_proxy_response(
                 send_data(&tx, "[DONE]").await;
             }
         }
-    }); // tokio::spawn 闭合
+
+        write_stream_completed_log(
+            &stream_log_meta,
+            &aggregated,
+            if matches!(format, ResponseFormat::Responses) {
+                Some(&responses_event_trace)
+            } else {
+                None
+            },
+            if matches!(format, ResponseFormat::Responses) {
+                Some(responses_event_delta_count)
+            } else {
+                None
+            },
+        );
+    });
 
     Response::builder()
         .status(StatusCode::OK)
@@ -3505,6 +4010,7 @@ mod tests {
                 "resp_prev_123".to_string(),
                 ResponsesSessionEntry {
                     response_id: "resp_prev_123".to_string(),
+                    upstream_conversation_id: Some("conv_prev_123".to_string()),
                     previous_response_id: None,
                     request_messages: vec![NormalizedMessage {
                         role: "user".to_string(),
@@ -3513,6 +4019,8 @@ mod tests {
                         tool_call_id: None,
                         metadata: None,
                     }],
+                    request_tools: None,
+                    request_tool_choice: None,
                     response_text: "第一答".to_string(),
                     tool_calls: vec![(
                         "call_1".to_string(),
@@ -3558,6 +4066,74 @@ mod tests {
                 .map(|call| call.function.name.as_str()),
             Some("search_docs")
         );
+    }
+
+    #[tokio::test]
+    async fn restore_responses_session_messages_filters_latest_tool_calls_by_tool_result() {
+        let state = proxy_test_state();
+        {
+            let mut sessions = state.responses_sessions.lock().await;
+            sessions.insert(
+                "resp_prev_123".to_string(),
+                ResponsesSessionEntry {
+                    response_id: "resp_prev_123".to_string(),
+                    upstream_conversation_id: Some("conv_prev_123".to_string()),
+                    previous_response_id: None,
+                    request_messages: vec![NormalizedMessage {
+                        role: "user".to_string(),
+                        content: Some(json!("first")),
+                        tool_calls: None,
+                        tool_call_id: None,
+                        metadata: None,
+                    }],
+                    request_tools: None,
+                    request_tool_choice: None,
+                    response_text: "planning".to_string(),
+                    tool_calls: vec![
+                        (
+                            "call_read".to_string(),
+                            "Read".to_string(),
+                            "{\"path\":\"README.md\"}".to_string(),
+                        ),
+                        (
+                            "call_ls".to_string(),
+                            "Ls".to_string(),
+                            "{\"path\":\".\"}".to_string(),
+                        ),
+                    ],
+                    updated_at: Instant::now(),
+                },
+            );
+        }
+
+        let request = NormalizedRequest {
+            model: "claude-sonnet-4-5".to_string(),
+            messages: vec![NormalizedMessage {
+                role: "tool".to_string(),
+                content: Some(json!("read result")),
+                tool_calls: None,
+                tool_call_id: Some("call_read".to_string()),
+                metadata: None,
+            }],
+            stream: false,
+            max_tokens: None,
+            temperature: None,
+            top_p: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+            previous_response_id: Some("resp_prev_123".to_string()),
+        };
+
+        let merged = restore_responses_session_messages(&state, &request).await;
+
+        assert_eq!(merged.len(), 3);
+        let assistant_tool_calls = merged[1]
+            .tool_calls
+            .as_ref()
+            .expect("assistant tool calls should exist");
+        assert_eq!(assistant_tool_calls.len(), 1);
+        assert_eq!(assistant_tool_calls[0].id, "call_read");
     }
 
     #[test]
@@ -3962,6 +4538,8 @@ mod tests {
         let function_done = build_stream_responses_function_call_arguments_done_event(
             "resp_test",
             "call_1",
+            1,
+            "call_1",
             "{\"q\":\"rust\"}",
         );
         let text_done = build_stream_responses_output_text_done_event("resp_test", "Hello Rust");
@@ -3969,6 +4547,8 @@ mod tests {
 
         assert_eq!(function_done["type"], "response.function_call_arguments.done");
         assert_eq!(function_done["response_id"], "resp_test");
+        assert_eq!(function_done["item_id"], "call_1");
+        assert_eq!(function_done["output_index"], 1);
         assert_eq!(function_done["call_id"], "call_1");
         assert_eq!(function_done["arguments"], "{\"q\":\"rust\"}");
 

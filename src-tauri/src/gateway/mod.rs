@@ -130,8 +130,11 @@ pub struct GatewayRuntime {
 pub(crate) struct ResponsesSessionEntry {
     #[allow(dead_code)]
     pub response_id: String,
+    pub upstream_conversation_id: Option<String>,
     pub previous_response_id: Option<String>,
     pub request_messages: Vec<crate::gateway::models::NormalizedMessage>,
+    pub request_tools: Option<Vec<crate::gateway::models::Tool>>,
+    pub request_tool_choice: Option<serde_json::Value>,
     pub response_text: String,
     pub tool_calls: Vec<(String, String, String)>,
     pub updated_at: Instant,

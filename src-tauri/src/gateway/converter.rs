@@ -491,7 +491,6 @@ pub async fn build_kiro_payload(
         .previous_response_id
         .clone()
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-    let agent_continuation_id = conversation_id.clone();
     let (processed_tools, tool_docs) = process_tools_with_long_descriptions(&request.tools);
     let tool_docs_for_current = tool_docs.clone();
 
@@ -620,8 +619,8 @@ pub async fn build_kiro_payload(
         conversation_state: ConversationState {
             chat_trigger_type: "MANUAL".to_string(),
             conversation_id: conversation_id.clone(),
-            agent_continuation_id: Some(agent_continuation_id),
-            agent_task_type: Some("vibe".to_string()),
+            agent_continuation_id: None,
+            agent_task_type: None,
             current_message: CurrentMessage {
                 user_input_message: UserInputMessage {
                     content: current_content,
@@ -1021,7 +1020,7 @@ fn merge_adjacent_messages(messages: &[&NormalizedMessage]) -> Vec<NormalizedMes
 
     for message in messages {
         if let Some(last) = merged.last_mut() {
-            if last.role == message.role {
+            if last.role == message.role && last.role != "tool" {
                 let existing = extract_text_content(last.content.as_ref());
                 let incoming = extract_text_content(message.content.as_ref());
                 last.content = Some(Value::String(join_with_newline(&existing, &incoming)));
@@ -2087,6 +2086,95 @@ mod tests {
             }
             other => panic!("unexpected history item: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn build_kiro_payload_keeps_multiple_tool_messages_separate() {
+        let request = NormalizedRequest {
+            model: "claude-sonnet-4-5-20250929".to_string(),
+            messages: vec![
+                NormalizedMessage {
+                    role: "assistant".to_string(),
+                    content: Some(json!("我会调用工具")),
+                    tool_calls: Some(vec![
+                        crate::gateway::models::ToolCall {
+                            id: "call_1".to_string(),
+                            call_type: "function".to_string(),
+                            function: crate::gateway::models::ToolCallFunction {
+                                name: "Read".to_string(),
+                                arguments: "{\"path\":\"a\"}".to_string(),
+                            },
+                        },
+                        crate::gateway::models::ToolCall {
+                            id: "call_2".to_string(),
+                            call_type: "function".to_string(),
+                            function: crate::gateway::models::ToolCallFunction {
+                                name: "Ls".to_string(),
+                                arguments: "{\"path\":\".\"}".to_string(),
+                            },
+                        },
+                    ]),
+                    tool_call_id: None,
+                    metadata: None,
+                },
+                NormalizedMessage {
+                    role: "tool".to_string(),
+                    content: Some(json!("{\"ok\":1}")),
+                    tool_calls: None,
+                    tool_call_id: Some("call_1".to_string()),
+                    metadata: None,
+                },
+                NormalizedMessage {
+                    role: "tool".to_string(),
+                    content: Some(json!("{\"ok\":2}")),
+                    tool_calls: None,
+                    tool_call_id: Some("call_2".to_string()),
+                    metadata: None,
+                },
+            ],
+            stream: true,
+            max_tokens: Some(2048),
+            temperature: None,
+            top_p: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+            previous_response_id: Some("resp_prev_test".to_string()),
+        };
+
+        let payload = build_kiro_payload(&Client::new(), &request, None)
+            .await
+            .expect("payload should build");
+
+        let history = payload
+            .conversation_state
+            .history
+            .as_ref()
+            .expect("history should exist");
+
+        let history_tool_results = history
+            .iter()
+            .filter_map(|item| match item {
+                HistoryItem::User { user_input_message } => user_input_message
+                    .user_input_message_context
+                    .as_ref()
+                    .and_then(|context| context.tool_results.as_ref())
+                    .map(Vec::len),
+                _ => None,
+            })
+            .sum::<usize>();
+
+        let current_tool_results = payload
+            .conversation_state
+            .current_message
+            .user_input_message
+            .user_input_message_context
+            .as_ref()
+            .and_then(|context| context.tool_results.as_ref())
+            .map(Vec::len)
+            .unwrap_or(0);
+
+        assert_eq!(history_tool_results + current_tool_results, 2);
     }
 
     #[tokio::test]
