@@ -217,6 +217,15 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         handle_deep_link_event(&app_handle, event.payload());
     });
 
+    #[cfg(target_os = "macos")]
+    {
+        let app_handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+            let _ = show_main_window(app_handle);
+        });
+    }
+
     let app_handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {
         if let Err(err) = gateway::auto_start_if_enabled(&app_handle).await {
