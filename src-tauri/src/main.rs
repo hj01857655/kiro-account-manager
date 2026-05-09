@@ -18,7 +18,7 @@ use core::account::{AccountStore, GroupTagStore};
 use auth::AuthState;
 use state::AppState;
 use std::sync::Mutex;
-use tauri::Listener;
+use tauri::{Listener, Manager};
 use services::session_storage::SessionStorage;
 
 // 导入命令
@@ -224,6 +224,25 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[tauri::command]
+fn reveal_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("main") else {
+        return Err("main window not found".to_string());
+    };
+
+    window
+        .unminimize()
+        .map_err(|e| format!("failed to unminimize main window: {e}"))?;
+    window
+        .show()
+        .map_err(|e| format!("failed to show main window: {e}"))?;
+    window
+        .set_focus()
+        .map_err(|e| format!("failed to focus main window: {e}"))?;
+
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)] // Tauri 框架要求在 main 中注册所有命令，无法拆分
 fn main() {
     tauri::Builder::default()
@@ -348,6 +367,8 @@ fn main() {
             restart_as_admin,
             // 浏览器检测
             detect_installed_browsers,
+            // 窗口控制
+            reveal_main_window,
             // MCP 管理命令
             get_mcp_config,
             save_mcp_server,
