@@ -9,6 +9,7 @@ pub enum KiroEvent {
     },
     ToolUseInputDelta {
         id: String,
+        name: Option<String>,
         input_delta: String,
     },
     ToolUseStop {
@@ -181,41 +182,8 @@ pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
         });
     }
 
-    if let Some(tool_use_id) = value.get("toolUseId").and_then(|item| item.as_str()) {
-        let name = value
-            .get("name")
-            .and_then(|item| item.as_str())
-            .unwrap_or_default()
-            .to_string();
-
-        if value.get("stop").and_then(|item| item.as_bool()) == Some(true) {
-            return Some(KiroEvent::ToolUseStop {
-                id: tool_use_id.to_string(),
-            });
-        }
-
-        if let Some(input) = value.get("input") {
-            let input_delta = if let Some(text) = input.as_str() {
-                text.to_string()
-            } else if input.is_object() || input.is_array() {
-                serde_json::to_string(input).unwrap_or_default()
-            } else {
-                String::new()
-            };
-            if !input_delta.is_empty() {
-                return Some(KiroEvent::ToolUseInputDelta {
-                    id: tool_use_id.to_string(),
-                    input_delta,
-                });
-            }
-        }
-
-        if !name.is_empty() {
-            return Some(KiroEvent::ToolUseStart {
-                id: tool_use_id.to_string(),
-                name,
-            });
-        }
+    if let Some(event) = parse_tool_use_event(&value) {
+        return Some(event);
     }
 
     if let Some(tool) = value
@@ -241,6 +209,48 @@ pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
     }
 
     parse_text_content(&value).map(KiroEvent::Text)
+}
+
+fn parse_tool_use_event(value: &serde_json::Value) -> Option<KiroEvent> {
+    let tool = value.get("toolUseEvent").unwrap_or(value);
+    let tool_use_id = tool.get("toolUseId").and_then(|item| item.as_str())?;
+    let name = tool
+        .get("name")
+        .and_then(|item| item.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    if tool.get("stop").and_then(|item| item.as_bool()) == Some(true) {
+        return Some(KiroEvent::ToolUseStop {
+            id: tool_use_id.to_string(),
+        });
+    }
+
+    if let Some(input) = tool.get("input") {
+        let input_delta = if let Some(text) = input.as_str() {
+            text.to_string()
+        } else if input.is_object() || input.is_array() {
+            serde_json::to_string(input).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        if !input_delta.is_empty() {
+            return Some(KiroEvent::ToolUseInputDelta {
+                id: tool_use_id.to_string(),
+                name: (!name.is_empty()).then_some(name),
+                input_delta,
+            });
+        }
+    }
+
+    if !name.is_empty() {
+        return Some(KiroEvent::ToolUseStart {
+            id: tool_use_id.to_string(),
+            name,
+        });
+    }
+
+    None
 }
 
 pub fn deduplicate_tool_calls(
@@ -287,13 +297,27 @@ pub fn aggregate_kiro_response(raw: &str) -> AggregatedKiroResponse {
                 KiroEvent::Text(text) => aggregated.text.push_str(&text),
                 KiroEvent::Thinking(text) => aggregated.thinking.push_str(&text),
                 KiroEvent::ToolUseStart { id, name } => {
-                    tool_accumulators.entry(id).or_insert((name, String::new()));
+                    let entry = tool_accumulators
+                        .entry(id)
+                        .or_insert((String::new(), String::new()));
+                    if entry.0.is_empty() {
+                        entry.0 = name;
+                    }
                 }
-                KiroEvent::ToolUseInputDelta { id, input_delta } => {
-                    if let Some((_, current_input)) = tool_accumulators.get_mut(&id) {
+                KiroEvent::ToolUseInputDelta {
+                    id,
+                    name,
+                    input_delta,
+                } => {
+                    if let Some((existing_name, current_input)) = tool_accumulators.get_mut(&id) {
+                        if existing_name.is_empty() {
+                            if let Some(name) = name {
+                                *existing_name = name;
+                            }
+                        }
                         current_input.push_str(&input_delta);
                     } else {
-                        tool_accumulators.insert(id, (String::new(), input_delta));
+                        tool_accumulators.insert(id, (name.unwrap_or_default(), input_delta));
                     }
                 }
                 KiroEvent::ToolUseStop { id } => {
@@ -330,6 +354,12 @@ pub fn aggregate_kiro_response(raw: &str) -> AggregatedKiroResponse {
         }
 
         remaining = &remaining[json_len..];
+    }
+
+    for (id, (name, input)) in tool_accumulators.drain() {
+        if !name.is_empty() {
+            aggregated.tool_calls.push((id, name, input));
+        }
     }
 
     if !found_usage {
@@ -564,6 +594,7 @@ mod tests {
             parse_kiro_event_full(r#"{"toolUseId":"tool_1","input":{"q":"gateway"}}"#),
             Some(KiroEvent::ToolUseInputDelta {
                 id: "tool_1".to_string(),
+                name: None,
                 input_delta: "{\"q\":\"gateway\"}".to_string(),
             })
         );
@@ -581,6 +612,72 @@ mod tests {
                 cache_read_input_tokens: None,
                 cache_creation_input_tokens: None,
             })
+        );
+    }
+
+    #[test]
+    fn parse_kiro_event_full_reads_wrapped_tool_use_events() {
+        assert_eq!(
+            parse_kiro_event_full(
+                r#"{"toolUseEvent":{"toolUseId":"tool_1","name":"server_health"}}"#
+            ),
+            Some(KiroEvent::ToolUseStart {
+                id: "tool_1".to_string(),
+                name: "server_health".to_string(),
+            })
+        );
+        assert_eq!(
+            parse_kiro_event_full(
+                r#"{"toolUseEvent":{"toolUseId":"tool_1","name":"server_health","input":"{}"}}"#
+            ),
+            Some(KiroEvent::ToolUseInputDelta {
+                id: "tool_1".to_string(),
+                name: Some("server_health".to_string()),
+                input_delta: "{}".to_string(),
+            })
+        );
+        assert_eq!(
+            parse_kiro_event_full(
+                r#"{"toolUseEvent":{"toolUseId":"tool_1","name":"server_health","stop":true}}"#
+            ),
+            Some(KiroEvent::ToolUseStop {
+                id: "tool_1".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn aggregate_kiro_response_keeps_name_when_input_arrives_first() {
+        let raw = concat!(
+            r#"{"toolUseEvent":{"toolUseId":"tool_1","name":"server_health","input":"{}"}}"#,
+            r#"{"toolUseEvent":{"toolUseId":"tool_1","stop":true}}"#
+        );
+
+        let aggregated = aggregate_kiro_response(raw);
+
+        assert_eq!(
+            aggregated.tool_calls,
+            vec![(
+                "tool_1".to_string(),
+                "server_health".to_string(),
+                "{}".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn aggregate_kiro_response_flushes_unstopped_tool_use() {
+        let raw = r#"{"toolUseEvent":{"toolUseId":"tool_1","name":"server_health"}}"#;
+
+        let aggregated = aggregate_kiro_response(raw);
+
+        assert_eq!(
+            aggregated.tool_calls,
+            vec![(
+                "tool_1".to_string(),
+                "server_health".to_string(),
+                String::new()
+            )]
         );
     }
 

@@ -3346,16 +3346,6 @@ fn stream_proxy_response(
                                         }
                                         KiroEvent::ContextUsage { percentage } => {
                                             aggregated.context_usage_percentage = Some(percentage);
-                                            if matches!(format, ResponseFormat::Anthropic) {
-                                                let data =
-                                                    json!({"type":"context_usage","percentage":percentage});
-                                                send_event(
-                                                    &tx,
-                                                    Some("context_usage"),
-                                                    &data.to_string(),
-                                                )
-                                                .await;
-                                            }
                                         }
                                         KiroEvent::Thinking(text) => {
                                             aggregated.thinking.push_str(&text);
@@ -3403,11 +3393,18 @@ fn stream_proxy_response(
                                         }
                                         KiroEvent::ToolUseStart { id, name } => {
                                             saw_tool_calls = true;
-                                            tool_accumulators
+                                            let entry = tool_accumulators
                                                 .entry(id.clone())
-                                                .or_insert((name.clone(), String::new()));
+                                                .or_insert((String::new(), String::new()));
+                                            if entry.0.is_empty() {
+                                                entry.0 = name.clone();
+                                            }
                                             match format {
                                                 ResponseFormat::Anthropic => {
+                                                    if tool_block_indexes.contains_key(&id) {
+                                                        raw_buffer.drain(..consumed_bytes);
+                                                        continue;
+                                                    }
                                                     ensure_anthropic_message_start(
                                                         &tx,
                                                         &mut message_started,
@@ -3445,6 +3442,10 @@ fn stream_proxy_response(
                                                     .await;
                                                 }
                                                 ResponseFormat::Responses => {
+                                                    if responses_tool_output_indexes.contains_key(&id) {
+                                                        raw_buffer.drain(..consumed_bytes);
+                                                        continue;
+                                                    }
                                                     let output_index = responses_next_output_index;
                                                     responses_next_output_index += 1;
                                                     responses_tool_output_indexes
@@ -3465,6 +3466,10 @@ fn stream_proxy_response(
                                                     send_data(&tx, &data.to_string()).await;
                                                 }
                                                 ResponseFormat::OpenAI => {
+                                                    if responses_tool_output_indexes.contains_key(&id) {
+                                                        raw_buffer.drain(..consumed_bytes);
+                                                        continue;
+                                                    }
                                                     let output_index = responses_next_output_index;
                                                     responses_next_output_index += 1;
                                                     responses_tool_output_indexes
@@ -3486,19 +3491,77 @@ fn stream_proxy_response(
                                                 }
                                             }
                                         }
-                                        KiroEvent::ToolUseInputDelta { id, input_delta } => {
-                                            if let Some((_, current_input)) =
+                                        KiroEvent::ToolUseInputDelta {
+                                            id,
+                                            name,
+                                            input_delta,
+                                        } => {
+                                            let mut started_from_delta = false;
+                                            if let Some((existing_name, current_input)) =
                                                 tool_accumulators.get_mut(&id)
                                             {
+                                                if existing_name.is_empty() {
+                                                    if let Some(name) = name.as_ref() {
+                                                        *existing_name = name.clone();
+                                                    }
+                                                }
                                                 current_input.push_str(&input_delta);
                                             } else {
                                                 tool_accumulators.insert(
                                                     id.clone(),
-                                                    (String::new(), input_delta.clone()),
+                                                    (
+                                                        name.clone().unwrap_or_default(),
+                                                        input_delta.clone(),
+                                                    ),
                                                 );
+                                                started_from_delta = true;
                                             }
                                             match format {
                                                 ResponseFormat::Anthropic => {
+                                                    if !tool_block_indexes.contains_key(&id) {
+                                                        if let Some(name) = name.as_ref() {
+                                                            saw_tool_calls = true;
+                                                            ensure_anthropic_message_start(
+                                                                &tx,
+                                                                &mut message_started,
+                                                                &anthropic_id,
+                                                                &model,
+                                                                input_tokens,
+                                                                output_tokens,
+                                                            )
+                                                            .await;
+                                                            close_content_block(
+                                                                &tx,
+                                                                &mut text_block_index,
+                                                            )
+                                                            .await;
+                                                            close_content_block(
+                                                                &tx,
+                                                                &mut thinking_block_index,
+                                                            )
+                                                            .await;
+                                                            let index = next_block_index;
+                                                            next_block_index += 1;
+                                                            tool_block_indexes
+                                                                .insert(id.clone(), index);
+                                                            let data = json!({
+                                                                "type": "content_block_start",
+                                                                "index": index,
+                                                                "content_block": {
+                                                                    "type": "tool_use",
+                                                                    "id": id,
+                                                                    "name": name,
+                                                                    "input": {}
+                                                                }
+                                                            });
+                                                            send_event(
+                                                                &tx,
+                                                                Some("content_block_start"),
+                                                                &data.to_string(),
+                                                            )
+                                                            .await;
+                                                        }
+                                                    }
                                                     if let Some(index) =
                                                         tool_block_indexes.get(&id).copied()
                                                     {
@@ -3519,6 +3582,29 @@ fn stream_proxy_response(
                                                     }
                                                 }
                                                 ResponseFormat::Responses => {
+                                                    if started_from_delta {
+                                                        if let Some(name) = name.as_ref() {
+                                                            let output_index =
+                                                                responses_next_output_index;
+                                                            responses_next_output_index += 1;
+                                                            responses_tool_output_indexes
+                                                                .insert(id.clone(), output_index);
+                                                            let data = json!({
+                                                                "type": "response.output_item.added",
+                                                                "response_id": response_id,
+                                                                "output_index": output_index,
+                                                                "item": {
+                                                                    "id": id,
+                                                                    "type": "function_call",
+                                                                    "status": "in_progress",
+                                                                    "call_id": id,
+                                                                    "name": name,
+                                                                    "arguments": ""
+                                                                }
+                                                            });
+                                                            send_data(&tx, &data.to_string()).await;
+                                                        }
+                                                    }
                                                     let data = json!({
                                                         "type": "response.function_call_arguments.delta",
                                                         "response_id": response_id,
@@ -3528,6 +3614,29 @@ fn stream_proxy_response(
                                                     send_data(&tx, &data.to_string()).await;
                                                 }
                                                 ResponseFormat::OpenAI => {
+                                                    if started_from_delta {
+                                                        if let Some(name) = name.as_ref() {
+                                                            let output_index =
+                                                                responses_next_output_index;
+                                                            responses_next_output_index += 1;
+                                                            responses_tool_output_indexes
+                                                                .insert(id.clone(), output_index);
+                                                            let data = json!({
+                                                                "type": "response.output_item.added",
+                                                                "response_id": response_id,
+                                                                "output_index": output_index,
+                                                                "item": {
+                                                                    "id": id,
+                                                                    "type": "function_call",
+                                                                    "status": "in_progress",
+                                                                    "call_id": id,
+                                                                    "name": name,
+                                                                    "arguments": ""
+                                                                }
+                                                            });
+                                                            send_data(&tx, &data.to_string()).await;
+                                                        }
+                                                    }
                                                     let data = json!({
                                                         "type": "response.function_call_arguments.delta",
                                                         "response_id": response_id,
@@ -3733,20 +3842,8 @@ fn stream_proxy_response(
                                                 }
                                             }
                                         }
-                                        KiroEvent::Metering { unit, unit_plural, usage } => {
-                                            // 记录 metering 信息到聚合响应
+                                        KiroEvent::Metering { usage, .. } => {
                                             aggregated.metering_usage = Some(usage);
-                                            
-                                            // 如果是 Anthropic 格式，发送 metering 事件
-                                            if matches!(format, ResponseFormat::Anthropic) {
-                                                let data = json!({
-                                                    "type": "metering",
-                                                    "unit": unit,
-                                                    "unitPlural": unit_plural,
-                                                    "usage": usage
-                                                });
-                                                send_event(&tx, Some("metering"), &data.to_string()).await;
-                                            }
                                         }
                                     }
                                 }
@@ -3798,12 +3895,24 @@ fn stream_proxy_response(
             )
             .await;
         }
+        for (id, (name, input)) in tool_accumulators.drain() {
+            if !name.is_empty() {
+                aggregated.tool_calls.push((id, name, input));
+            }
+        }
         aggregated.tool_calls = stream::deduplicate_tool_calls(aggregated.tool_calls);
 
         match format {
             ResponseFormat::Anthropic => {
                 close_content_block(&tx, &mut text_block_index).await;
                 close_content_block(&tx, &mut thinking_block_index).await;
+                for (_, index) in tool_block_indexes.drain() {
+                    let data = json!({
+                        "type": "content_block_stop",
+                        "index": index
+                    });
+                    send_event(&tx, Some("content_block_stop"), &data.to_string()).await;
+                }
                 let finish = json!({
                     "type": "message_delta",
                     "delta": {
