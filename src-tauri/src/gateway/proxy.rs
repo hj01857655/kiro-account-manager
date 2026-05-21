@@ -1,5 +1,3 @@
-
-
 use axum::{
     body::{Body, Bytes},
     http::{header, HeaderMap, HeaderValue, StatusCode},
@@ -21,20 +19,19 @@ use tokio_stream::wrappers::ReceiverStream;
 use url::Url;
 
 use crate::{
-    core::account::{Account, AccountStore},
+    clients::{
+        http_client::{
+            build_kiro_custom_user_agent, resolve_kiro_upstream_region,
+            should_add_redirect_for_internal, should_send_codewhisperer_optout,
+        },
+        kiro_q_client::KiroQClient,
+    },
     commands::common::{
         calc_expires_at, calc_status, get_usage_by_provider, refresh_token_by_provider,
         RefreshResult,
     },
     commands::machine_guid::get_machine_id,
-    clients::{
-        http_client::{
-            build_kiro_custom_user_agent,
-            resolve_kiro_upstream_region, should_add_redirect_for_internal,
-            should_send_codewhisperer_optout,
-        },
-        kiro_q_client::KiroQClient,
-    },
+    core::account::{Account, AccountStore},
 };
 
 const MAX_FAILURES_PER_ACCOUNT: u32 = 3;
@@ -42,15 +39,17 @@ const MAX_KIRO_PAYLOAD_SIZE: usize = 615 * 1024; // 615KB - Kiro API 的 HTTP �
 
 // Token 限制的默认值（当无法从 API 获取时使用）
 const SUMMARIZATION_THRESHOLD_PERCENT: f64 = 0.8; // 80% 触发总结（Kiro IDE 的阈值）
+const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 1.15;
+const EMPTY_ANTHROPIC_RESPONSE_FALLBACK: &str = "[Gateway received an empty upstream response.]";
 
 use super::{
     append_gateway_request_log,
     converter::{
-        build_kiro_payload, get_available_models,
-        normalize_anthropic_request, normalize_responses_request,
+        build_kiro_payload, get_available_models, normalize_anthropic_request,
+        normalize_responses_request,
     },
-    eventstream::decode_message,
     effective_client_api_keys,
+    eventstream::decode_message,
     models::{
         AnthropicContentBlock, AnthropicMessagesRequest, AnthropicMessagesResponse, AnthropicUsage,
         ModelsResponse, NormalizedMessage, NormalizedRequest, OpenAIChatRequest, Tool, ToolCall,
@@ -281,16 +280,18 @@ fn build_models_response() -> Value {
 }
 
 fn build_count_tokens_response(payload: &Value) -> Value {
-    let mut chars = 0usize;
-    if let Some(messages) = payload.get("messages").and_then(Value::as_array) {
-        for message in messages {
-            chars += extract_plain_text(message.get("content")).chars().count();
-        }
-    }
-    if let Some(input) = payload.get("input") {
-        chars += extract_plain_text(Some(input)).chars().count();
-    }
-    json!({ "input_tokens": (chars / 4).max(1) })
+    json!({ "input_tokens": estimate_count_tokens_payload(payload).max(1) })
+}
+
+fn estimate_count_tokens_payload(payload: &Value) -> usize {
+    let model_id = payload
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let tokenizer_type = TokenizerType::from_model_id(model_id);
+    let serialized = serde_json::to_string(payload).unwrap_or_else(|_| payload.to_string());
+    let raw_tokens = estimate_text_tokens(&serialized, tokenizer_type);
+    ((raw_tokens as f64) * COUNT_TOKENS_SAFETY_MULTIPLIER).ceil() as usize
 }
 
 fn build_health_response() -> Value {
@@ -322,36 +323,41 @@ async fn get_available_models_for_upstream(
         .and_then(|v| v.as_array())
         .ok_or("Invalid response: missing models array")?
         .iter()
-        .filter_map(|m| m.get("modelId").and_then(|id| id.as_str()).map(String::from))
+        .filter_map(|m| {
+            m.get("modelId")
+                .and_then(|id| id.as_str())
+                .map(String::from)
+        })
         .collect();
 
     Ok(models)
 }
 
 fn check_payload_size(payload: &Value) -> usize {
-    serde_json::to_string(payload)
-        .map(|s| s.len())
-        .unwrap_or(0)
+    serde_json::to_string(payload).map(|s| s.len()).unwrap_or(0)
 }
 
 /// Token 估算器类型（根据模型选择不同的估算方法）
 #[derive(Debug, Clone, Copy)]
 enum TokenizerType {
-    Claude,   // Anthropic Claude 模型
-    OpenAI,   // OpenAI GPT 模型（使用 tiktoken）
-    Llama,    // Meta Llama 模型
-    Generic,  // 通用估算（未知模型）
+    Claude,  // Anthropic Claude 模型
+    OpenAI,  // OpenAI GPT 模型（使用 tiktoken）
+    Llama,   // Meta Llama 模型
+    Generic, // 通用估算（未知模型）
 }
 
 impl TokenizerType {
     /// 根据模型 ID 判断使用哪种估算方法
     fn from_model_id(model_id: &str) -> Self {
         let model_lower = model_id.to_lowercase();
-        
+
         // Claude 系列：4.5, 4.6, 4.7 及所有变体
         if model_lower.contains("claude") {
             TokenizerType::Claude
-        } else if model_lower.contains("gpt") || model_lower.contains("o1") || model_lower.contains("o3") {
+        } else if model_lower.contains("gpt")
+            || model_lower.contains("o1")
+            || model_lower.contains("o3")
+        {
             TokenizerType::OpenAI
         } else if model_lower.contains("llama") {
             TokenizerType::Llama
@@ -362,20 +368,20 @@ impl TokenizerType {
 }
 
 /// 估算请求消息的 token 数量（支持多种模型）
-/// 
+///
 /// 参考 Kiro IDE 源码：extension.js 行 310847-310873
 /// - Claude: length / 4 + newlines * 0.5 + code_blocks * 2
 /// - OpenAI: 使用 Generic 方法（tiktoken 需要额外依赖）
 /// - Llama: length / 3.5
 /// - Generic: length / 4 + newlines * 0.5 + code_blocks * 2
-/// 
+///
 /// 注意：这是粗略估算，用于提前拒绝明显超长的请求
 /// - Kiro API 的 max_input_tokens 是 200k
 /// - Kiro IDE 在 80% (160k tokens) 时触发自动总结
 /// - 网关在 160k tokens 时直接拒绝（无法实现 AI 总结）
 fn estimate_request_tokens(messages: &[NormalizedMessage], model_id: &str) -> usize {
     let tokenizer_type = TokenizerType::from_model_id(model_id);
-    
+
     messages
         .iter()
         .map(|msg| {
@@ -398,6 +404,24 @@ fn estimate_request_tokens(messages: &[NormalizedMessage], model_id: &str) -> us
             tokens
         })
         .sum()
+}
+
+fn estimate_request_tokens_with_tools(
+    messages: &[NormalizedMessage],
+    tools: &Option<Vec<Tool>>,
+    model_id: &str,
+) -> usize {
+    estimate_request_tokens(messages, model_id) + estimate_tools_tokens(tools, model_id)
+}
+
+fn estimate_tools_tokens(tools: &Option<Vec<Tool>>, model_id: &str) -> usize {
+    let Some(tools) = tools.as_ref().filter(|items| !items.is_empty()) else {
+        return 0;
+    };
+    let tokenizer_type = TokenizerType::from_model_id(model_id);
+    serde_json::to_string(tools)
+        .map(|serialized| estimate_text_tokens(&serialized, tokenizer_type))
+        .unwrap_or(0)
 }
 
 /// 估算单个文本的 token 数量（支持多种模型）
@@ -445,9 +469,7 @@ fn estimate_text_tokens(text: &str, tokenizer_type: TokenizerType) -> usize {
             // Llama: length / 3.5 (向上取整)
             ((text.len() as f64 / 3.5).ceil() as usize).max(1)
         }
-        TokenizerType::Generic => {
-            estimate_generic_tokens(text)
-        }
+        TokenizerType::Generic => estimate_generic_tokens(text),
     }
 }
 
@@ -476,7 +498,7 @@ fn estimate_generic_tokens(text: &str) -> usize {
 /// 获取模型的最大输入 token 数
 ///
 /// 根据模型 ID 返回对应的 maxInputTokens
-/// 
+///
 /// 数据来源：
 /// - Kiro 官方文档：https://kiro.dev/docs/models/
 /// - Claude Opus 4.6/4.7：1M tokens
@@ -484,7 +506,7 @@ fn estimate_generic_tokens(text: &str) -> usize {
 /// - 其他 Claude 4.x：200k tokens
 async fn get_model_max_input_tokens(model_id: &str) -> usize {
     let model_lower = model_id.to_lowercase();
-    
+
     // 根据模型 ID 返回对应的 token 限制
     if model_lower == "auto" {
         1_000_000 // auto 模型支持 1M tokens
@@ -581,7 +603,10 @@ fn trim_kiro_payload_history(payload: &mut Value, max_bytes: usize) -> bool {
                     history.remove(0);
                     history.remove(0); // 删除第二条（现在变成第一条了）
                     removed_count += 2;
-                    log::debug!("[Gateway] Removed tool call/result pair. Remaining: {}", history.len());
+                    log::debug!(
+                        "[Gateway] Removed tool call/result pair. Remaining: {}",
+                        history.len()
+                    );
                     continue;
                 } else {
                     // 删除后会少于 2 条消息，停止裁剪
@@ -593,7 +618,10 @@ fn trim_kiro_payload_history(payload: &mut Value, max_bytes: usize) -> bool {
         // 单个消息可以安全删除
         history.remove(0);
         removed_count += 1;
-        log::debug!("[Gateway] Removed single message. Remaining: {}", history.len());
+        log::debug!(
+            "[Gateway] Removed single message. Remaining: {}",
+            history.len()
+        );
     }
 
     let final_len = payload
@@ -777,12 +805,15 @@ fn write_request_log(
 ) {
     // 调试日志：记录 tokens 信息
     if input_tokens.is_none() && output_tokens.is_none() {
-        eprintln!("⚠️  [write_request_log] No tokens info for request #{}", context.request_index);
+        eprintln!(
+            "⚠️  [write_request_log] No tokens info for request #{}",
+            context.request_index
+        );
     } else {
         eprintln!("📊 [write_request_log] Request #{}: input={:?}, output={:?}, cache_read={:?}, cache_creation={:?}",
             context.request_index, input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens);
     }
-    
+
     let duration_ms = context
         .started_at
         .elapsed()
@@ -990,18 +1021,18 @@ pub async fn proxy_handler(
         Ok(creds) => creds,
         Err(message) => {
             let sanitized = sanitize_error(&message);
-                return gateway_error_with_log(
-                    &state,
-                    format,
-                    &request_log_context,
-                    GatewayErrorDetails {
-                        status: StatusCode::UNAUTHORIZED,
-                        error_type: "authentication_error",
-                        message: &sanitized,
-                        response_body: None,
-                    },
-                )
-                .await;
+            return gateway_error_with_log(
+                &state,
+                format,
+                &request_log_context,
+                GatewayErrorDetails {
+                    status: StatusCode::UNAUTHORIZED,
+                    error_type: "authentication_error",
+                    message: &sanitized,
+                    response_body: None,
+                },
+            )
+            .await;
         }
     };
     let response_id = format!("resp_{}", short_uuid());
@@ -1082,13 +1113,11 @@ pub async fn proxy_handler(
                 created_at,
                 request.previous_response_id.as_deref(),
             ),
-            ResponseFormat::OpenAI => {
-                serde_json::to_value(stream::build_openai_response(
-                    &request.model,
-                    &outcome.aggregated,
-                ))
-                .unwrap_or_else(|_| json!({}))
-            }
+            ResponseFormat::OpenAI => serde_json::to_value(stream::build_openai_response(
+                &request.model,
+                &outcome.aggregated,
+            ))
+            .unwrap_or_else(|_| json!({})),
         };
         let response_body = serialize_logged_value(&response);
         if matches!(format, ResponseFormat::Responses) {
@@ -1122,8 +1151,10 @@ pub async fn proxy_handler(
     // Kiro IDE 在 80% 时触发 Truncation Summarization，网关无法实现，所以直接拒绝
 
     // 生成缓存 key：messages 的 JSON 序列化 + model_id
-    let cache_key = format!("{}:{}",
+    let cache_key = format!(
+        "{}:{}:{}",
         serde_json::to_string(&request.messages).unwrap_or_default(),
+        serde_json::to_string(&request.tools).unwrap_or_default(),
         request.model
     );
 
@@ -1137,16 +1168,17 @@ pub async fn proxy_handler(
     let estimated_tokens = if let Some(tokens) = estimated_tokens {
         tokens
     } else {
-        let tokens = estimate_request_tokens(&request.messages, &request.model);
+        let tokens =
+            estimate_request_tokens_with_tools(&request.messages, &request.tools, &request.model);
         let mut cache = state.token_cache.lock().await;
         cache.insert(cache_key, tokens);
         tokens
     };
-    
+
     // 从可用模型列表中获取该模型的 maxInputTokens
     let max_input_tokens = get_model_max_input_tokens(&request.model).await;
     let threshold_tokens = (max_input_tokens as f64 * SUMMARIZATION_THRESHOLD_PERCENT) as usize;
-    
+
     if estimated_tokens > threshold_tokens {
         let error_message = format!(
             "Input is too long. Estimated {} tokens exceeds the summarization threshold of {} tokens (80% of {}). Please reduce the size of your messages or start a new conversation.",
@@ -1213,11 +1245,10 @@ pub async fn proxy_handler(
             .await;
         }
     };
-    
+
     // 【第二层防护】Payload 大小裁剪（硬限制 - 615KB）
     // 如果 payload 超过 Kiro API 的 HTTP 请求大小限制，自动裁剪历史记录
-    let mut payload_value = serde_json::to_value(&upstream_payload)
-        .unwrap_or_else(|_| json!({}));
+    let mut payload_value = serde_json::to_value(&upstream_payload).unwrap_or_else(|_| json!({}));
 
     let original_size = check_payload_size(&payload_value);
     if original_size > MAX_KIRO_PAYLOAD_SIZE {
@@ -1236,7 +1267,7 @@ pub async fn proxy_handler(
             );
         }
     }
-    
+
     let upstream_request_body = serde_json::to_string_pretty(&payload_value)
         .unwrap_or_else(|_| "[failed to serialize upstream payload]".to_string());
     let upstream_payload_log_context = RequestLogContext {
@@ -1248,10 +1279,10 @@ pub async fn proxy_handler(
     const MAX_ACCOUNT_RETRIES: u32 = 3;
     let mut account_attempt = 0;
     let mut tried_account_ids: HashSet<String> = HashSet::new();
-    
+
     let upstream_resp = loop {
         account_attempt += 1;
-        
+
         if account_attempt > MAX_ACCOUNT_RETRIES {
             // 所有账号都尝试过了，返回最后一个错误
             return gateway_error_with_log(
@@ -1267,7 +1298,7 @@ pub async fn proxy_handler(
             )
             .await;
         }
-        
+
         // 如果不是第一次尝试，需要重新选择账号
         let current_upstream = if account_attempt > 1 {
             match resolve_upstream_credentials(&state.config, &state).await {
@@ -1320,7 +1351,7 @@ pub async fn proxy_handler(
             tried_account_ids.insert(account_id);
             upstream.clone()
         };
-        
+
         // 发送请求
         match send_generate_request(&state.http, &current_upstream, &payload_value).await {
             Ok(resp) => break resp,
@@ -1328,22 +1359,22 @@ pub async fn proxy_handler(
                 // 检查是否是 429 错误
                 if status == StatusCode::TOO_MANY_REQUESTS {
                     let account_id = extract_account_id_from_upstream(&current_upstream);
-                    
+
                     // 标记账号为速率限制
                     state.load_balancer.mark_rate_limited(&account_id).await;
                     state.load_balancer.record_failure(&account_id).await;
-                    
+
                     log::warn!(
                         "[Gateway] 账号 {} 返回 429 错误，标记为速率限制并切换账号 (尝试: {}/{})",
                         current_upstream.source_label,
                         account_attempt,
                         MAX_ACCOUNT_RETRIES
                     );
-                    
+
                     // 继续尝试下一个账号
                     continue;
                 }
-                
+
                 // 其他错误直接返回
                 return gateway_error_with_log(
                     &state,
@@ -1366,9 +1397,14 @@ pub async fn proxy_handler(
         // 将 log_context 转换为 'static 生命周期
         let static_log_context = RequestLogContext {
             request_index: upstream_payload_log_context.request_index,
-            endpoint: Box::leak(upstream_payload_log_context.endpoint.to_string().into_boxed_str()),
+            endpoint: Box::leak(
+                upstream_payload_log_context
+                    .endpoint
+                    .to_string()
+                    .into_boxed_str(),
+            ),
             client_addr: upstream_payload_log_context.client_addr,
-            request: None, // 不持有引用
+            request: None,  // 不持有引用
             upstream: None, // 不持有引用
             started_at: upstream_payload_log_context.started_at,
             request_body: None,
@@ -1713,9 +1749,9 @@ async fn execute_request_with_server_tools(
             (
                 StatusCode::BAD_REQUEST,
                 "invalid_request_error",
-                        sanitize_error(&message),
-                    )
-                })?;
+                sanitize_error(&message),
+            )
+        })?;
         let upstream_resp = send_generate_request(&state.http, upstream, &upstream_payload)
             .await
             .map_err(|(status, error_type, message, _)| (status, error_type, message))?;
@@ -1834,16 +1870,16 @@ async fn send_generate_request<T: serde::Serialize + ?Sized>(
         }
 
         let body = upstream_resp.text().await.unwrap_or_default();
-        
+
         // 429 错误不重试，直接返回（让外层切换账号）
         if status == StatusCode::TOO_MANY_REQUESTS {
             let (mapped_status, error_type, message) = map_upstream_error(status, &body);
             return Err((mapped_status, error_type, message, Some(body)));
         }
-        
+
         // 其他错误（403、5xx）才重试
-        let should_retry = attempt < MAX_RETRIES
-            && (status == StatusCode::FORBIDDEN || status.is_server_error());
+        let should_retry =
+            attempt < MAX_RETRIES && (status == StatusCode::FORBIDDEN || status.is_server_error());
 
         if should_retry {
             let backoff_ms = 1000 * 2u64.pow(attempt - 1);
@@ -2154,13 +2190,13 @@ fn normalize_request(format: ResponseFormat, payload: &Value) -> Result<Normaliz
                 .map_err(|error| format!("Anthropic 请求解析失败: {error}"))?;
             Ok(normalize_anthropic_request(&request))
         }
-        ResponseFormat::Responses => {
-            normalize_responses_request(payload)
-        }
+        ResponseFormat::Responses => normalize_responses_request(payload),
         ResponseFormat::OpenAI => {
             let request: OpenAIChatRequest = serde_json::from_value(payload.clone())
                 .map_err(|error| format!("OpenAI 请求解析失败: {error}"))?;
-            Ok(crate::gateway::converter::normalize_openai_chat_request(&request))
+            Ok(crate::gateway::converter::normalize_openai_chat_request(
+                &request,
+            ))
         }
     }
 }
@@ -2182,10 +2218,9 @@ fn verify_client_auth(headers: &HeaderMap, config: &GatewayConfig) -> Result<(),
         .get("x-api-key")
         .and_then(|value| value.to_str().ok());
 
-    if expected_keys
-        .iter()
-        .any(|expected| authorization == Some(expected.as_str()) || api_key == Some(expected.as_str()))
-    {
+    if expected_keys.iter().any(|expected| {
+        authorization == Some(expected.as_str()) || api_key == Some(expected.as_str())
+    }) {
         Ok(())
     } else {
         Err("客户端 API Key 无效".to_string())
@@ -2212,15 +2247,11 @@ async fn resolve_managed_account_credentials(
 
     // 自愈机制：检查是否所有账号都因 "TooManyFailures" 被禁用
     let all_disabled_by_failures = match config.account_mode.as_str() {
-        "single" => {
-            store
-                .accounts
-                .iter()
-                .filter(|account| config.account_id.as_deref() == Some(account.id.as_str()))
-                .all(|account| {
-                    account.disabled_reason.as_deref() == Some("TooManyFailures")
-                })
-        }
+        "single" => store
+            .accounts
+            .iter()
+            .filter(|account| config.account_id.as_deref() == Some(account.id.as_str()))
+            .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures")),
         "group" => {
             let group_accounts: Vec<_> = store
                 .accounts
@@ -2229,9 +2260,9 @@ async fn resolve_managed_account_credentials(
                 .collect();
 
             !group_accounts.is_empty()
-                && group_accounts.iter().all(|account| {
-                    account.disabled_reason.as_deref() == Some("TooManyFailures")
-                })
+                && group_accounts
+                    .iter()
+                    .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures"))
         }
         "pool" => {
             let pool_accounts: Vec<_> = store
@@ -2241,9 +2272,9 @@ async fn resolve_managed_account_credentials(
                 .collect();
 
             !pool_accounts.is_empty()
-                && pool_accounts.iter().all(|account| {
-                    account.disabled_reason.as_deref() == Some("TooManyFailures")
-                })
+                && pool_accounts
+                    .iter()
+                    .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures"))
         }
         _ => false,
     };
@@ -2345,7 +2376,10 @@ async fn resolve_managed_account_credentials(
 
             // 记录成功
             let response_time_ms = request_start.elapsed().as_millis() as u64;
-            state.load_balancer.record_success(&account.id, response_time_ms).await;
+            state
+                .load_balancer
+                .record_success(&account.id, response_time_ms)
+                .await;
 
             let machine_id = account
                 .machine_id
@@ -2693,6 +2727,19 @@ fn build_anthropic_content_blocks(
             citations: None,
         });
     }
+    if content.is_empty() {
+        content.push(AnthropicContentBlock {
+            block_type: "text".to_string(),
+            text: Some(EMPTY_ANTHROPIC_RESPONSE_FALLBACK.to_string()),
+            thinking: None,
+            id: None,
+            name: None,
+            input: None,
+            tool_use_id: None,
+            content: None,
+            citations: None,
+        });
+    }
     content
 }
 
@@ -3010,10 +3057,7 @@ fn build_stream_responses_function_call_arguments_done_event(
     })
 }
 
-fn build_stream_responses_output_text_done_event(
-    response_id: &str,
-    text: &str,
-) -> Value {
+fn build_stream_responses_output_text_done_event(response_id: &str, text: &str) -> Value {
     json!({
         "type": "response.output_text.done",
         "response_id": response_id,
@@ -3021,10 +3065,7 @@ fn build_stream_responses_output_text_done_event(
     })
 }
 
-fn build_stream_responses_reasoning_done_event(
-    response_id: &str,
-    text: &str,
-) -> Value {
+fn build_stream_responses_reasoning_done_event(response_id: &str, text: &str) -> Value {
     json!({
         "type": "response.reasoning.done",
         "response_id": response_id,
@@ -3171,7 +3212,8 @@ fn short_uuid() -> String {
 fn extract_account_id_from_upstream(upstream: &UpstreamCredentials) -> String {
     // 从 source_label 提取账号标识
     // 格式：single:email@example.com 或 group:group_name:email@example.com
-    upstream.source_label
+    upstream
+        .source_label
         .split(':')
         .last()
         .unwrap_or(&upstream.source_label)
@@ -3191,11 +3233,15 @@ fn stream_proxy_response(
     log_context: RequestLogContext<'static>,
 ) -> Response {
     let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(2048);
+    let estimated_input_tokens =
+        estimate_request_tokens_with_tools(&request_messages, &request_tools, &model)
+            .min(i32::MAX as usize) as i32;
     tokio::spawn(async move {
         let mut upstream_stream = upstream_resp.bytes_stream();
         let mut raw_buffer = Vec::new();
         let mut parser = ThinkingParser::new();
         let mut aggregated = stream::AggregatedKiroResponse::default();
+        aggregated.input_tokens = estimated_input_tokens;
         let mut tool_accumulators: HashMap<String, (String, String)> = HashMap::new();
         let mut message_started = false;
         let mut next_block_index = 0usize;
@@ -3203,7 +3249,7 @@ fn stream_proxy_response(
         let mut thinking_block_index: Option<usize> = None;
         let mut tool_block_indexes: HashMap<String, usize> = HashMap::new();
         let mut saw_tool_calls = false;
-        let mut input_tokens = 0i32;
+        let mut input_tokens = estimated_input_tokens;
         let mut output_tokens = 0i32;
         let anthropic_id = format!("msg_{}", short_uuid());
         let response_id = format!("resp_{}", short_uuid());
@@ -3253,14 +3299,8 @@ fn stream_proxy_response(
                 content: Some("".to_string()),
                 tool_calls: None,
             };
-            let chunk = stream::build_openai_chunk(
-                &completion_id,
-                created,
-                &model,
-                delta,
-                None,
-                None,
-            );
+            let chunk =
+                stream::build_openai_chunk(&completion_id, created, &model, delta, None, None);
             if let Ok(chunk_json) = serde_json::to_string(&chunk) {
                 if !send_data(&tx, &chunk_json).await {
                     return;
@@ -3268,28 +3308,23 @@ fn stream_proxy_response(
             }
         }
 
-        const STALLED_STREAM_TIMEOUT: tokio::time::Duration =
-            tokio::time::Duration::from_secs(300);
+        const STALLED_STREAM_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_secs(300);
 
         loop {
-            let chunk_result = match tokio::time::timeout(
-                STALLED_STREAM_TIMEOUT,
-                upstream_stream.next(),
-            )
-            .await
-            {
-                Ok(Some(result)) => result,
-                Ok(None) => break,
-                Err(_) => {
-                    log::error!("流式响应超时: 5分钟内未收到数据");
-                    let data = json!({
-                        "type": "error",
-                        "message": "流式响应超时: 5分钟内未收到数据"
-                    });
-                    send_data(&tx, &data.to_string()).await;
-                    break;
-                }
-            };
+            let chunk_result =
+                match tokio::time::timeout(STALLED_STREAM_TIMEOUT, upstream_stream.next()).await {
+                    Ok(Some(result)) => result,
+                    Ok(None) => break,
+                    Err(_) => {
+                        log::error!("流式响应超时: 5分钟内未收到数据");
+                        let data = json!({
+                            "type": "error",
+                            "message": "流式响应超时: 5分钟内未收到数据"
+                        });
+                        send_data(&tx, &data.to_string()).await;
+                        break;
+                    }
+                };
 
             match chunk_result {
                 Ok(bytes) => {
@@ -3300,7 +3335,8 @@ fn stream_proxy_response(
                         match decode_message(&raw_buffer) {
                             Ok(Some((msg, consumed_bytes))) => {
                                 // 成功解码一个消息
-                                let message_type = msg.headers.get(":message-type").map(String::as_str);
+                                let message_type =
+                                    msg.headers.get(":message-type").map(String::as_str);
                                 let event_type = msg.headers.get(":event-type").map(String::as_str);
 
                                 if matches!(message_type, Some("error") | Some("exception")) {
@@ -3341,8 +3377,10 @@ fn stream_proxy_response(
                                             output_tokens = output;
                                             aggregated.input_tokens = input;
                                             aggregated.output_tokens = output;
-                                            aggregated.cache_read_input_tokens = cache_read_input_tokens;
-                                            aggregated.cache_creation_input_tokens = cache_creation_input_tokens;
+                                            aggregated.cache_read_input_tokens =
+                                                cache_read_input_tokens;
+                                            aggregated.cache_creation_input_tokens =
+                                                cache_creation_input_tokens;
                                         }
                                         KiroEvent::ContextUsage { percentage } => {
                                             aggregated.context_usage_percentage = Some(percentage);
@@ -3442,7 +3480,9 @@ fn stream_proxy_response(
                                                     .await;
                                                 }
                                                 ResponseFormat::Responses => {
-                                                    if responses_tool_output_indexes.contains_key(&id) {
+                                                    if responses_tool_output_indexes
+                                                        .contains_key(&id)
+                                                    {
                                                         raw_buffer.drain(..consumed_bytes);
                                                         continue;
                                                     }
@@ -3466,7 +3506,9 @@ fn stream_proxy_response(
                                                     send_data(&tx, &data.to_string()).await;
                                                 }
                                                 ResponseFormat::OpenAI => {
-                                                    if responses_tool_output_indexes.contains_key(&id) {
+                                                    if responses_tool_output_indexes
+                                                        .contains_key(&id)
+                                                    {
                                                         raw_buffer.drain(..consumed_bytes);
                                                         continue;
                                                     }
@@ -3652,9 +3694,14 @@ fn stream_proxy_response(
                                                 if let Some((name, input)) =
                                                     tool_accumulators.remove(&id)
                                                 {
-                                                    aggregated.tool_calls.push((id.clone(), name, input));
+                                                    aggregated.tool_calls.push((
+                                                        id.clone(),
+                                                        name,
+                                                        input,
+                                                    ));
                                                 }
-                                                if let Some(index) = tool_block_indexes.remove(&id) {
+                                                if let Some(index) = tool_block_indexes.remove(&id)
+                                                {
                                                     let data = json!({
                                                         "type": "content_block_stop",
                                                         "index": index
@@ -3682,13 +3729,15 @@ fn stream_proxy_response(
                                                         &input,
                                                     );
                                                     send_data(&tx, &done.to_string()).await;
-                                                    let output_index = responses_tool_output_indexes
-                                                        .remove(&id)
-                                                        .unwrap_or_else(|| {
-                                                            let idx = responses_next_output_index;
-                                                            responses_next_output_index += 1;
-                                                            idx
-                                                        });
+                                                    let output_index =
+                                                        responses_tool_output_indexes
+                                                            .remove(&id)
+                                                            .unwrap_or_else(|| {
+                                                                let idx =
+                                                                    responses_next_output_index;
+                                                                responses_next_output_index += 1;
+                                                                idx
+                                                            });
                                                     let data = json!({
                                                         "type": "response.output_item.done",
                                                         "response_id": response_id,
@@ -3720,13 +3769,15 @@ fn stream_proxy_response(
                                                         &input,
                                                     );
                                                     send_data(&tx, &done.to_string()).await;
-                                                    let output_index = responses_tool_output_indexes
-                                                        .remove(&id)
-                                                        .unwrap_or_else(|| {
-                                                            let idx = responses_next_output_index;
-                                                            responses_next_output_index += 1;
-                                                            idx
-                                                        });
+                                                    let output_index =
+                                                        responses_tool_output_indexes
+                                                            .remove(&id)
+                                                            .unwrap_or_else(|| {
+                                                                let idx =
+                                                                    responses_next_output_index;
+                                                                responses_next_output_index += 1;
+                                                                idx
+                                                            });
                                                     let data = json!({
                                                         "type": "response.output_item.done",
                                                         "response_id": response_id,
@@ -3809,13 +3860,14 @@ fn stream_proxy_response(
                                                         .into_iter()
                                                         .next()
                                                     {
-                                                        let data = build_responses_annotation_added_event(
-                                                            &response_id,
-                                                            &message_id,
-                                                            annotation,
-                                                            aggregated.citations.len() - 1,
-                                                            responses_sequence_number,
-                                                        );
+                                                        let data =
+                                                            build_responses_annotation_added_event(
+                                                                &response_id,
+                                                                &message_id,
+                                                                annotation,
+                                                                aggregated.citations.len() - 1,
+                                                                responses_sequence_number,
+                                                            );
                                                         responses_sequence_number += 1;
                                                         send_data(&tx, &data.to_string()).await;
                                                     }
@@ -3829,13 +3881,14 @@ fn stream_proxy_response(
                                                         .into_iter()
                                                         .next()
                                                     {
-                                                        let data = build_responses_annotation_added_event(
-                                                            &response_id,
-                                                            &message_id,
-                                                            annotation,
-                                                            aggregated.citations.len() - 1,
-                                                            responses_sequence_number,
-                                                        );
+                                                        let data =
+                                                            build_responses_annotation_added_event(
+                                                                &response_id,
+                                                                &message_id,
+                                                                annotation,
+                                                                aggregated.citations.len() - 1,
+                                                                responses_sequence_number,
+                                                            );
                                                         responses_sequence_number += 1;
                                                         send_data(&tx, &data.to_string()).await;
                                                     }
@@ -3904,6 +3957,18 @@ fn stream_proxy_response(
 
         match format {
             ResponseFormat::Anthropic => {
+                if next_block_index == 0 {
+                    emit_anthropic_empty_response_fallback(
+                        &tx,
+                        &mut message_started,
+                        &anthropic_id,
+                        &model,
+                        input_tokens,
+                        output_tokens,
+                        &mut next_block_index,
+                    )
+                    .await;
+                }
                 close_content_block(&tx, &mut text_block_index).await;
                 close_content_block(&tx, &mut thinking_block_index).await;
                 for (_, index) in tool_block_indexes.drain() {
@@ -4006,17 +4071,26 @@ fn stream_proxy_response(
                         crate::gateway::models::OpenAIChatDelta {
                             role: None,
                             content: None,
-                            tool_calls: Some(tool_calls_delta.iter().map(|tc| {
-                                crate::gateway::models::OpenAIDeltaToolCall {
-                                    index: tc["index"].as_i64().unwrap() as i32,
-                                    id: tc["id"].as_str().unwrap().to_string(),
-                                    call_type: "function".to_string(),
-                                    function: crate::gateway::models::OpenAIToolCallFunction {
-                                        name: tc["function"]["name"].as_str().unwrap().to_string(),
-                                        arguments: tc["function"]["arguments"].as_str().unwrap().to_string(),
-                                    },
-                                }
-                            }).collect()),
+                            tool_calls: Some(
+                                tool_calls_delta
+                                    .iter()
+                                    .map(|tc| crate::gateway::models::OpenAIDeltaToolCall {
+                                        index: tc["index"].as_i64().unwrap() as i32,
+                                        id: tc["id"].as_str().unwrap().to_string(),
+                                        call_type: "function".to_string(),
+                                        function: crate::gateway::models::OpenAIToolCallFunction {
+                                            name: tc["function"]["name"]
+                                                .as_str()
+                                                .unwrap()
+                                                .to_string(),
+                                            arguments: tc["function"]["arguments"]
+                                                .as_str()
+                                                .unwrap()
+                                                .to_string(),
+                                        },
+                                    })
+                                    .collect(),
+                            ),
                         },
                         None,
                         None,
@@ -4198,6 +4272,55 @@ async fn handle_stream_text(
     }
 }
 
+async fn emit_anthropic_empty_response_fallback(
+    tx: &mpsc::Sender<Result<Bytes, Infallible>>,
+    message_started: &mut bool,
+    anthropic_id: &str,
+    model: &str,
+    input_tokens: i32,
+    output_tokens: i32,
+    next_block_index: &mut usize,
+) {
+    ensure_anthropic_message_start(
+        tx,
+        message_started,
+        anthropic_id,
+        model,
+        input_tokens,
+        output_tokens,
+    )
+    .await;
+
+    let index = *next_block_index;
+    *next_block_index += 1;
+
+    let start = json!({
+        "type": "content_block_start",
+        "index": index,
+        "content_block": {
+            "type": "text",
+            "text": ""
+        }
+    });
+    send_event(tx, Some("content_block_start"), &start.to_string()).await;
+
+    let delta = json!({
+        "type": "content_block_delta",
+        "index": index,
+        "delta": {
+            "type": "text_delta",
+            "text": EMPTY_ANTHROPIC_RESPONSE_FALLBACK
+        }
+    });
+    send_event(tx, Some("content_block_delta"), &delta.to_string()).await;
+
+    let stop = json!({
+        "type": "content_block_stop",
+        "index": index
+    });
+    send_event(tx, Some("content_block_stop"), &stop.to_string()).await;
+}
+
 async fn ensure_anthropic_message_start(
     tx: &mpsc::Sender<Result<Bytes, Infallible>>,
     message_started: &mut bool,
@@ -4264,10 +4387,7 @@ mod tests {
     use super::*;
     use crate::gateway::token_cache::TokenCache;
     use serde_json::json;
-    use std::sync::{
-        atomic::AtomicU64,
-        Arc,
-    };
+    use std::sync::{atomic::AtomicU64, Arc};
     use tokio::sync::Mutex as AsyncMutex;
 
     fn proxy_test_state() -> RouterState {
@@ -4422,7 +4542,10 @@ mod tests {
         assert_eq!(chat_request.stream, responses_request.stream);
         assert_eq!(chat_request.tool_choice, responses_request.tool_choice);
         assert_eq!(chat_request.tools.as_ref().map(Vec::len), Some(1));
-        assert_eq!(chat_request.messages.len(), responses_request.messages.len());
+        assert_eq!(
+            chat_request.messages.len(),
+            responses_request.messages.len()
+        );
         assert_eq!(
             chat_request.messages[1]
                 .tool_calls
@@ -4508,6 +4631,73 @@ mod tests {
 
         let tokens = estimate_request_tokens(&messages, "claude-3-7-sonnet-20250219");
         assert!(tokens > 0);
+    }
+
+    #[test]
+    fn test_estimate_request_tokens_with_tools_includes_tool_schema() {
+        let messages = vec![NormalizedMessage {
+            role: "user".to_string(),
+            content: Some(json!("Use the tool")),
+            tool_calls: None,
+            tool_call_id: None,
+            metadata: None,
+        }];
+        let tools = Some(vec![Tool {
+            tool_type: "function".to_string(),
+            function: crate::gateway::models::ToolFunction {
+                name: "big_tool".to_string(),
+                description: Some("A".repeat(4096)),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "B".repeat(4096)
+                        }
+                    }
+                })),
+            },
+            web_search: None,
+        }]);
+
+        assert!(
+            estimate_request_tokens_with_tools(&messages, &tools, "claude-opus-4.7")
+                > estimate_request_tokens(&messages, "claude-opus-4.7")
+        );
+    }
+
+    #[test]
+    fn test_count_tokens_response_counts_system_tools_and_tool_results() {
+        let small = build_count_tokens_response(&json!({
+            "model": "claude-opus-4.7",
+            "messages": [{ "role": "user", "content": "hello" }]
+        }));
+        let large = build_count_tokens_response(&json!({
+            "model": "claude-opus-4.7",
+            "system": "S".repeat(4096),
+            "tools": [{
+                "name": "analyze_function",
+                "description": "D".repeat(4096),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "addr": { "type": "string", "description": "A".repeat(2048) }
+                    }
+                }
+            }],
+            "messages": [{
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "tool_1",
+                    "content": "R".repeat(8192)
+                }]
+            }]
+        }));
+
+        let small_tokens = small.get("input_tokens").and_then(Value::as_u64).unwrap();
+        let large_tokens = large.get("input_tokens").and_then(Value::as_u64).unwrap();
+        assert!(large_tokens > small_tokens + 4000);
     }
 
     #[test]
@@ -4626,7 +4816,10 @@ mod tests {
     #[tokio::test]
     async fn test_get_model_max_input_tokens() {
         assert_eq!(get_model_max_input_tokens("auto").await, 1_000_000);
-        assert_eq!(get_model_max_input_tokens("claude-3-7-sonnet-20250219").await, 200_000);
+        assert_eq!(
+            get_model_max_input_tokens("claude-3-7-sonnet-20250219").await,
+            200_000
+        );
         assert_eq!(get_model_max_input_tokens("gpt-4").await, 200_000);
         assert_eq!(get_model_max_input_tokens("deepseek-chat").await, 128_000);
         assert_eq!(get_model_max_input_tokens("llama-3-70b").await, 128_000);
@@ -5029,6 +5222,56 @@ mod tests {
     }
 
     #[test]
+    fn build_anthropic_response_emits_text_block_for_empty_upstream_response() {
+        let response = build_anthropic_response(
+            "claude-sonnet-4-5",
+            &stream::AggregatedKiroResponse::default(),
+            &[],
+        );
+
+        assert_eq!(response["stop_reason"], "end_turn");
+        assert_eq!(response["content"].as_array().unwrap().len(), 1);
+        assert_eq!(response["content"][0]["type"], "text");
+        assert_eq!(
+            response["content"][0]["text"],
+            EMPTY_ANTHROPIC_RESPONSE_FALLBACK
+        );
+    }
+
+    #[tokio::test]
+    async fn emit_anthropic_empty_response_fallback_starts_and_stops_text_block() {
+        let (tx, mut rx) = mpsc::channel(8);
+        let mut message_started = false;
+        let mut next_block_index = 0usize;
+
+        emit_anthropic_empty_response_fallback(
+            &tx,
+            &mut message_started,
+            "msg_test",
+            "claude-sonnet-4-5",
+            123,
+            0,
+            &mut next_block_index,
+        )
+        .await;
+        drop(tx);
+
+        let mut output = String::new();
+        while let Some(chunk) = rx.recv().await {
+            let bytes = chunk.expect("stream chunk should be infallible");
+            output.push_str(std::str::from_utf8(&bytes).expect("SSE chunk should be UTF-8"));
+        }
+
+        assert!(message_started);
+        assert_eq!(next_block_index, 1);
+        assert!(output.contains("event: message_start"));
+        assert!(output.contains("event: content_block_start"));
+        assert!(output.contains("\"type\":\"text_delta\""));
+        assert!(output.contains(EMPTY_ANTHROPIC_RESPONSE_FALLBACK));
+        assert!(output.contains("event: content_block_stop"));
+    }
+
+    #[test]
     fn build_stream_responses_completed_event_keeps_citations_and_tool_calls() {
         let aggregated = stream::AggregatedKiroResponse {
             text: "Hello Rust".to_string(),
@@ -5114,7 +5357,10 @@ mod tests {
         );
 
         assert_eq!(event["response"]["output"][0]["type"], "web_search_call");
-        assert_eq!(event["response"]["output"][0]["action"]["query"], "Rust release");
+        assert_eq!(
+            event["response"]["output"][0]["action"]["query"],
+            "Rust release"
+        );
         assert_eq!(event["response"]["output"][1]["type"], "message");
     }
 
@@ -5128,7 +5374,10 @@ mod tests {
         let text_done = build_stream_responses_output_text_done_event("resp_test", "Hello Rust");
         let reasoning_done = build_stream_responses_reasoning_done_event("resp_test", "Think");
 
-        assert_eq!(function_done["type"], "response.function_call_arguments.done");
+        assert_eq!(
+            function_done["type"],
+            "response.function_call_arguments.done"
+        );
         assert_eq!(function_done["response_id"], "resp_test");
         assert_eq!(function_done["call_id"], "call_1");
         assert_eq!(function_done["arguments"], "{\"q\":\"rust\"}");
