@@ -39,8 +39,8 @@ const MAX_KIRO_PAYLOAD_SIZE: usize = 615 * 1024; // 615KB - Kiro API 的 HTTP �
 
 // Token 限制的默认值（当无法从 API 获取时使用）
 const SUMMARIZATION_THRESHOLD_PERCENT: f64 = 0.8; // 80% 触发总结（Kiro IDE 的阈值）
-const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 1.5;
-const REQUEST_TOKENS_SAFETY_MULTIPLIER: f64 = 1.5;
+const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 2.0;
+const REQUEST_TOKENS_SAFETY_MULTIPLIER: f64 = 2.0;
 const EMPTY_ANTHROPIC_RESPONSE_FALLBACK: &str = "[Gateway received an empty upstream response.]";
 
 use super::{
@@ -1200,19 +1200,10 @@ pub async fn proxy_handler(
 
     if estimated_tokens > threshold_tokens {
         log::warn!(
-            "[Gateway] Estimated {} tokens exceeds threshold {} tokens (80% of {}). Returning compact hint before upstream request.",
+            "[Gateway] Estimated {} tokens exceeds threshold {} tokens (80% of {}). Continuing without gateway-side truncation so the client can compact.",
             estimated_tokens,
             threshold_tokens,
             max_input_tokens
-        );
-        return context_overflow_hint_response(
-            format,
-            &request,
-            &upstream_log_context,
-            estimated_tokens,
-            threshold_tokens,
-            max_input_tokens,
-            "The request is already above the effective context threshold before it reaches the upstream model.",
         );
     }
 
@@ -1269,20 +1260,9 @@ pub async fn proxy_handler(
     let original_size = check_payload_size(&payload_value);
     if original_size > MAX_KIRO_PAYLOAD_SIZE {
         log::warn!(
-            "[Gateway] Payload size {} bytes exceeds limit {} bytes. Returning compact hint before upstream request.",
+            "[Gateway] Payload size {} bytes exceeds limit {} bytes. Continuing without gateway-side truncation; upstream may reject the oversized request.",
             original_size,
             MAX_KIRO_PAYLOAD_SIZE
-        );
-        let byte_estimated_tokens = ((original_size as f64 / 4.0) * REQUEST_TOKENS_SAFETY_MULTIPLIER)
-            .ceil() as usize;
-        return context_overflow_hint_response(
-            format,
-            &request,
-            &upstream_log_context,
-            estimated_tokens.max(byte_estimated_tokens),
-            threshold_tokens,
-            max_input_tokens,
-            "The serialized upstream payload would exceed Kiro's request-size limit.",
         );
     }
 
@@ -1476,7 +1456,11 @@ pub async fn proxy_handler(
         .await;
     }
 
-    let aggregated = aggregate_kiro_response(&body);
+    let mut aggregated = aggregate_kiro_response(&body);
+    let estimated_input_tokens =
+        estimate_request_tokens_with_tools(&request.messages, &request.tools, &request.model)
+            .min(i32::MAX as usize) as i32;
+    aggregated.input_tokens = aggregated.input_tokens.max(estimated_input_tokens);
     let response = match format {
         ResponseFormat::Anthropic => build_anthropic_response(&request.model, &aggregated, &[]),
         ResponseFormat::Responses => build_responses_response_with_ids(
@@ -3101,336 +3085,6 @@ fn gateway_error_response(
     (status, Json(body)).into_response()
 }
 
-fn context_overflow_hint_text(
-    estimated_tokens: usize,
-    threshold_tokens: usize,
-    max_input_tokens: usize,
-    reason: &str,
-) -> String {
-    format!(
-        "[Gateway context warning]\n\n{reason}\n\nEstimated input: {estimated_tokens} tokens.\nCompact threshold: {threshold_tokens} tokens (80% of {max_input_tokens}).\n\nNo upstream request was sent and no conversation history was truncated. Please compact or summarize the current conversation, then retry the last request."
-    )
-}
-
-fn context_overflow_hint_response(
-    format: ResponseFormat,
-    request: &NormalizedRequest,
-    log_context: &RequestLogContext<'_>,
-    estimated_tokens: usize,
-    threshold_tokens: usize,
-    max_input_tokens: usize,
-    reason: &str,
-) -> Response {
-    let text = context_overflow_hint_text(
-        estimated_tokens,
-        threshold_tokens,
-        max_input_tokens,
-        reason,
-    );
-    let input_tokens = estimated_tokens.min(i32::MAX as usize) as i32;
-    let output_tokens = estimate_text_tokens(&text, TokenizerType::from_model_id(&request.model))
-        .min(i32::MAX as usize) as i32;
-    let mut aggregated = stream::AggregatedKiroResponse::default();
-    aggregated.text = text.clone();
-    aggregated.input_tokens = input_tokens;
-    aggregated.output_tokens = output_tokens;
-
-    let created_at = chrono::Utc::now().timestamp();
-    let response_id = format!("resp_{}", short_uuid());
-    let message_id = format!("msg_{}", short_uuid());
-    let response = match format {
-        ResponseFormat::Anthropic => build_anthropic_response(&request.model, &aggregated, &[]),
-        ResponseFormat::Responses => build_responses_response_with_ids(
-            &request.model,
-            &aggregated,
-            &[],
-            &response_id,
-            &message_id,
-            created_at,
-            request.previous_response_id.as_deref(),
-        ),
-        ResponseFormat::OpenAI => serde_json::to_value(stream::build_openai_response(
-            &request.model,
-            &aggregated,
-        ))
-        .unwrap_or_else(|_| json!({})),
-    };
-    let response_body = serialize_logged_value(&response);
-    write_request_log(
-        log_context,
-        StatusCode::OK,
-        "context_overflow_hint",
-        None,
-        Some(response_body.as_str()),
-        Some(input_tokens),
-        Some(output_tokens),
-        None,
-        None,
-    );
-
-    if request.stream {
-        context_overflow_hint_stream_response(
-            format,
-            &request.model,
-            &text,
-            input_tokens,
-            output_tokens,
-            &response_id,
-            &message_id,
-            created_at,
-            request.previous_response_id.as_deref(),
-        )
-    } else {
-        Json(response).into_response()
-    }
-}
-
-fn context_overflow_hint_stream_response(
-    format: ResponseFormat,
-    model: &str,
-    text: &str,
-    input_tokens: i32,
-    output_tokens: i32,
-    response_id: &str,
-    message_id: &str,
-    created_at: i64,
-    previous_response_id: Option<&str>,
-) -> Response {
-    let body = match format {
-        ResponseFormat::Anthropic => build_anthropic_hint_sse(
-            model,
-            text,
-            input_tokens,
-            output_tokens,
-        ),
-        ResponseFormat::Responses => build_responses_hint_sse(
-            model,
-            text,
-            input_tokens,
-            output_tokens,
-            response_id,
-            message_id,
-            created_at,
-            previous_response_id,
-        ),
-        ResponseFormat::OpenAI => build_openai_hint_sse(model, text, input_tokens, output_tokens),
-    };
-
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("text/event-stream"),
-        )
-        .header(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"))
-        .header(header::CONNECTION, HeaderValue::from_static("keep-alive"))
-        .body(Body::from(body))
-        .unwrap_or_else(|_| Response::new(Body::empty()))
-}
-
-fn build_anthropic_hint_sse(
-    model: &str,
-    text: &str,
-    input_tokens: i32,
-    output_tokens: i32,
-) -> String {
-    let message_id = format!("msg_{}", short_uuid());
-    let events = vec![
-        (
-            "message_start",
-            json!({
-                "type": "message_start",
-                "message": {
-                    "id": message_id,
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [],
-                    "model": model,
-                    "stop_reason": Value::Null,
-                    "stop_sequence": Value::Null,
-                    "usage": {
-                        "input_tokens": input_tokens,
-                        "output_tokens": 0
-                    }
-                }
-            }),
-        ),
-        (
-            "content_block_start",
-            json!({
-                "type": "content_block_start",
-                "index": 0,
-                "content_block": {
-                    "type": "text",
-                    "text": ""
-                }
-            }),
-        ),
-        (
-            "content_block_delta",
-            json!({
-                "type": "content_block_delta",
-                "index": 0,
-                "delta": {
-                    "type": "text_delta",
-                    "text": text
-                }
-            }),
-        ),
-        (
-            "content_block_stop",
-            json!({
-                "type": "content_block_stop",
-                "index": 0
-            }),
-        ),
-        (
-            "message_delta",
-            json!({
-                "type": "message_delta",
-                "delta": {
-                    "stop_reason": "end_turn",
-                    "stop_sequence": Value::Null
-                },
-                "usage": {
-                    "output_tokens": output_tokens
-                }
-            }),
-        ),
-        (
-            "message_stop",
-            json!({
-                "type": "message_stop"
-            }),
-        ),
-    ];
-    events
-        .into_iter()
-        .map(|(event, data)| format!("event: {event}\ndata: {data}\n\n"))
-        .collect()
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_responses_hint_sse(
-    model: &str,
-    text: &str,
-    input_tokens: i32,
-    output_tokens: i32,
-    response_id: &str,
-    message_id: &str,
-    created_at: i64,
-    previous_response_id: Option<&str>,
-) -> String {
-    let mut aggregated = stream::AggregatedKiroResponse::default();
-    aggregated.text = text.to_string();
-    aggregated.input_tokens = input_tokens;
-    aggregated.output_tokens = output_tokens;
-
-    let events = vec![
-        json!({
-            "type": "response.created",
-            "response": {
-                "id": response_id,
-                "object": "response",
-                "created_at": created_at,
-                "status": "in_progress",
-                "model": model,
-                "output": []
-            }
-        }),
-        json!({
-            "type": "response.output_item.added",
-            "response_id": response_id,
-            "output_index": 0,
-            "item": {
-                "id": message_id,
-                "type": "message",
-                "status": "in_progress",
-                "role": "assistant",
-                "content": []
-            }
-        }),
-        json!({
-            "type": "response.output_text.delta",
-            "response_id": response_id,
-            "delta": text
-        }),
-        build_stream_responses_output_text_done_event(response_id, text),
-        json!({
-            "type": "response.output_item.done",
-            "response_id": response_id,
-            "output_index": 0,
-            "item": {
-                "id": message_id,
-                "type": "message",
-                "status": "completed",
-                "role": "assistant",
-                "content": build_responses_message_content(&aggregated, &[])
-            }
-        }),
-        build_stream_responses_completed_event(
-            model,
-            &aggregated,
-            &[],
-            response_id,
-            message_id,
-            created_at,
-            previous_response_id,
-        ),
-    ];
-
-    let mut body = String::new();
-    for event in events {
-        body.push_str(&format!("data: {event}\n\n"));
-    }
-    body.push_str("data: [DONE]\n\n");
-    body
-}
-
-fn build_openai_hint_sse(
-    model: &str,
-    text: &str,
-    input_tokens: i32,
-    output_tokens: i32,
-) -> String {
-    let completion_id = format!("chatcmpl-{}", short_uuid());
-    let created = chrono::Utc::now().timestamp();
-    let first = stream::build_openai_chunk(
-        &completion_id,
-        created,
-        model,
-        crate::gateway::models::OpenAIChatDelta {
-            role: Some("assistant".to_string()),
-            content: Some(text.to_string()),
-            tool_calls: None,
-        },
-        None,
-        None,
-    );
-    let final_chunk = stream::build_openai_chunk(
-        &completion_id,
-        created,
-        model,
-        crate::gateway::models::OpenAIChatDelta {
-            role: None,
-            content: None,
-            tool_calls: None,
-        },
-        Some("stop".to_string()),
-        Some(crate::gateway::models::OpenAIChatUsage {
-            prompt_tokens: input_tokens,
-            completion_tokens: output_tokens,
-            total_tokens: input_tokens + output_tokens,
-        }),
-    );
-
-    format!(
-        "data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
-        serde_json::to_string(&first).unwrap_or_else(|_| "{}".to_string()),
-        serde_json::to_string(&final_chunk).unwrap_or_else(|_| "{}".to_string())
-    )
-}
-
 fn map_upstream_error(status: StatusCode, body: &str) -> (StatusCode, &'static str, String) {
     let sanitized = sanitize_error(&extract_error_message(body));
     let explicit_error_type = extract_error_type(body);
@@ -3721,9 +3375,10 @@ fn stream_proxy_response(
                                             cache_read_input_tokens,
                                             cache_creation_input_tokens,
                                         } => {
-                                            input_tokens = input;
+                                            let safe_input = input.max(estimated_input_tokens);
+                                            input_tokens = safe_input;
                                             output_tokens = output;
-                                            aggregated.input_tokens = input;
+                                            aggregated.input_tokens = safe_input;
                                             aggregated.output_tokens = output;
                                             aggregated.cache_read_input_tokens =
                                                 cache_read_input_tokens;
@@ -5067,36 +4722,6 @@ mod tests {
         let small_tokens = small.get("input_tokens").and_then(Value::as_u64).unwrap();
         let large_tokens = large.get("input_tokens").and_then(Value::as_u64).unwrap();
         assert!(large_tokens > small_tokens + 4000);
-    }
-
-    #[test]
-    fn context_overflow_hint_text_tells_client_to_compact_without_truncating() {
-        let text = context_overflow_hint_text(
-            148_000,
-            104_857,
-            131_072,
-            "The request is already above the effective context threshold.",
-        );
-
-        assert!(text.contains("Please compact or summarize"));
-        assert!(text.contains("No upstream request was sent"));
-        assert!(text.contains("no conversation history was truncated"));
-    }
-
-    #[test]
-    fn build_anthropic_hint_sse_uses_valid_text_block_events() {
-        let sse = build_anthropic_hint_sse(
-            "claude-opus-4.7[131072]",
-            "compact please",
-            148_000,
-            4,
-        );
-
-        assert!(sse.contains("event: message_start"));
-        assert!(sse.contains("event: content_block_start"));
-        assert!(sse.contains("\"type\":\"text_delta\""));
-        assert!(sse.contains("compact please"));
-        assert!(sse.contains("event: message_stop"));
     }
 
     #[test]
