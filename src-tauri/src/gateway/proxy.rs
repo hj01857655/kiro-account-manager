@@ -2221,7 +2221,7 @@ async fn resolve_managed_account_credentials(
                 );
                 return Ok(UpstreamCredentials {
                     access_token: access_token.clone(),
-                    profile_arn: Some(ctx.profile_arn),
+                    profile_arn: ctx.profile_arn,
                     provider: account.provider.clone(),
                     region: ctx.region,
                     source_label: format_managed_upstream_source(&state.config, &account),
@@ -2289,8 +2289,15 @@ async fn resolve_managed_account_credentials(
                 .clone()
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(get_machine_id);
-            let profile_arn = refresh.profile_arn.or_else(|| account.profile_arn.clone())
-                .or_else(|| Some(resolve_default_profile_arn(account.provider.as_deref()).to_string()));
+            let profile_arn = refresh.profile_arn
+                .or_else(|| account.profile_arn.clone())
+                .or_else(|| {
+                    if account.provider.as_deref() == Some("Enterprise") {
+                        None
+                    } else {
+                        Some(resolve_default_profile_arn(account.provider.as_deref()).to_string())
+                    }
+                });
             let region = resolve_kiro_upstream_region(
                 profile_arn.as_deref(),
                 account.region.as_deref(),

@@ -1732,12 +1732,14 @@ pub async fn set_overage_status(
     let overage_status = if enabled { "ENABLED" } else { "DISABLED" };
     let client = KiroQClient::new()?;
 
+    let profile_arn_str = ctx.profile_arn.as_deref().unwrap_or("");
+
     let result = client
         .set_user_preference(
             &final_access_token,
             &ctx.machine_id,
             &ctx.region,
-            &ctx.profile_arn,
+            profile_arn_str,
             overage_status,
         )
         .await;
@@ -1763,7 +1765,7 @@ pub async fn set_overage_status(
                     &refresh_result.access_token,
                     &ctx.machine_id,
                     &ctx.region,
-                    &ctx.profile_arn,
+                    profile_arn_str,
                     overage_status,
                 )
                 .await?;
