@@ -39,8 +39,7 @@ const MAX_KIRO_PAYLOAD_SIZE: usize = 615 * 1024; // 615KB - Kiro API 的 HTTP �
 
 // Token 限制的默认值（当无法从 API 获取时使用）
 const SUMMARIZATION_THRESHOLD_PERCENT: f64 = 0.8; // 80% 触发总结（Kiro IDE 的阈值）
-const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 2.0;
-const REQUEST_TOKENS_SAFETY_MULTIPLIER: f64 = 2.0;
+const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 1.15;
 const EMPTY_ANTHROPIC_RESPONSE_FALLBACK: &str = "[Gateway received an empty upstream response.]";
 
 use super::{
@@ -412,8 +411,7 @@ fn estimate_request_tokens_with_tools(
     tools: &Option<Vec<Tool>>,
     model_id: &str,
 ) -> usize {
-    let raw_tokens = estimate_request_tokens(messages, model_id) + estimate_tools_tokens(tools, model_id);
-    ((raw_tokens as f64) * REQUEST_TOKENS_SAFETY_MULTIPLIER).ceil() as usize
+    estimate_request_tokens(messages, model_id) + estimate_tools_tokens(tools, model_id)
 }
 
 fn estimate_tools_tokens(tools: &Option<Vec<Tool>>, model_id: &str) -> usize {
@@ -507,10 +505,6 @@ fn estimate_generic_tokens(text: &str) -> usize {
 /// - Claude Sonnet 4.6：1M tokens
 /// - 其他 Claude 4.x：200k tokens
 async fn get_model_max_input_tokens(model_id: &str) -> usize {
-    if let Some(override_tokens) = parse_model_context_window_override(model_id) {
-        return override_tokens;
-    }
-
     let model_lower = model_id.to_lowercase();
 
     // 根据模型 ID 返回对应的 token 限制
@@ -537,18 +531,6 @@ async fn get_model_max_input_tokens(model_id: &str) -> usize {
     }
 }
 
-fn parse_model_context_window_override(model_id: &str) -> Option<usize> {
-    let trimmed = model_id.trim();
-    let without_close = trimmed.strip_suffix(']')?;
-    let open_index = without_close.rfind('[')?;
-    let value = without_close[open_index + 1..].trim();
-    if value.is_empty() || !value.chars().all(|ch| ch.is_ascii_digit()) {
-        return None;
-    }
-    let tokens = value.parse::<usize>().ok()?;
-    (tokens >= 4096 && tokens <= 2_000_000).then_some(tokens)
-}
-
 /// 智能裁剪 Kiro payload 历史记录
 ///
 /// 策略：
@@ -556,7 +538,6 @@ fn parse_model_context_window_override(model_id: &str) -> Option<usize> {
 /// 2. 从最旧的完整对话单元开始删除
 /// 3. 保留最近的对话（至少保留最后 2 条消息）
 /// 4. 避免破坏 tool_calls 和 tool_results 的配对关系
-#[cfg(test)]
 fn trim_kiro_payload_history(payload: &mut Value, max_bytes: usize) -> bool {
     let original_size = check_payload_size(payload);
     if original_size <= max_bytes {
@@ -1199,12 +1180,24 @@ pub async fn proxy_handler(
     let threshold_tokens = (max_input_tokens as f64 * SUMMARIZATION_THRESHOLD_PERCENT) as usize;
 
     if estimated_tokens > threshold_tokens {
-        log::warn!(
-            "[Gateway] Estimated {} tokens exceeds threshold {} tokens (80% of {}). Continuing without gateway-side truncation so the client can compact.",
+        let error_message = format!(
+            "Input is too long. Estimated {} tokens exceeds the summarization threshold of {} tokens (80% of {}). Please reduce the size of your messages or start a new conversation.",
             estimated_tokens,
             threshold_tokens,
             max_input_tokens
         );
+        return gateway_error_with_log(
+            &state,
+            format,
+            &upstream_log_context,
+            GatewayErrorDetails {
+                status: StatusCode::BAD_REQUEST,
+                error_type: "invalid_request_error",
+                message: &error_message,
+                response_body: None,
+            },
+        )
+        .await;
     }
 
     // 获取账号可用模型列表（用于模型降级）
@@ -1255,15 +1248,24 @@ pub async fn proxy_handler(
 
     // 【第二层防护】Payload 大小裁剪（硬限制 - 615KB）
     // 如果 payload 超过 Kiro API 的 HTTP 请求大小限制，自动裁剪历史记录
-    let payload_value = serde_json::to_value(&upstream_payload).unwrap_or_else(|_| json!({}));
+    let mut payload_value = serde_json::to_value(&upstream_payload).unwrap_or_else(|_| json!({}));
 
     let original_size = check_payload_size(&payload_value);
     if original_size > MAX_KIRO_PAYLOAD_SIZE {
-        log::warn!(
-            "[Gateway] Payload size {} bytes exceeds limit {} bytes. Continuing without gateway-side truncation; upstream may reject the oversized request.",
+        log::info!(
+            "[Gateway] Payload size {} bytes exceeds limit {} bytes. Trimming history...",
             original_size,
             MAX_KIRO_PAYLOAD_SIZE
         );
+        let trimmed = trim_kiro_payload_history(&mut payload_value, MAX_KIRO_PAYLOAD_SIZE);
+        if trimmed {
+            let final_size = check_payload_size(&payload_value);
+            log::info!(
+                "[Gateway] Payload trimmed from {} bytes to {} bytes",
+                original_size,
+                final_size
+            );
+        }
     }
 
     let upstream_request_body = serde_json::to_string_pretty(&payload_value)
@@ -1456,11 +1458,7 @@ pub async fn proxy_handler(
         .await;
     }
 
-    let mut aggregated = aggregate_kiro_response(&body);
-    let estimated_input_tokens =
-        estimate_request_tokens_with_tools(&request.messages, &request.tools, &request.model)
-            .min(i32::MAX as usize) as i32;
-    aggregated.input_tokens = aggregated.input_tokens.max(estimated_input_tokens);
+    let aggregated = aggregate_kiro_response(&body);
     let response = match format {
         ResponseFormat::Anthropic => build_anthropic_response(&request.model, &aggregated, &[]),
         ResponseFormat::Responses => build_responses_response_with_ids(
@@ -3375,10 +3373,9 @@ fn stream_proxy_response(
                                             cache_read_input_tokens,
                                             cache_creation_input_tokens,
                                         } => {
-                                            let safe_input = input.max(estimated_input_tokens);
-                                            input_tokens = safe_input;
+                                            input_tokens = input;
                                             output_tokens = output;
-                                            aggregated.input_tokens = safe_input;
+                                            aggregated.input_tokens = input;
                                             aggregated.output_tokens = output;
                                             aggregated.cache_read_input_tokens =
                                                 cache_read_input_tokens;
@@ -4670,27 +4667,6 @@ mod tests {
     }
 
     #[test]
-    fn test_estimate_request_tokens_with_tools_applies_safety_multiplier() {
-        let messages = vec![NormalizedMessage {
-            role: "user".to_string(),
-            content: Some(json!("A".repeat(4000))),
-            tool_calls: None,
-            tool_call_id: None,
-            metadata: None,
-        }];
-
-        let raw_tokens = estimate_request_tokens(&messages, "claude-opus-4.7[131072]");
-        let safe_tokens = estimate_request_tokens_with_tools(
-            &messages,
-            &None,
-            "claude-opus-4.7[131072]",
-        );
-
-        assert!(safe_tokens > raw_tokens);
-        assert!(safe_tokens >= ((raw_tokens as f64) * REQUEST_TOKENS_SAFETY_MULTIPLIER) as usize);
-    }
-
-    #[test]
     fn test_count_tokens_response_counts_system_tools_and_tool_results() {
         let small = build_count_tokens_response(&json!({
             "model": "claude-opus-4.7",
@@ -4840,14 +4816,6 @@ mod tests {
     #[tokio::test]
     async fn test_get_model_max_input_tokens() {
         assert_eq!(get_model_max_input_tokens("auto").await, 1_000_000);
-        assert_eq!(
-            get_model_max_input_tokens("claude-opus-4.7[131072]").await,
-            131_072
-        );
-        assert_eq!(
-            get_model_max_input_tokens("gpt-5.5[200000]").await,
-            200_000
-        );
         assert_eq!(
             get_model_max_input_tokens("claude-3-7-sonnet-20250219").await,
             200_000
