@@ -39,7 +39,8 @@ const MAX_KIRO_PAYLOAD_SIZE: usize = 615 * 1024; // 615KB - Kiro API 的 HTTP �
 
 // Token 限制的默认值（当无法从 API 获取时使用）
 const SUMMARIZATION_THRESHOLD_PERCENT: f64 = 0.8; // 80% 触发总结（Kiro IDE 的阈值）
-const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 1.15;
+const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 1.5;
+const REQUEST_TOKENS_SAFETY_MULTIPLIER: f64 = 1.5;
 const EMPTY_ANTHROPIC_RESPONSE_FALLBACK: &str = "[Gateway received an empty upstream response.]";
 
 use super::{
@@ -411,7 +412,8 @@ fn estimate_request_tokens_with_tools(
     tools: &Option<Vec<Tool>>,
     model_id: &str,
 ) -> usize {
-    estimate_request_tokens(messages, model_id) + estimate_tools_tokens(tools, model_id)
+    let raw_tokens = estimate_request_tokens(messages, model_id) + estimate_tools_tokens(tools, model_id);
+    ((raw_tokens as f64) * REQUEST_TOKENS_SAFETY_MULTIPLIER).ceil() as usize
 }
 
 fn estimate_tools_tokens(tools: &Option<Vec<Tool>>, model_id: &str) -> usize {
@@ -505,6 +507,10 @@ fn estimate_generic_tokens(text: &str) -> usize {
 /// - Claude Sonnet 4.6：1M tokens
 /// - 其他 Claude 4.x：200k tokens
 async fn get_model_max_input_tokens(model_id: &str) -> usize {
+    if let Some(override_tokens) = parse_model_context_window_override(model_id) {
+        return override_tokens;
+    }
+
     let model_lower = model_id.to_lowercase();
 
     // 根据模型 ID 返回对应的 token 限制
@@ -529,6 +535,18 @@ async fn get_model_max_input_tokens(model_id: &str) -> usize {
         // - glm-5
         200_000
     }
+}
+
+fn parse_model_context_window_override(model_id: &str) -> Option<usize> {
+    let trimmed = model_id.trim();
+    let without_close = trimmed.strip_suffix(']')?;
+    let open_index = without_close.rfind('[')?;
+    let value = without_close[open_index + 1..].trim();
+    if value.is_empty() || !value.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    let tokens = value.parse::<usize>().ok()?;
+    (tokens >= 4096 && tokens <= 2_000_000).then_some(tokens)
 }
 
 /// 智能裁剪 Kiro payload 历史记录
@@ -638,6 +656,101 @@ fn trim_kiro_payload_history(payload: &mut Value, max_bytes: usize) -> bool {
             original_len,
             final_len,
             removed_count
+        );
+    }
+
+    trimmed
+}
+
+fn estimate_kiro_payload_tokens(payload: &Value, model_id: &str) -> usize {
+    let tokenizer_type = TokenizerType::from_model_id(model_id);
+    let serialized = serde_json::to_string(payload).unwrap_or_else(|_| payload.to_string());
+    let raw_tokens = estimate_text_tokens(&serialized, tokenizer_type);
+    ((raw_tokens as f64) * REQUEST_TOKENS_SAFETY_MULTIPLIER).ceil() as usize
+}
+
+fn trim_kiro_payload_history_to_token_limit(
+    payload: &mut Value,
+    model_id: &str,
+    max_tokens: usize,
+) -> bool {
+    if estimate_kiro_payload_tokens(payload, model_id) <= max_tokens {
+        return false;
+    }
+
+    let original_len = payload
+        .pointer("/conversationState/history")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.len())
+        .unwrap_or(0);
+
+    if original_len == 0 {
+        return false;
+    }
+
+    let mut removed_count = 0;
+    loop {
+        if estimate_kiro_payload_tokens(payload, model_id) <= max_tokens {
+            break;
+        }
+
+        let Some(history) = payload
+            .pointer_mut("/conversationState/history")
+            .and_then(|v| v.as_array_mut())
+        else {
+            break;
+        };
+
+        if history.len() <= 2 {
+            break;
+        }
+
+        let first_is_assistant_with_tools = history
+            .first()
+            .and_then(|msg| msg.get("assistant_response_message"))
+            .and_then(|msg| msg.get("tool_uses"))
+            .and_then(|tools| tools.as_array())
+            .map(|arr| !arr.is_empty())
+            .unwrap_or(false);
+
+        if first_is_assistant_with_tools && history.len() > 1 {
+            let second_has_tool_results = history
+                .get(1)
+                .and_then(|msg| msg.get("user_input_message"))
+                .and_then(|msg| msg.get("user_input_message_context"))
+                .and_then(|ctx| ctx.get("tool_results"))
+                .and_then(|results| results.as_array())
+                .map(|arr| !arr.is_empty())
+                .unwrap_or(false);
+
+            if second_has_tool_results {
+                if history.len() > 3 {
+                    history.remove(0);
+                    history.remove(0);
+                    removed_count += 2;
+                    continue;
+                }
+                break;
+            }
+        }
+
+        history.remove(0);
+        removed_count += 1;
+    }
+
+    let final_len = payload
+        .pointer("/conversationState/history")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.len())
+        .unwrap_or(0);
+    let trimmed = final_len < original_len;
+
+    if trimmed {
+        log::info!(
+            "[Gateway] Token trim removed {} history messages ({} -> {})",
+            removed_count,
+            original_len,
+            final_len
         );
     }
 
@@ -1180,24 +1293,12 @@ pub async fn proxy_handler(
     let threshold_tokens = (max_input_tokens as f64 * SUMMARIZATION_THRESHOLD_PERCENT) as usize;
 
     if estimated_tokens > threshold_tokens {
-        let error_message = format!(
-            "Input is too long. Estimated {} tokens exceeds the summarization threshold of {} tokens (80% of {}). Please reduce the size of your messages or start a new conversation.",
+        log::warn!(
+            "[Gateway] Estimated {} tokens exceeds threshold {} tokens (80% of {}). Will trim Kiro history before upstream request.",
             estimated_tokens,
             threshold_tokens,
             max_input_tokens
         );
-        return gateway_error_with_log(
-            &state,
-            format,
-            &upstream_log_context,
-            GatewayErrorDetails {
-                status: StatusCode::BAD_REQUEST,
-                error_type: "invalid_request_error",
-                message: &error_message,
-                response_body: None,
-            },
-        )
-        .await;
     }
 
     // 获取账号可用模型列表（用于模型降级）
@@ -1249,6 +1350,28 @@ pub async fn proxy_handler(
     // 【第二层防护】Payload 大小裁剪（硬限制 - 615KB）
     // 如果 payload 超过 Kiro API 的 HTTP 请求大小限制，自动裁剪历史记录
     let mut payload_value = serde_json::to_value(&upstream_payload).unwrap_or_else(|_| json!({}));
+
+    let original_tokens = estimate_kiro_payload_tokens(&payload_value, &request.model);
+    if original_tokens > threshold_tokens {
+        log::info!(
+            "[Gateway] Kiro payload estimate {} tokens exceeds threshold {} tokens. Trimming history...",
+            original_tokens,
+            threshold_tokens
+        );
+        let trimmed = trim_kiro_payload_history_to_token_limit(
+            &mut payload_value,
+            &request.model,
+            threshold_tokens,
+        );
+        if trimmed {
+            let final_tokens = estimate_kiro_payload_tokens(&payload_value, &request.model);
+            log::info!(
+                "[Gateway] Kiro payload token estimate trimmed from {} to {} tokens",
+                original_tokens,
+                final_tokens
+            );
+        }
+    }
 
     let original_size = check_payload_size(&payload_value);
     if original_size > MAX_KIRO_PAYLOAD_SIZE {
@@ -4667,6 +4790,27 @@ mod tests {
     }
 
     #[test]
+    fn test_estimate_request_tokens_with_tools_applies_safety_multiplier() {
+        let messages = vec![NormalizedMessage {
+            role: "user".to_string(),
+            content: Some(json!("A".repeat(4000))),
+            tool_calls: None,
+            tool_call_id: None,
+            metadata: None,
+        }];
+
+        let raw_tokens = estimate_request_tokens(&messages, "claude-opus-4.7[131072]");
+        let safe_tokens = estimate_request_tokens_with_tools(
+            &messages,
+            &None,
+            "claude-opus-4.7[131072]",
+        );
+
+        assert!(safe_tokens > raw_tokens);
+        assert!(safe_tokens >= ((raw_tokens as f64) * REQUEST_TOKENS_SAFETY_MULTIPLIER) as usize);
+    }
+
+    #[test]
     fn test_count_tokens_response_counts_system_tools_and_tool_results() {
         let small = build_count_tokens_response(&json!({
             "model": "claude-opus-4.7",
@@ -4813,9 +4957,60 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_trim_kiro_payload_history_to_token_limit_removes_old_history() {
+        let mut payload = json!({
+            "conversationState": {
+                "history": [
+                    {
+                        "user_input_message": {
+                            "user_input_message_context": { "text": "old ".repeat(4096) }
+                        }
+                    },
+                    {
+                        "assistant_response_message": { "text": "old response ".repeat(4096) }
+                    },
+                    {
+                        "user_input_message": {
+                            "user_input_message_context": { "text": "recent question" }
+                        }
+                    }
+                ],
+                "currentMessage": {
+                    "userInputMessage": {
+                        "content": "current question",
+                        "modelId": "claude-opus-4.7"
+                    }
+                }
+            }
+        });
+
+        let before = estimate_kiro_payload_tokens(&payload, "claude-opus-4.7[8192]");
+        let trimmed =
+            trim_kiro_payload_history_to_token_limit(&mut payload, "claude-opus-4.7[8192]", 8192);
+        let after = estimate_kiro_payload_tokens(&payload, "claude-opus-4.7[8192]");
+
+        assert!(trimmed);
+        assert!(after < before);
+        let history_len = payload
+            .pointer("/conversationState/history")
+            .and_then(|v| v.as_array())
+            .map(Vec::len)
+            .unwrap_or_default();
+        assert!(history_len < 3);
+    }
+
     #[tokio::test]
     async fn test_get_model_max_input_tokens() {
         assert_eq!(get_model_max_input_tokens("auto").await, 1_000_000);
+        assert_eq!(
+            get_model_max_input_tokens("claude-opus-4.7[131072]").await,
+            131_072
+        );
+        assert_eq!(
+            get_model_max_input_tokens("gpt-5.5[200000]").await,
+            200_000
+        );
         assert_eq!(
             get_model_max_input_tokens("claude-3-7-sonnet-20250219").await,
             200_000

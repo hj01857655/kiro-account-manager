@@ -1,10 +1,9 @@
 use crate::gateway::models::{
     AnthropicMessagesRequest, ConversationState, CurrentMessage, HistoryAssistantMessage,
-    HistoryItem, HistoryUserMessage, ImageBlock, ImageSource, KiroInputSchema,
-    KiroPayload, KiroTool, KiroToolResult, KiroToolResultContent, KiroToolSpec, KiroToolUse,
-    ModelInfo, NormalizedMessage, NormalizedRequest, OpenAIChatRequest,
-    Tool, ToolCall, ToolCallFunction, ToolFunction, UserInputMessage,
-    UserInputMessageContext, WebSearchToolOptions,
+    HistoryItem, HistoryUserMessage, ImageBlock, ImageSource, KiroInputSchema, KiroPayload,
+    KiroTool, KiroToolResult, KiroToolResultContent, KiroToolSpec, KiroToolUse, ModelInfo,
+    NormalizedMessage, NormalizedRequest, OpenAIChatRequest, Tool, ToolCall, ToolCallFunction,
+    ToolFunction, UserInputMessage, UserInputMessageContext, WebSearchToolOptions,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use reqwest::Client;
@@ -601,7 +600,21 @@ pub fn get_internal_model_id_with_fallback(
 }
 
 fn normalize_external_model_alias(external_model: &str) -> String {
-    external_model.trim().to_ascii_lowercase()
+    strip_context_window_suffix(external_model.trim()).to_ascii_lowercase()
+}
+
+fn strip_context_window_suffix(model: &str) -> &str {
+    let Some(without_close) = model.strip_suffix(']') else {
+        return model;
+    };
+    let Some(open_index) = without_close.rfind('[') else {
+        return model;
+    };
+    let value = without_close[open_index + 1..].trim();
+    if value.is_empty() || !value.chars().all(|ch| ch.is_ascii_digit()) {
+        return model;
+    }
+    without_close[..open_index].trim_end()
 }
 
 /// 检测模型名是否包含 "thinking" 后缀，若包含则覆写 thinking 配置
@@ -719,7 +732,7 @@ pub async fn build_kiro_payload(
             match message.role.as_str() {
                 "assistant" => {
                     let mut assistant_msg = build_history_assistant_message(message);
-                    
+
                     // Prompt Caching 策略 3：缓存早期对话历史
                     // 在倒数第 10 轮对话之前添加缓存点（如果对话足够长）
                     if history_len > 10 && index == history_len - 10 {
@@ -727,30 +740,28 @@ pub async fn build_kiro_payload(
                             "type": "default"
                         }));
                     }
-                    
+
                     history_items.push(HistoryItem::Assistant {
                         assistant_response_message: assistant_msg,
                     });
                 }
                 "user" => {
                     let mut content = extract_text_content(message.content.as_ref());
-                    
+
                     // Prompt Caching 策略 1：缓存系统提示
                     // 在第一条用户消息中添加系统提示，并标记缓存点
-                    let should_add_cache_point = Some(index) == first_user_index 
+                    let should_add_cache_point = Some(index) == first_user_index
                         && !system_prompt.is_empty()
-                        && processed_tools.is_some();  // 只有在有工具定义时才缓存系统提示
-                    
+                        && processed_tools.is_some(); // 只有在有工具定义时才缓存系统提示
+
                     if Some(index) == first_user_index && !system_prompt.is_empty() {
                         content = join_with_double_newline(&system_prompt, &content);
                     }
-                    
+
                     let images = extract_images(client, message.content.as_ref()).await;
-                    let mut user_context = build_user_context(
-                        None,
-                        extract_tool_results(message.content.as_ref()),
-                    );
-                    
+                    let mut user_context =
+                        build_user_context(None, extract_tool_results(message.content.as_ref()));
+
                     // 如果需要缓存系统提示，在用户上下文中添加缓存点
                     if should_add_cache_point {
                         if let Some(ref mut _ctx) = user_context {
@@ -759,7 +770,7 @@ pub async fn build_kiro_payload(
                             // 这里我们通过在第一条用户消息后添加缓存点来实现
                         }
                     }
-                    
+
                     history_items.push(HistoryItem::User {
                         user_input_message: HistoryUserMessage {
                             content,
@@ -1274,9 +1285,6 @@ fn extract_anthropic_tool_result_id(content: &Value) -> Option<String> {
     })
 }
 
-
-
-
 fn merge_adjacent_messages(messages: &[&NormalizedMessage]) -> Vec<NormalizedMessage> {
     let mut merged: Vec<NormalizedMessage> = Vec::new();
 
@@ -1641,9 +1649,7 @@ async fn extract_image_block(client: &Client, item: &Value) -> Option<ImageBlock
                 .unwrap_or("image/png");
             Some(ImageBlock {
                 format: media_type_to_format(media_type)?,
-                source: ImageSource::Bytes {
-                    bytes,
-                },
+                source: ImageSource::Bytes { bytes },
             })
         }
         "image_url" => {
@@ -1654,9 +1660,7 @@ async fn extract_image_block(client: &Client, item: &Value) -> Option<ImageBlock
             let (format, bytes) = resolve_image_source(client, url).await?;
             Some(ImageBlock {
                 format,
-                source: ImageSource::Bytes {
-                    bytes,
-                },
+                source: ImageSource::Bytes { bytes },
             })
         }
         "input_image" => {
@@ -1667,9 +1671,7 @@ async fn extract_image_block(client: &Client, item: &Value) -> Option<ImageBlock
             let (format, bytes) = resolve_image_source(client, url).await?;
             Some(ImageBlock {
                 format,
-                source: ImageSource::Bytes {
-                    bytes,
-                },
+                source: ImageSource::Bytes { bytes },
             })
         }
         _ => None,
@@ -1916,7 +1918,6 @@ fn normalize_tool_choice(
         other => Err(format!("暂不支持的 tool_choice.type: {other}")),
     }
 }
-
 
 fn convert_tools(tools: &Option<Vec<Tool>>) -> Option<Vec<KiroTool>> {
     tools.as_ref().map(|items| {
@@ -2308,7 +2309,7 @@ mod tests {
             }]),
             tool_choice: None,
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(
@@ -2378,7 +2379,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -2392,6 +2393,16 @@ mod tests {
                 .user_input_message
                 .model_id,
             "claude-sonnet-4.5"
+        );
+        assert_eq!(
+            get_internal_model_id("claude-opus-4.7[131072]")
+                .expect("context window suffix should be stripped"),
+            "claude-opus-4.7"
+        );
+        assert_eq!(
+            get_internal_model_id("gpt-5.5[200000]")
+                .expect("context window suffix should not break aliases"),
+            "claude-opus-4.7"
         );
     }
 
@@ -2414,7 +2425,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -2613,7 +2624,6 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn build_kiro_payload_preserves_responses_tool_choice() {
         let request = NormalizedRequest {
@@ -2644,7 +2654,7 @@ mod tests {
             }]),
             tool_choice: Some(json!({ "type": "function", "name": "search_docs" })),
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -2684,7 +2694,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             previous_response_id: Some("resp_prev_123".to_string()),
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -2724,7 +2734,7 @@ mod tests {
             }]),
             tool_choice: Some(json!({ "type": "function", "name": "missing_tool" })),
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let error = build_kiro_payload(&Client::new(), &request, None, None)
@@ -2766,7 +2776,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -2856,7 +2866,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -2903,7 +2913,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -2984,7 +2994,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             previous_response_id: None,
-        thinking: None,
+            thinking: None,
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3142,17 +3152,27 @@ mod tests {
         };
 
         let converted = normalize_anthropic_request(&request);
-        
+
         // 验证 content 仍然是数组（而不是被转换成字符串）
         assert_eq!(converted.messages.len(), 1);
-        let content = converted.messages[0].content.as_ref().expect("content should exist");
-        
+        let content = converted.messages[0]
+            .content
+            .as_ref()
+            .expect("content should exist");
+
         // 关键断言：content 应该是 Array，不是 String
-        assert!(content.is_array(), "content should be an array to preserve image data");
-        
+        assert!(
+            content.is_array(),
+            "content should be an array to preserve image data"
+        );
+
         let content_array = content.as_array().expect("content should be array");
-        assert_eq!(content_array.len(), 2, "should have 2 items: text and image");
-        
+        assert_eq!(
+            content_array.len(),
+            2,
+            "should have 2 items: text and image"
+        );
+
         // 验证图片 block 仍然存在
         let image_block = &content_array[1];
         assert_eq!(
@@ -3186,11 +3206,11 @@ mod tests {
 
         let client = Client::new();
         let images = extract_images(&client, Some(&content)).await;
-        
+
         // 验证成功提取了图片
         assert_eq!(images.len(), 1, "should extract 1 image");
         assert_eq!(images[0].format, "png", "image format should be png");
-        
+
         // 验证图片数据
         match &images[0].source {
             ImageSource::Bytes { bytes } => {
@@ -3235,21 +3255,27 @@ mod tests {
             ]
         });
 
-        let normalized = normalize_responses_request(&payload).expect("should normalize successfully");
-        
+        let normalized =
+            normalize_responses_request(&payload).expect("should normalize successfully");
+
         // 验证消息数量：user + assistant + compaction + user = 4
         assert_eq!(normalized.messages.len(), 4, "should have 4 messages");
-        
+
         // 验证 compaction item 被保留为 system 消息
-        assert_eq!(normalized.messages[2].role, "system", "compaction should be system role");
+        assert_eq!(
+            normalized.messages[2].role, "system",
+            "compaction should be system role"
+        );
         assert!(
-            normalized.messages[2].metadata.as_ref()
+            normalized.messages[2]
+                .metadata
+                .as_ref()
                 .and_then(|m| m.get("is_compaction"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
             "compaction should have is_compaction metadata"
         );
-        
+
         // 验证 compaction 内容被原样保留
         let compaction_content = normalized.messages[2].content.as_ref().unwrap();
         assert_eq!(
@@ -3264,4 +3290,3 @@ mod tests {
         );
     }
 }
-
