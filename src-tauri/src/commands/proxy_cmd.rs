@@ -2,6 +2,8 @@
 
 #![allow(clippy::needless_pass_by_value)] // Tauri 命令需要按值传递参数
 
+use crate::clients::http_client::build_http_client_for_proxy_test;
+use crate::core::account::AccountProxyConfig;
 #[cfg(target_os = "windows")]
 use crate::utils::cmd_output::decode_cmd_output;
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,14 @@ pub struct SystemProxyInfo {
     pub http_proxy: Option<String>,
     pub tun_mode: bool,
     pub tun_interface: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountProxyTestResult {
+    pub ok: bool,
+    pub status: u16,
+    pub response: String,
 }
 
 // ============================================================
@@ -344,6 +354,38 @@ pub async fn detect_system_proxy() -> Result<SystemProxyInfo, String> {
     tokio::task::spawn_blocking(detect_system_proxy_inner)
         .await
         .map_err(|e| format!("Task failed: {e}"))?
+}
+
+#[tauri::command]
+pub async fn test_account_proxy(
+    proxy_config: AccountProxyConfig,
+) -> Result<AccountProxyTestResult, String> {
+    if !proxy_config.enabled {
+        return Err("Account proxy is disabled".to_string());
+    }
+
+    let client = build_http_client_for_proxy_test(&proxy_config)?;
+    let response = client
+        .get("https://api.ipify.org?format=json")
+        .send()
+        .await
+        .map_err(|error| format!("Proxy connectivity test failed: {error}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("Proxy test response read failed: {error}"))?;
+
+    if !status.is_success() {
+        return Err(format!("Proxy test returned HTTP {status}: {body}"));
+    }
+
+    Ok(AccountProxyTestResult {
+        ok: true,
+        status: status.as_u16(),
+        response: body.chars().take(500).collect(),
+    })
 }
 
 #[cfg(all(test, target_os = "windows"))]

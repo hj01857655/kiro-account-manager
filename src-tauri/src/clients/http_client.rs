@@ -1,6 +1,7 @@
 //! HTTP 客户端公共模块
 //! 提供统一的 HTTP 客户端构建，支持代理配置
-use reqwest::{Client, Proxy};
+use crate::core::account::{Account, AccountProxyConfig};
+use reqwest::{Client, ClientBuilder, Proxy};
 use serde_json::Value;
 use std::{path::PathBuf, time::Duration};
 
@@ -317,41 +318,11 @@ fn get_proxy_from_kiro_settings() -> Option<String> {
     })
 }
 
-/// 构建 HTTP 客户端（支持代理、超时配置）
-pub fn build_http_client() -> Result<Client, String> {
-    build_http_client_with_timeout(30, 10)
-}
-
-/// 构建用于流式请求的 HTTP 客户端（无总超时限制）
-pub fn build_streaming_http_client() -> Result<Client, String> {
-    let mut builder = Client::builder()
-        .connect_timeout(Duration::from_secs(30))
-        .pool_idle_timeout(Duration::from_secs(120))
-        .pool_max_idle_per_host(20)
-        .tcp_keepalive(Duration::from_secs(60))
-        .http2_keep_alive_interval(Duration::from_secs(30))
-        .http2_keep_alive_timeout(Duration::from_secs(20))
-        .http2_keep_alive_while_idle(true);
-
-    // 尝试从 Kiro 设置获取代理
-    if let Some(proxy_url) = get_proxy_from_kiro_settings() {
-        if let Ok(proxy) = Proxy::all(&proxy_url) {
-            builder = builder.proxy(proxy);
-        }
-    }
-
-    builder
-        .build()
-        .map_err(|e| format!("Failed to create streaming HTTP client: {e}"))
-}
-
-/// 构建 HTTP 客户端（自定义超时）
-pub fn build_http_client_with_timeout(
-    timeout_secs: u64,
+fn base_http_client_builder(
+    timeout_secs: Option<u64>,
     connect_timeout_secs: u64,
-) -> Result<Client, String> {
-    let mut builder = Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
+) -> ClientBuilder {
+    let builder = Client::builder()
         .connect_timeout(Duration::from_secs(connect_timeout_secs))
         .pool_idle_timeout(Duration::from_secs(120))
         .pool_max_idle_per_host(20)
@@ -360,35 +331,119 @@ pub fn build_http_client_with_timeout(
         .http2_keep_alive_timeout(Duration::from_secs(20))
         .http2_keep_alive_while_idle(true);
 
-    // 尝试从 Kiro 设置获取代理
+    if let Some(timeout_secs) = timeout_secs {
+        builder.timeout(Duration::from_secs(timeout_secs))
+    } else {
+        builder
+    }
+}
+
+fn apply_kiro_settings_proxy(mut builder: ClientBuilder) -> ClientBuilder {
+    // Preserve the existing generic proxy behavior: invalid settings are ignored.
     if let Some(proxy_url) = get_proxy_from_kiro_settings() {
         if let Ok(proxy) = Proxy::all(&proxy_url) {
             builder = builder.proxy(proxy);
         }
     }
+    builder
+}
+
+fn apply_account_proxy(
+    builder: ClientBuilder,
+    proxy_config: &AccountProxyConfig,
+) -> Result<ClientBuilder, String> {
+    let proxy_url = proxy_config.to_proxy_url()?;
+    let proxy = Proxy::all(&proxy_url)
+        .map_err(|error| format!("Invalid account proxy configuration: {error}"))?;
+
+    Ok(builder.no_proxy().proxy(proxy))
+}
+
+fn account_proxy_config(account: &Account) -> Option<&AccountProxyConfig> {
+    account
+        .proxy_config
+        .as_ref()
+        .filter(|proxy_config| proxy_config.enabled)
+}
+
+/// 构建 HTTP 客户端（支持代理、超时配置）
+pub fn build_http_client() -> Result<Client, String> {
+    build_http_client_with_timeout(30, 10)
+}
+
+pub fn build_streaming_http_client_for_account(account: &Account) -> Result<Client, String> {
+    let builder = base_http_client_builder(None, 30);
+    let builder = if let Some(proxy_config) = account_proxy_config(account) {
+        apply_account_proxy(builder, proxy_config)?
+    } else {
+        apply_kiro_settings_proxy(builder)
+    };
 
     builder
+        .build()
+        .map_err(|e| format!("Failed to create account streaming HTTP client: {e}"))
+}
+
+/// 构建 HTTP 客户端（自定义超时）
+pub fn build_http_client_with_timeout(
+    timeout_secs: u64,
+    connect_timeout_secs: u64,
+) -> Result<Client, String> {
+    apply_kiro_settings_proxy(base_http_client_builder(
+        Some(timeout_secs),
+        connect_timeout_secs,
+    ))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {e}"))
 }
 
-/// 构建 HTTP 客户端（带 User-Agent）
-pub fn build_http_client_with_user_agent(user_agent: &str) -> Result<Client, String> {
-    let mut builder = Client::builder()
-        .timeout(Duration::from_secs(30))
-        .connect_timeout(Duration::from_secs(10))
-        .user_agent(user_agent);
-
-    // 尝试从 Kiro 设置获取代理
-    if let Some(proxy_url) = get_proxy_from_kiro_settings() {
-        if let Ok(proxy) = Proxy::all(&proxy_url) {
-            builder = builder.proxy(proxy);
-        }
-    }
+pub fn build_http_client_with_timeout_for_account(
+    account: &Account,
+    timeout_secs: u64,
+    connect_timeout_secs: u64,
+) -> Result<Client, String> {
+    let builder = base_http_client_builder(Some(timeout_secs), connect_timeout_secs);
+    let builder = if let Some(proxy_config) = account_proxy_config(account) {
+        apply_account_proxy(builder, proxy_config)?
+    } else {
+        apply_kiro_settings_proxy(builder)
+    };
 
     builder
         .build()
+        .map_err(|e| format!("Failed to create account HTTP client: {e}"))
+}
+
+/// 构建 HTTP 客户端（带 User-Agent）
+pub fn build_http_client_with_user_agent(user_agent: &str) -> Result<Client, String> {
+    apply_kiro_settings_proxy(base_http_client_builder(Some(30), 10).user_agent(user_agent))
+        .build()
         .map_err(|e| format!("Failed to create HTTP client: {e}"))
+}
+
+pub fn build_http_client_with_user_agent_for_account(
+    user_agent: &str,
+    account: &Account,
+) -> Result<Client, String> {
+    let builder = base_http_client_builder(Some(30), 10).user_agent(user_agent);
+    let builder = if let Some(proxy_config) = account_proxy_config(account) {
+        apply_account_proxy(builder, proxy_config)?
+    } else {
+        apply_kiro_settings_proxy(builder)
+    };
+
+    builder
+        .build()
+        .map_err(|e| format!("Failed to create account HTTP client: {e}"))
+}
+
+pub fn build_http_client_for_proxy_test(
+    proxy_config: &AccountProxyConfig,
+) -> Result<Client, String> {
+    let builder = base_http_client_builder(Some(15), 10);
+    apply_account_proxy(builder, proxy_config)?
+        .build()
+        .map_err(|e| format!("Failed to create proxy test client: {e}"))
 }
 
 #[cfg(test)]

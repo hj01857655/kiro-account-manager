@@ -102,7 +102,7 @@ use commands::session_manager::{
 
 
 //代理
-use commands::proxy_cmd::detect_system_proxy;
+use commands::proxy_cmd::{detect_system_proxy, test_account_proxy};
 
 //Powers
 use commands::powers_cmd::{
@@ -512,6 +512,7 @@ fn main() {
             cleanup_expired_cache,
             // 代理检测命令
             detect_system_proxy,
+            test_account_proxy,
             // 更新检查命令
             check_update,
             // Steering 管理命令

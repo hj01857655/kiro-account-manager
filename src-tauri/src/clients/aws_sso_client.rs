@@ -2,7 +2,8 @@
 //! 实现 AWS SSO OIDC API 调用，用于 BuilderId/Enterprise 认证
 //! 使用 Authorization Code Flow（跟 Kiro Desktop 一致）
 
-use crate::clients::http_client::build_http_client;
+use crate::clients::http_client::{build_http_client, build_http_client_with_timeout_for_account};
+use crate::core::account::Account;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -65,6 +66,13 @@ impl AWSSSOClient {
         let client = build_http_client().expect("Failed to create HTTP client");
 
         Self { base_url, client }
+    }
+
+    pub fn for_account(region: &str, account: &Account) -> Result<Self, String> {
+        let base_url = format!("https://oidc.{region}.amazonaws.com");
+        let client = build_http_client_with_timeout_for_account(account, 30, 10)?;
+
+        Ok(Self { base_url, client })
     }
 
     /// 获取 authorize URL

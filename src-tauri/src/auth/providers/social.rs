@@ -114,8 +114,12 @@ impl AuthProvider for SocialProvider {
         metadata: RefreshMetadata,
     ) -> Result<AuthResult, String> {
         // 优先使用账号的 machineId，没有则用系统机器码
-        let machine_id = metadata.machine_id.unwrap_or_else(get_machine_id);
-        let client = KiroAuthServiceClient::new(&machine_id)?;
+        let machine_id = metadata.machine_id.clone().unwrap_or_else(get_machine_id);
+        let client = if let Some(account) = metadata.account.as_ref() {
+            KiroAuthServiceClient::for_account(&machine_id, account)?
+        } else {
+            KiroAuthServiceClient::new(&machine_id)?
+        };
         let token_response: SocialRefreshResponse = client.refresh_token(refresh_token).await?;
 
         let expires_at =

@@ -20,7 +20,6 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -42,7 +41,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::clients::http_client::{build_streaming_http_client, is_supported_kiro_region};
+use crate::clients::http_client::is_supported_kiro_region;
 use crate::gateway::token_cache::TokenCache;
 
 #[cfg(test)]
@@ -298,7 +297,6 @@ struct RouterState {
     config: GatewayConfig,
     request_count: Arc<AtomicU64>,
     last_error: Arc<AsyncMutex<Option<String>>>,
-    http: Client,
     responses_sessions: ResponsesSessionStore,
     #[allow(dead_code)]
     token_cache: Arc<AsyncMutex<TokenCache>>,
@@ -985,9 +983,6 @@ async fn spawn_runtime(config: GatewayConfig) -> Result<GatewayRuntime, String> 
     let responses_sessions = Arc::new(AsyncMutex::new(HashMap::new()));
     let token_cache = Arc::new(AsyncMutex::new(TokenCache::new()));
 
-    let http = build_streaming_http_client()
-        .map_err(|e| format!("初始化 HTTP 客户端失败: {e}"))?;
-
     // 初始化负载均衡器
     let strategy = load_balancer::LoadBalancerStrategy::from_str(&config.strategy);
     let load_balancer = Arc::new(load_balancer::LoadBalancer::new(strategy));
@@ -1025,7 +1020,6 @@ async fn spawn_runtime(config: GatewayConfig) -> Result<GatewayRuntime, String> 
         config: config.clone(),
         request_count: request_count.clone(),
         last_error: last_error.clone(),
-        http,
         responses_sessions,
         token_cache,
         load_balancer,
@@ -1217,7 +1211,6 @@ mod tests {
             config,
             request_count: Arc::new(AtomicU64::new(0)),
             last_error: Arc::new(AsyncMutex::new(None)),
-            http: Client::new(),
             responses_sessions: Arc::new(AsyncMutex::new(HashMap::new())),
             token_cache: Arc::new(AsyncMutex::new(TokenCache::new())),
             load_balancer: Arc::new(load_balancer::LoadBalancer::new(strategy)),
@@ -1250,7 +1243,6 @@ mod tests {
             config,
             request_count: Arc::new(AtomicU64::new(0)),
             last_error: Arc::new(AsyncMutex::new(None)),
-            http: Client::new(),
             responses_sessions: Arc::new(AsyncMutex::new(HashMap::new())),
             token_cache: Arc::new(AsyncMutex::new(TokenCache::new())),
             load_balancer: Arc::new(load_balancer::LoadBalancer::new(strategy)),

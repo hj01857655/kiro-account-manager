@@ -3,7 +3,7 @@
 #![allow(clippy::needless_pass_by_value)] // Tauri 命令需要按值传递 State
 #![allow(clippy::too_many_lines)] // 命令文件包含多个函数
 
-use crate::core::account::Account;
+use crate::core::account::{Account, AccountProxyConfig};
 use crate::auth::{refresh_token_desktop, User};
 use crate::commands::account_models::{
     clear_available_models_cache, fetch_all_available_models, read_available_models_cache,
@@ -12,7 +12,8 @@ use crate::commands::account_models::{
 use crate::commands::common::{
     calc_expires_at, extract_user_info, find_account_by_id,
     find_existing_account_idx, get_enterprise_usage_with_region_probe, get_usage_by_account,
-    get_usage_by_provider, is_auth_error_message, is_token_expired, is_token_expiring_soon,
+    get_usage_by_provider, is_auth_error_message,
+    is_token_expired, is_token_expiring_soon,
     lock_store, refresh_token_by_provider, save_store, token_needs_refresh, update_account_status, RefreshResult,
 };
 use crate::auth::providers::{AuthProvider, IdcProvider, RefreshMetadata};
@@ -39,6 +40,7 @@ pub struct UpdateAccountParams {
     pub client_secret: Option<String>,
     pub machine_id: Option<String>,
     pub enabled: Option<bool>,
+    pub proxy_config: Option<AccountProxyConfig>,
 }
 
 // ===== 数据结构 =====
@@ -363,17 +365,22 @@ pub async fn verify_account(
     } = params;
 
     let is_idc = provider == "BuilderId" || provider == "Enterprise";
+    let existing_account = {
+        let store = lock_store(&state.store, "store")?;
+        store
+            .accounts
+            .iter()
+            .find(|a| a.refresh_token.as_ref() == Some(&refresh_token))
+            .cloned()
+    };
 
     // 刷新 token
     let (new_access_token, new_refresh_token) = if is_idc {
         let (cid, csec, reg) = if client_id.is_some() && client_secret.is_some() {
             (client_id, client_secret, region)
         } else {
-            let store = lock_store(&state.store, "store")?;
-            store
-                .accounts
-                .iter()
-                .find(|a| a.refresh_token.as_ref() == Some(&refresh_token))
+            existing_account
+                .as_ref()
                 .map_or((None, None, None), |a| {
                     (
                         a.client_id.clone(),
@@ -402,13 +409,7 @@ pub async fn verify_account(
 
     // 获取 usage_data（使用统一的 getUsageLimits 接口）
     let temp_account = {
-        let store = lock_store(&state.store, "store")?;
-        let account = store
-            .accounts
-            .iter()
-            .find(|a| a.refresh_token.as_ref() == Some(&refresh_token))
-            .ok_or("Account not found")?;
-
+        let account = existing_account.as_ref().ok_or("Account not found")?;
         let mut temp_account = account.clone();
         temp_account.access_token = Some(new_access_token.clone());
         temp_account
@@ -1135,6 +1136,27 @@ pub fn update_account(
         // 启用/禁用
         if let Some(enabled) = params.enabled {
             store.accounts[idx].enabled = enabled;
+        }
+        if let Some(proxy_config) = params.proxy_config {
+            let has_proxy_values = !proxy_config.host.trim().is_empty()
+                || proxy_config.port > 0
+                || proxy_config
+                    .username
+                    .as_deref()
+                    .map_or(false, |value| !value.trim().is_empty())
+                || proxy_config
+                    .password
+                    .as_deref()
+                    .map_or(false, |value| !value.is_empty());
+            let next_proxy_config = if proxy_config.enabled || has_proxy_values {
+                Some(proxy_config)
+            } else {
+                None
+            };
+            if store.accounts[idx].proxy_config != next_proxy_config {
+                store.accounts[idx].proxy_config = next_proxy_config;
+                clear_available_models_cache(&mut store.accounts[idx]);
+            }
         }
         let result = store.accounts[idx].clone();
         save_store(&store)?;

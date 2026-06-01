@@ -2,6 +2,7 @@
 // 参考 kiro-batch-login/src/providers/base-provider.js
 
 use async_trait::async_trait;
+use crate::core::account::Account;
 use serde::{Deserialize, Serialize};
 
 /// 认证结果
@@ -39,6 +40,7 @@ pub struct RefreshMetadata {
     pub client_id_hash: Option<String>,
     pub profile_arn: Option<String>,
     pub machine_id: Option<String>,
+    pub account: Option<Account>,
 }
 
 /// 认证提供者接口

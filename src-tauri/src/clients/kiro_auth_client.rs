@@ -1,5 +1,8 @@
+use crate::clients::http_client::{
+    build_http_client_with_user_agent, build_http_client_with_user_agent_for_account,
+};
+use crate::core::account::Account;
 use crate::utils::browser::open_browser;
-use crate::clients::http_client::build_http_client_with_user_agent;
 use reqwest::Client;
 use serde::Deserialize;
 
@@ -16,6 +19,15 @@ impl KiroAuthServiceClient {
         let user_agent = format!("KiroIDE-0.6.18-{machine_id}");
 
         let client = build_http_client_with_user_agent(&user_agent)?;
+
+        Ok(Self { endpoint, client })
+    }
+
+    pub fn for_account(machine_id: &str, account: &Account) -> Result<Self, String> {
+        let endpoint = "https://prod.us-east-1.auth.desktop.kiro.dev".to_string();
+        let user_agent = format!("KiroIDE-0.6.18-{machine_id}");
+
+        let client = build_http_client_with_user_agent_for_account(&user_agent, account)?;
 
         Ok(Self { endpoint, client })
     }

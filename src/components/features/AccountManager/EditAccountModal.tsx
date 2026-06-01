@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { Copy, Check, Folder, Plus, X, RefreshCw, Loader2, CheckCircle } from 'lucide-react'
+import { Copy, Check, Folder, Plus, X, RefreshCw, Loader2, CheckCircle, Network } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import { useDialog } from '../../../contexts/DialogContext'
 import { setAccountTags, setAccountGroup, getGroups, addGroup } from '../../../api/groupTag'
@@ -17,7 +17,7 @@ import {
   DialogFooter} from '../../shared/dialog'
 import { Button } from '../../shared/button'
 import { getThemeAccent } from '../KiroConfig/themeAccent'
-import { Account, GroupDefinition } from '../../../types/account'
+import { Account, AccountProxyConfig, GroupDefinition } from '../../../types/account'
 
 const PRESET_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', 
@@ -122,6 +122,12 @@ interface VerifyAccountResponse {
   refreshToken: string;
 }
 
+interface AccountProxyTestResult {
+  ok: boolean;
+  status: number;
+  response: string;
+}
+
 function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps) {
   const { t, theme } = useApp()
   const { showError } = useDialog()
@@ -139,12 +145,21 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
     clientId: account.clientId || '',
     clientSecret: account.clientSecret || '',
     machineId: account.machineId || ''})
+  const [proxyForm, setProxyForm] = useState({
+    enabled: Boolean(account.proxyConfig?.enabled),
+    protocol: account.proxyConfig?.protocol || 'http',
+    host: account.proxyConfig?.host || '',
+    port: account.proxyConfig?.port ? String(account.proxyConfig.port) : '',
+    username: account.proxyConfig?.username || '',
+    password: account.proxyConfig?.password || ''})
 
   const [selectedTagIds, setSelectedTagIds] = useState((account.tagLinks || []).map(link => link.tagId))
   const [selectedGroupId, setSelectedGroupId] = useState(account.groupId || '')
   const [groups, setGroups] = useState<GroupDefinition[]>([])
   const [saving, setSaving] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  const [testingProxy, setTestingProxy] = useState(false)
+  const [proxyTestStatus, setProxyTestStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
   
   // 账号信息状态（验证后更新）
@@ -254,7 +269,60 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
     }
   }
 
+  const buildProxyConfig = (): AccountProxyConfig => {
+    const username = proxyForm.username.trim()
+    const password = proxyForm.password
+    return {
+      enabled: proxyForm.enabled,
+      protocol: proxyForm.protocol as AccountProxyConfig['protocol'],
+      host: proxyForm.host.trim(),
+      port: Number(proxyForm.port) || 0,
+      ...(username ? { username } : {}),
+      ...(password ? { password } : {})
+    }
+  }
+
+  const validateProxyForm = async () => {
+    if (!proxyForm.enabled) return true
+    if (!proxyForm.host.trim()) {
+      await showError(t('editAccount.proxyInvalid'), t('editAccount.proxyHostRequired'))
+      return false
+    }
+    const port = Number(proxyForm.port)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      await showError(t('editAccount.proxyInvalid'), t('editAccount.proxyPortRequired'))
+      return false
+    }
+    if (proxyForm.password && !proxyForm.username.trim()) {
+      await showError(t('editAccount.proxyInvalid'), t('editAccount.proxyUsernameRequired'))
+      return false
+    }
+    return true
+  }
+
+  const handleTestProxy = async () => {
+    if (!(await validateProxyForm())) return
+    setTestingProxy(true)
+    setProxyTestStatus(null)
+    try {
+      const result = await invoke<AccountProxyTestResult>('test_account_proxy', {
+        proxyConfig: buildProxyConfig()
+      })
+      setProxyTestStatus({
+        type: 'success',
+        message: `${t('editAccount.proxyTestSuccess')} (${result.status})`
+      })
+    } catch (e) {
+      const message = String(e)
+      setProxyTestStatus({ type: 'error', message })
+      await showError(t('editAccount.proxyTestFailed'), message)
+    } finally {
+      setTestingProxy(false)
+    }
+  }
+
   const handleSave = async () => {
+    if (!(await validateProxyForm())) return
     setSaving(true)
     try {
       const params: any = {
@@ -262,7 +330,8 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
         label: form.label || null,
         accessToken: form.accessToken || null,
         refreshToken: form.refreshToken || null,
-        machineId: form.machineId || null}
+        machineId: form.machineId || null,
+        proxyConfig: buildProxyConfig()}
       if (isIdCAccount) {
         params.clientId = form.clientId || null
         params.clientSecret = form.clientSecret || null
@@ -394,6 +463,158 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
               >
                 {copiedField === 'machineId' ? <Check size={16} className="text-green-500" /> : <Copy size={16} className={"text-muted-foreground"} />}
               </button>
+            </div>
+          </div>
+
+          {/* Account Proxy */}
+          <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg ${accent.iconBadgeBg}`}>
+                  <Network size={16} className={accent.text} />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-foreground">{t('editAccount.proxyTitle')}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{t('editAccount.proxyDescription')}</div>
+                </div>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={proxyForm.enabled}
+                  onChange={(e) => {
+                    setProxyForm({ ...proxyForm, enabled: e.target.checked })
+                    setProxyTestStatus(null)
+                  }}
+                  className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                />
+                {t('editAccount.proxyEnabled')}
+              </label>
+            </div>
+
+            <div className={proxyForm.enabled ? 'space-y-4' : 'space-y-4 opacity-60'}>
+              <div className="grid grid-cols-2 gap-2">
+                {(['http', 'socks5'] as const).map(protocol => (
+                  <button
+                    key={protocol}
+                    type="button"
+                    disabled={!proxyForm.enabled}
+                    onClick={() => {
+                      setProxyForm({ ...proxyForm, protocol })
+                      setProxyTestStatus(null)
+                    }}
+                    className={`h-10 rounded-xl border text-sm font-medium transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                      proxyForm.protocol === protocol
+                        ? `${accent.solidBg} ${accent.solidHoverBg} text-white border-transparent`
+                        : 'border-input bg-background hover:bg-muted/50 text-foreground'
+                    }`}
+                  >
+                    {protocol.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    {t('editAccount.proxyHost')}
+                  </label>
+                  <input
+                    type="text"
+                    disabled={!proxyForm.enabled}
+                    placeholder="127.0.0.1"
+                    value={proxyForm.host}
+                    onChange={(e) => {
+                      setProxyForm({ ...proxyForm, host: e.target.value })
+                      setProxyTestStatus(null)
+                    }}
+                    className={`w-full px-4 py-2.5 border rounded-xl text-sm text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 outline-none disabled:cursor-not-allowed`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    {t('editAccount.proxyPort')}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    disabled={!proxyForm.enabled}
+                    placeholder="7890"
+                    value={proxyForm.port}
+                    onChange={(e) => {
+                      setProxyForm({ ...proxyForm, port: e.target.value })
+                      setProxyTestStatus(null)
+                    }}
+                    className={`w-full px-4 py-2.5 border rounded-xl text-sm text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 outline-none disabled:cursor-not-allowed`}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    {t('editAccount.proxyUsername')}
+                  </label>
+                  <input
+                    type="text"
+                    disabled={!proxyForm.enabled}
+                    placeholder={t('editAccount.proxyOptional')}
+                    value={proxyForm.username}
+                    onChange={(e) => {
+                      setProxyForm({ ...proxyForm, username: e.target.value })
+                      setProxyTestStatus(null)
+                    }}
+                    className={`w-full px-4 py-2.5 border rounded-xl text-sm text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 outline-none disabled:cursor-not-allowed`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    {t('editAccount.proxyPassword')}
+                  </label>
+                  <input
+                    type="password"
+                    disabled={!proxyForm.enabled}
+                    placeholder={t('editAccount.proxyOptional')}
+                    value={proxyForm.password}
+                    onChange={(e) => {
+                      setProxyForm({ ...proxyForm, password: e.target.value })
+                      setProxyTestStatus(null)
+                    }}
+                    className={`w-full px-4 py-2.5 border rounded-xl text-sm text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 outline-none disabled:cursor-not-allowed`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <Button
+                  variant="secondary"
+                  className="h-10 rounded-xl font-medium"
+                  onClick={handleTestProxy}
+                  disabled={!proxyForm.enabled || testingProxy}
+                >
+                  {testingProxy ? (
+                    <>
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                      {t('editAccount.proxyTesting')}
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={16} className="mr-2" />
+                      {t('editAccount.proxyTest')}
+                    </>
+                  )}
+                </Button>
+                {proxyTestStatus && (
+                  <span
+                    className={`text-xs font-medium ${
+                      proxyTestStatus.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'
+                    }`}
+                  >
+                    {proxyTestStatus.message}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

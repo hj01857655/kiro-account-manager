@@ -31,7 +31,7 @@ tokio-stream = "0.1"
 futures-util = "0.3"
 uuid = { version = "1.6", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-reqwest = { version = "0.12", features = ["json", "cookies", "stream"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "cookies", "stream", "socks"], default-features = false }
 url = "2.5"
 open = "5.0"
 tiny_http = "0.12"

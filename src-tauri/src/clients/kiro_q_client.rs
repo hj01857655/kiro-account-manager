@@ -2,9 +2,10 @@
 // 支持 getUsageLimits、ListAvailableModels、MCP、setUserPreference
 
 use crate::clients::http_client::{
-    build_http_client, build_kiro_custom_user_agent,
+    build_http_client, build_http_client_with_timeout_for_account, build_kiro_custom_user_agent,
     build_q_service_url, get_usage_probe_regions,
 };
+use crate::core::account::Account;
 use reqwest::RequestBuilder;
 use uuid::Uuid;
 
@@ -70,6 +71,15 @@ impl KiroQClient {
     pub fn new() -> Result<Self, String> {
         let client = build_http_client()?;
         Ok(Self { client })
+    }
+
+    pub fn for_account(account: &Account) -> Result<Self, String> {
+        let client = build_http_client_with_timeout_for_account(account, 30, 10)?;
+        Ok(Self { client })
+    }
+
+    pub fn from_client(client: reqwest::Client) -> Self {
+        Self { client }
     }
 
     /// 统一的 getUsageLimits 接口（支持所有账号类型）

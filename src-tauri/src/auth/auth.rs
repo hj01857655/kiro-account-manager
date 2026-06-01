@@ -59,7 +59,13 @@ pub struct DesktopRefreshResponse {
 /// 使用桌面端 API 刷新 Token（只需要 `RefreshToken`）
 pub async fn refresh_token_desktop(refresh_token: &str) -> Result<DesktopRefreshResponse, String> {
     let client = build_http_client().map_err(|e| format!("Failed to create client: {e}"))?;
+    refresh_token_desktop_with_client(refresh_token, &client).await
+}
 
+async fn refresh_token_desktop_with_client(
+    refresh_token: &str,
+    client: &reqwest::Client,
+) -> Result<DesktopRefreshResponse, String> {
     let body = serde_json::json!({
         "refreshToken": refresh_token
     });

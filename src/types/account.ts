@@ -69,6 +69,15 @@ export interface TagLink {
     linkedAt?: string;
 }
 
+export interface AccountProxyConfig {
+    enabled: boolean;
+    protocol: 'http' | 'socks5';
+    host: string;
+    port: number;
+    username?: string;
+    password?: string;
+}
+
 export interface Account {
     id: string;
     email?: string;
@@ -97,6 +106,7 @@ export interface Account {
     clientId?: string;
     clientSecret?: string;
     enabled?: boolean;
+    proxyConfig?: AccountProxyConfig;
     _index?: number;
 }
 

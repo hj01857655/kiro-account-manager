@@ -391,7 +391,11 @@ impl AuthProvider for IdcProvider {
             .ok_or("Client secret is required for IdC token refresh")?;
         let region = metadata.region.as_deref().unwrap_or(&self.region);
 
-        let sso_client = AWSSSOClient::new(region);
+        let sso_client = if let Some(account) = metadata.account.as_ref() {
+            AWSSSOClient::for_account(region, account)?
+        } else {
+            AWSSSOClient::new(region)
+        };
         let token_response = sso_client
             .refresh_token(&client_id, &client_secret, refresh_token)
             .await?;
