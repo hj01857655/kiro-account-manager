@@ -826,11 +826,19 @@ pub async fn build_kiro_payload(
 
                 // 如果有 toolResults，必须保留前面的 assistant（带 toolUses）
                 if has_tool_results && idx > 0 {
-                    let prev = &conversation_messages[idx - 1];
-                    if prev.role == "assistant" {
-                        idx -= 1;
-                        kept_count += 1;
-                        keep_from_index = idx;
+                    let mut search_idx = idx;
+                    while search_idx > 0 {
+                        search_idx -= 1;
+                        let prev = &conversation_messages[search_idx];
+                        if prev.role == "assistant" {
+                            idx = search_idx;
+                            kept_count += 1;
+                            keep_from_index = idx;
+                            break;
+                        }
+                        if prev.role != "tool" {
+                            break;
+                        }
                     }
                 }
             } else if msg.role == "assistant" {
@@ -997,6 +1005,9 @@ pub async fn build_kiro_payload(
                     if content.trim().is_empty() && tool_results.is_empty() {
                         content = "Continue".to_string();
                     }
+                    if content.trim().is_empty() && !tool_results.is_empty() {
+                        content = "[Tool results]".to_string();
+                    }
                     
                     // 如果需要缓存系统提示，在用户上下文中添加缓存点
                     if should_add_cache_point {
@@ -1017,14 +1028,19 @@ pub async fn build_kiro_payload(
                     });
                 }
                 "tool" => {
+                    let mut content =
+                        if Some(index) == first_user_index && !system_prompt.is_empty() {
+                            system_prompt.clone()
+                        } else {
+                            String::new()
+                        };
+                    if content.trim().is_empty() {
+                        content = "[Tool results]".to_string();
+                    }
+
                     history_items.push(HistoryItem::User {
                         user_input_message: HistoryUserMessage {
-                            content: if Some(index) == first_user_index && !system_prompt.is_empty()
-                            {
-                                system_prompt.clone()
-                            } else {
-                                String::new()
-                            },
+                            content,
                             model_id: model_id.clone(),
                             origin: "AI_EDITOR".to_string(),
                             images: None,
@@ -1077,7 +1093,7 @@ pub async fn build_kiro_payload(
         });
 
         // sanitize 所有消息（包括 currentMessage）
-        let all_sanitized = sanitize_history(history_items);
+        let all_sanitized = sanitize_history(history_items, &model_id);
 
         // 分割：最后一条作为 currentMessage 的数据源，其余作为 history
         if all_sanitized.len() <= 1 {
@@ -1659,7 +1675,7 @@ fn extract_anthropic_tool_result_id(content: &Value) -> Option<String> {
 /// 3. 补充缺失的 toolResults
 /// 4. 修复交替（插入占位消息）
 /// 5. 确保以 user 结束
-fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
+fn sanitize_history(mut items: Vec<HistoryItem>, fallback_model_id: &str) -> Vec<HistoryItem> {
     if items.is_empty() {
         return items;
     }
@@ -1669,7 +1685,7 @@ fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
         items.insert(0, HistoryItem::User {
             user_input_message: HistoryUserMessage {
                 content: "Hello".to_string(),
-                model_id: String::new(),
+                model_id: fallback_model_id.to_string(),
                 origin: "AI_EDITOR".to_string(),
                 images: None,
                 user_input_message_context: None,
@@ -1705,43 +1721,83 @@ fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
     }).map(|(_, item)| item).collect();
 
     // 步骤 3：补充缺失的 toolResults
-    // 如果 assistant 有 toolUses 但下一条 user 没有对应 toolResults，插入错误占位
+    // 如果 assistant 有 toolUses 但下一条 user 没有对应 toolResults，补充错误占位
     let mut patched: Vec<HistoryItem> = Vec::new();
-    for (idx, item) in items.iter().enumerate() {
-        patched.push(item.clone());
+    let mut idx = 0;
+    while idx < items.len() {
+        let item = items[idx].clone();
 
-        if let HistoryItem::Assistant { assistant_response_message } = item {
+        if let HistoryItem::Assistant { assistant_response_message } = &item {
             if let Some(tool_uses) = &assistant_response_message.tool_uses {
                 if !tool_uses.is_empty() {
                     // 检查下一条是否是带 toolResults 的 user
                     let next = items.get(idx + 1);
-                    let next_has_results = match next {
+                    let existing_result_ids: std::collections::HashSet<String> = match next {
                         Some(HistoryItem::User { user_input_message }) => {
                             user_input_message.user_input_message_context
                                 .as_ref()
                                 .and_then(|ctx| ctx.tool_results.as_ref())
-                                .map(|r| !r.is_empty())
-                                .unwrap_or(false)
+                                .map(|results| {
+                                    results.iter().map(|result| result.tool_use_id.clone()).collect()
+                                })
+                                .unwrap_or_default()
                         }
-                        _ => false,
+                        _ => std::collections::HashSet::new(),
                     };
 
-                    if !next_has_results {
-                        // 插入错误占位的 toolResults
-                        let error_results: Vec<KiroToolResult> = tool_uses.iter().map(|tu| {
-                            KiroToolResult {
-                                tool_use_id: tu.tool_use_id.clone(),
-                                content: vec![KiroToolResultContent::Text {
-                                    text: "Tool execution failed".to_string(),
-                                }],
-                                status: "error".to_string(),
+                    let missing_results: Vec<KiroToolResult> = tool_uses
+                        .iter()
+                        .filter(|tool_use| !existing_result_ids.contains(&tool_use.tool_use_id))
+                        .map(|tool_use| KiroToolResult {
+                            tool_use_id: tool_use.tool_use_id.clone(),
+                            content: vec![KiroToolResultContent::Text {
+                                text: "Tool execution failed".to_string(),
+                            }],
+                            status: "error".to_string(),
+                        })
+                        .collect();
+
+                    if !missing_results.is_empty() {
+                        patched.push(item);
+
+                        if let Some(HistoryItem::User { .. }) = next {
+                            let mut next_item = items[idx + 1].clone();
+                            if let HistoryItem::User {
+                                user_input_message,
+                            } = &mut next_item
+                            {
+                                if user_input_message.content.trim().is_empty() {
+                                    user_input_message.content =
+                                        "[Tool results]".to_string();
+                                }
+                                let ctx = user_input_message
+                                    .user_input_message_context
+                                    .get_or_insert_with(|| UserInputMessageContext {
+                                        additional_context: None,
+                                        app_studio_context: None,
+                                        console_state: None,
+                                        diagnostic: None,
+                                        editor_state: None,
+                                        env_state: None,
+                                        git_state: None,
+                                        shell_state: None,
+                                        tool_results: None,
+                                        tools: None,
+                                        user_settings: None,
+                                    });
+                                ctx.tool_results
+                                    .get_or_insert_with(Vec::new)
+                                    .extend(missing_results);
                             }
-                        }).collect();
+                            patched.push(next_item);
+                            idx += 2;
+                            continue;
+                        }
 
                         patched.push(HistoryItem::User {
                             user_input_message: HistoryUserMessage {
-                                content: String::new(),
-                                model_id: String::new(),
+                                content: "[Tool execution failed]".to_string(),
+                                model_id: fallback_model_id.to_string(),
                                 origin: "AI_EDITOR".to_string(),
                                 images: None,
                                 user_input_message_context: Some(UserInputMessageContext {
@@ -1753,18 +1809,76 @@ fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
                                     env_state: None,
                                     git_state: None,
                                     shell_state: None,
-                                    tool_results: Some(error_results),
+                                    tool_results: Some(missing_results),
                                     tools: None,
                                     user_settings: None,
                                 }),
                             },
                         });
+                        idx += 1;
+                        continue;
                     }
                 }
             }
         }
+
+        patched.push(item);
+        idx += 1;
     }
     items = patched;
+
+    // 步骤 3.5：user 有 toolResults 时，前一条必须是 assistant 且 ID 完全匹配
+    let mut cleaned_tool_results: Vec<HistoryItem> = Vec::new();
+    for item in items {
+        if let HistoryItem::User { user_input_message } = &item {
+            if let Some(results) = user_input_message
+                .user_input_message_context
+                .as_ref()
+                .and_then(|ctx| ctx.tool_results.as_ref())
+            {
+                if !results.is_empty() {
+                    let matching_assistant = match cleaned_tool_results.last() {
+                        Some(HistoryItem::Assistant {
+                            assistant_response_message,
+                        }) => {
+                            let tool_use_ids: std::collections::HashSet<String> =
+                                assistant_response_message
+                                    .tool_uses
+                                    .as_ref()
+                                    .map(|tool_uses| {
+                                        tool_uses
+                                            .iter()
+                                            .map(|tool_use| tool_use.tool_use_id.clone())
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
+                            results
+                                .iter()
+                                .all(|result| tool_use_ids.contains(&result.tool_use_id))
+                        }
+                        _ => false,
+                    };
+
+                    if !matching_assistant {
+                        let mut item = item;
+                        if let HistoryItem::User {
+                            user_input_message,
+                        } = &mut item
+                        {
+                            if user_input_message.content.trim().is_empty() {
+                                user_input_message.content = "Continue".to_string();
+                            }
+                            user_input_message.user_input_message_context = None;
+                        }
+                        cleaned_tool_results.push(item);
+                        continue;
+                    }
+                }
+            }
+        }
+        cleaned_tool_results.push(item);
+    }
+    items = cleaned_tool_results;
 
     // 步骤 4：修复交替（两个连续 user 之间插入 assistant，两个连续 assistant 之间插入 user）
     let mut alternated: Vec<HistoryItem> = Vec::new();
@@ -1792,7 +1906,7 @@ fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
                 alternated.push(HistoryItem::User {
                     user_input_message: HistoryUserMessage {
                         content: "Continue".to_string(),
-                        model_id: String::new(),
+                        model_id: fallback_model_id.to_string(),
                         origin: "AI_EDITOR".to_string(),
                         images: None,
                         user_input_message_context: None,
@@ -2812,6 +2926,117 @@ mod tests {
         thread,
         time::Duration,
     };
+
+    fn history_user(
+        content: &str,
+        model_id: &str,
+        tool_results: Option<Vec<KiroToolResult>>,
+    ) -> HistoryItem {
+        HistoryItem::User {
+            user_input_message: HistoryUserMessage {
+                content: content.to_string(),
+                model_id: model_id.to_string(),
+                origin: "AI_EDITOR".to_string(),
+                images: None,
+                user_input_message_context: tool_results.map(|tool_results| {
+                    UserInputMessageContext {
+                        additional_context: None,
+                        app_studio_context: None,
+                        console_state: None,
+                        diagnostic: None,
+                        editor_state: None,
+                        env_state: None,
+                        git_state: None,
+                        shell_state: None,
+                        tool_results: Some(tool_results),
+                        tools: None,
+                        user_settings: None,
+                    }
+                }),
+            },
+        }
+    }
+
+    fn history_assistant_with_tools(tool_use_ids: &[&str]) -> HistoryItem {
+        HistoryItem::Assistant {
+            assistant_response_message: HistoryAssistantMessage {
+                content: "Using tools".to_string(),
+                tool_uses: Some(
+                    tool_use_ids
+                        .iter()
+                        .map(|tool_use_id| KiroToolUse {
+                            name: "search".to_string(),
+                            input: json!({}),
+                            tool_use_id: (*tool_use_id).to_string(),
+                        })
+                        .collect(),
+                ),
+                reasoning_content: None,
+                references: None,
+                supplementary_web_links: None,
+                followup_prompt: None,
+                message_id: None,
+                cache_point: None,
+            },
+        }
+    }
+
+    fn tool_result(tool_use_id: &str) -> KiroToolResult {
+        KiroToolResult {
+            content: vec![KiroToolResultContent::Text {
+                text: "ok".to_string(),
+            }],
+            status: "success".to_string(),
+            tool_use_id: tool_use_id.to_string(),
+        }
+    }
+
+    #[test]
+    fn sanitize_history_appends_only_missing_tool_results() {
+        let history = sanitize_history(
+            vec![
+                history_user("Hello", "claude-sonnet-4.5", None),
+                history_assistant_with_tools(&["call_1", "call_2"]),
+                history_user("[Tool results]", "claude-sonnet-4.5", Some(vec![tool_result("call_1")])),
+            ],
+            "claude-sonnet-4.5",
+        );
+
+        assert_eq!(history.len(), 3);
+        let HistoryItem::User { user_input_message } = &history[2] else {
+            panic!("expected user with tool results");
+        };
+        let results = user_input_message
+            .user_input_message_context
+            .as_ref()
+            .and_then(|ctx| ctx.tool_results.as_ref())
+            .expect("tool results should be present");
+        let ids: std::collections::HashSet<_> =
+            results.iter().map(|result| result.tool_use_id.as_str()).collect();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains("call_1"));
+        assert!(ids.contains("call_2"));
+    }
+
+    #[test]
+    fn sanitize_history_removes_orphaned_tool_results() {
+        let history = sanitize_history(
+            vec![
+                history_user("Hello", "claude-sonnet-4.5", None),
+                history_user("", "claude-sonnet-4.5", Some(vec![tool_result("orphaned")])),
+            ],
+            "claude-sonnet-4.5",
+        );
+
+        let HistoryItem::User { user_input_message } = history
+            .last()
+            .expect("sanitized history should retain final user")
+        else {
+            panic!("expected final user");
+        };
+        assert_eq!(user_input_message.content, "Continue");
+        assert!(user_input_message.user_input_message_context.is_none());
+    }
 
     /// 回归测试：工具描述超长且截断点落在多字节字符（中文）中间时不得 panic。
     /// 旧实现 `&desc[..TOOL_DESCRIPTION_MAX_LENGTH]` 按字节切，会在
@@ -3939,4 +4164,3 @@ mod tests {
         );
     }
 }
-
