@@ -26,7 +26,7 @@ interface ConfirmModalProps {
 }
 
 /**
- * 通用确认/提示模态框
+ * Shared confirmation / notification modal.
  */
 function ConfirmModal({
   type = 'confirm',
@@ -88,10 +88,10 @@ function ConfirmModal({
             {message}
           </p>
           
-          {/* 自定义内容 */}
+          {/* Custom content */}
           {customContent}
           
-          {/* 原始响应展开区域 */}
+          {/* Raw response disclosure */}
           {rawData && (
             <div className="mt-4">
               <button
@@ -99,7 +99,7 @@ function ConfirmModal({
                 className={`flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors cursor-pointer`}
               >
                 {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                {expanded ? '收起原始响应' : '查看原始响应'}
+                {expanded ? t('common.hideRawResponse', { defaultValue: 'Hide raw response' }) : t('common.viewRawResponse', { defaultValue: 'View raw response' })}
               </button>
               {expanded && (
                 <div className="mt-2 relative">
@@ -110,7 +110,7 @@ function ConfirmModal({
                       setTimeout(() => setCopied(false), 2000)
                     }}
                     className={`absolute top-2 right-2 p-1.5 rounded hover:bg-muted/50 transition-colors cursor-pointer`}
-                    title="复制"
+                    title={t('common.copy')}
                   >
                     {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} className={"text-muted-foreground"} />}
                   </button>

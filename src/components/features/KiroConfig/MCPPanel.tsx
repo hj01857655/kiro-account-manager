@@ -71,11 +71,11 @@ function MCPPanel({ onCountChange, projectDir }: any) {
       const stats = await invoke<any>('get_mcp_tool_stats', { projectDir: projectDir || null })
       setToolCount(stats.estimatedTools)
     } catch (e) {
-      handleUiError('加载 MCP 配置失败', e, { userMessage: '加载 MCP 配置失败' })
+      handleUiError('load MCP config failed', e, { userMessage: t('mcp.saveFailed') })
     } finally {
       setLoading(false)
     }
-  }, [onCountChange, projectDir])
+  }, [onCountChange, projectDir, t])
 
   useEffect(() => { loadConfig() }, [loadConfig])
 
@@ -86,7 +86,7 @@ function MCPPanel({ onCountChange, projectDir }: any) {
       await invoke('toggle_mcp_server', { name, disabled, projectDir: projectDir || null })
     } catch (e) {
       setServers((prev: any) => ({ ...prev, [name]: { ...prev[name], disabled: oldDisabled } }))
-      handleUiError('切换 MCP 状态失败', e, { userMessage: '切换状态失败' })
+      handleUiError('toggle MCP status failed', e, { userMessage: t('mcp.toggleFailedInternal') })
     }
   }
 
@@ -96,7 +96,7 @@ function MCPPanel({ onCountChange, projectDir }: any) {
       await invoke('delete_mcp_server', { name, projectDir: projectDir || null })
       setServers((prev: any) => { const next = { ...prev }; delete next[name]; return next })
     } catch (e) {
-      handleUiError('删除 MCP 服务失败', e, { userMessage: '删除失败' })
+      handleUiError('delete MCP service failed', e, { userMessage: t('mcp.deleteFailed') })
     }
   }
 
@@ -119,10 +119,10 @@ function MCPPanel({ onCountChange, projectDir }: any) {
           </div>
           <div className="flex-1">
             <div className="text-xs font-semibold text-foreground mb-0.5">
-              MCP 工具数量较多
+              {t('mcp.toolCountWarningTitle')}
             </div>
             <div className="text-[11px] text-muted-foreground leading-relaxed">
-              您已配置约 {toolCount} 个 MCP 工具（{serverList.length} 个服务器）。过多的工具可能导致工具选择性能下降和上下文消耗增加。建议禁用不常用的服务器。
+              {t('mcp.toolCountWarningBody', { toolCount, serverCount: serverList.length })}
             </div>
           </div>
         </div>

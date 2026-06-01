@@ -19,7 +19,7 @@ export function useGatewayPolling({
   statusInterval = 2000,
   logsInterval = 5000
 }: UseGatewayPollingOptions) {
-  // 状态轮询
+  // Status polling.
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null
     let isActive = true
@@ -44,22 +44,22 @@ export function useGatewayPolling({
         })
     }
 
-    // 立即执行一次
+    // Run once immediately.
     poll()
 
-    // 设置定时轮询
+    // Schedule polling.
     timer = setInterval(poll, statusInterval)
 
-    // 监听页面可见性变化
+    // Pause polling while the page is hidden.
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // 页面隐藏时清除定时器
+        // Clear the timer while the page is hidden.
         if (timer) {
           clearInterval(timer)
           timer = null
         }
       } else {
-        // 页面可见时重新启动轮询
+        // Restart polling when the page becomes visible.
         if (!timer && isActive) {
           poll()
           timer = setInterval(poll, statusInterval)
@@ -78,7 +78,7 @@ export function useGatewayPolling({
     }
   }, [fallbackConfig, onStatus, statusInterval])
 
-  // 请求日志轮询
+  // Request log polling.
   useEffect(() => {
     if (activeTab !== 'observability') {
       return undefined
@@ -106,22 +106,22 @@ export function useGatewayPolling({
         })
     }
 
-    // 立即执行一次
+    // Run once immediately.
     poll()
 
-    // 设置定时轮询
+    // Schedule polling.
     timer = setInterval(poll, logsInterval)
 
-    // 监听页面可见性变化
+    // Pause polling while the page is hidden.
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // 页面隐藏时清除定时器
+        // Clear the timer while the page is hidden.
         if (timer) {
           clearInterval(timer)
           timer = null
         }
       } else {
-        // 页面可见时重新启动轮询
+        // Restart polling when the page becomes visible.
         if (!timer && isActive) {
           poll()
           timer = setInterval(poll, logsInterval)

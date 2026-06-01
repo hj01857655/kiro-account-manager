@@ -26,11 +26,11 @@ function MCPManager() {
       const config = await invoke<any>('get_mcp_config', { projectDir: null })
       setServers(config.mcpServers || {})
     } catch (e) {
-      handleUiError('加载 MCP 配置失败', e, { userMessage: '加载 MCP 配置失败' })
+      handleUiError('load MCP config failed', e, { userMessage: t('mcp.saveFailed') })
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     loadConfig()
@@ -45,7 +45,7 @@ function MCPManager() {
         [name]: { ...prev[name], disabled }
       }))
     } catch (e) {
-      handleUiError('切换 MCP 状态失败', e, { userMessage: '切换状态失败' })
+      handleUiError('toggle MCP status failed', e, { userMessage: t('mcp.toggleFailedInternal') })
     }
   }
 
@@ -61,7 +61,7 @@ function MCPManager() {
           return next
         })
       } catch (e) {
-        handleUiError('删除 MCP 服务失败', e, { userMessage: '删除失败' })
+        handleUiError('delete MCP service failed', e, { userMessage: t('mcp.deleteFailed') })
       }
     }
   }

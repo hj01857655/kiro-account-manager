@@ -25,20 +25,20 @@ interface SearchableTagSelectProps {
 }
 
 /**
- * 可搜索的标签选择下拉框
+ * Searchable tag select dropdown.
  */
 function SearchableTagSelect({
   tags = [],
   value,
   onChange,
-  placeholder = '搜索标签...',
+  placeholder = 'Search tags...',
   showAllOption = false,
   showNoneOption = false,
-  allLabel = '全部',
-  noneLabel = '无标签',
-  hasLabel = '有标签',
+  allLabel = 'All',
+  noneLabel = 'No tags',
+  hasLabel = 'Has tags',
   className = ''}: SearchableTagSelectProps) {
-  const { theme } = useApp()
+  const { t, theme } = useApp()
   const accent = useMemo(() => getThemeAccent(theme), [theme])
   const activeOptionClass = `${accent.bgSoft} ${accent.text} font-medium`
   const [open, setOpen] = useState(false)
@@ -47,7 +47,7 @@ function SearchableTagSelect({
   const panelRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // 点击外部关闭
+  // Close on outside click.
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !isPointerInsideContainer(e, [containerRef.current, panelRef.current])) {
@@ -59,34 +59,34 @@ function SearchableTagSelect({
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
-  // 打开时聚焦输入框
+  // Focus the input when opened.
   useEffect(() => {
     if (open && inputRef.current) {
       inputRef.current.focus()
     }
   }, [open])
 
-  // 过滤标签
+  // Filter tags.
   const filteredTags = tags.filter(tag => 
     tag.name.toLowerCase().includes(search.toLowerCase())
   )
 
-  // 获取当前选中的标签
+  // Get the selected tag.
   const selectedTag = tags.find(t => t.id === value)
 
-  // 选择标签
+  // Select a tag.
   const handleSelect = (tagId: string | null) => {
     onChange(tagId)
     setOpen(false)
     setSearch('')
   }
 
-  // 显示文本
+  // Display text.
   const displayText = value === '__none__' ? noneLabel : value === '__has__' ? hasLabel : (selectedTag?.name || '')
 
   return (
     <div className={`relative ${className}`} ref={containerRef}>
-      {/* 输入框（可搜索） */}
+      {/* Searchable input */}
       <div className={`w-full flex items-center border rounded-xl text-sm bg-background border-input ${open ? `ring-2 ${accent.ring} ${accent.border}` : ''} transition-all cursor-pointer shadow-sm`}>
         {selectedTag && (
           <span className="ml-4 w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: selectedTag.color }} />
@@ -105,7 +105,7 @@ function SearchableTagSelect({
             type="button" 
             onClick={(e) => { e.stopPropagation(); onChange(null); setSearch('') }} 
             className={`p-1.5 mr-1 rounded-lg hover:bg-muted/50 hover:bg-red-500/10 transition-all hover:scale-110 active:scale-95`}
-            title="清空"
+            title={t('settings.clear')}
           >
             <X size={14} className="text-red-500" strokeWidth={2.5} />
           </button>
@@ -115,14 +115,14 @@ function SearchableTagSelect({
         </button>
       </div>
 
-      {/* 下拉面板 */}
+      {/* Dropdown panel */}
       {open && (
         <div
           ref={panelRef}
           className={`absolute left-0 right-0 top-full mt-2 glass-card border border-border rounded-xl shadow-xl z-50 overflow-hidden`}
         >
             <div className="max-h-56 overflow-y-auto">
-            {/* 全部选项 */}
+            {/* All option */}
             {showAllOption && (
               <button
                 type="button"
@@ -181,7 +181,7 @@ function SearchableTagSelect({
               ))
             ) : search ? (
               <div className={`px-4 py-6 text-center text-sm text-muted-foreground`}>
-                未找到匹配的标签
+                {t('common.noMatches')}
               </div>
             ) : null}
           </div>

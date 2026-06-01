@@ -125,19 +125,19 @@ export function getAccountStatusMeta(statusOrAccount: string | Account | any, t?
 
   switch (normalized) {
     case 'active':
-      return { key: 'active', label: t?.('accounts.active') ?? '正常', tone: 'success' }
+      return { key: 'active', label: t?.('accounts.active') ?? 'Active', tone: 'success' }
     case 'capped':
-      return { key: 'capped', label: t?.('accounts.capped') ?? '封顶', tone: 'danger' }
+      return { key: 'capped', label: t?.('accounts.capped') ?? 'Capped', tone: 'danger' }
     case 'overage':
-      return { key: 'overage', label: t?.('accounts.overage') ?? '超额中', tone: 'warning' }
+      return { key: 'overage', label: t?.('accounts.overage') ?? 'Overage', tone: 'warning' }
     case 'banned':
-      return { key: 'banned', label: t?.('accounts.banned') ?? '封禁', tone: 'danger' }
+      return { key: 'banned', label: t?.('accounts.banned') ?? 'Banned', tone: 'danger' }
     case 'invalid':
-      return { key: 'invalid', label: t?.('accounts.invalid') ?? '失效', tone: 'danger' }
+      return { key: 'invalid', label: t?.('accounts.invalid') ?? 'Invalid', tone: 'danger' }
     case 'expired':
-      return { key: 'expired', label: t?.('accounts.expired') ?? '过期', tone: 'warning' }
+      return { key: 'expired', label: t?.('accounts.expired') ?? 'Expired', tone: 'warning' }
     default:
       const { status } = resolveStatusInput(statusOrAccount, usageData)
-      return { key: normalized, label: status || (t?.('common.unknown') ?? '未知'), tone: 'warning' }
+      return { key: normalized, label: status || (t?.('common.unknown') ?? 'Unknown'), tone: 'warning' }
   }
 }

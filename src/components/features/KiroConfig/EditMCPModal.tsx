@@ -11,7 +11,7 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
   const accent = useMemo(() => getThemeAccent(theme), [theme])
   const accentGradientButtonClass = getGradientAccentButton(accent)
 
-  // 定义本地色彩系统
+  // Local color system.
   const colors = {
     inputFocus: 'focus:ring-primary/20 focus:border-primary'
   }
@@ -21,7 +21,7 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
   const [error, setError] = useState('')
   const [parseError, setParseError] = useState('')
 
-  // 初始化 JSON
+  // Initialize JSON.
   useEffect(() => {
     const configObj = {
       command: config.command || '',
@@ -33,7 +33,7 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
     setJsonConfig(JSON.stringify(configObj, null, 2))
   }, [config])
 
-  // 实时校验 JSON
+  // Validate JSON in real time.
   useEffect(() => {
     if (!jsonConfig.trim()) {
       setParseError('')
@@ -42,16 +42,16 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
     try {
       const parsed = JSON.parse(jsonConfig)
       if (!parsed.command) {
-        setParseError('缺少 command 字段')
+        setParseError(t('mcp.missingCommand', { defaultValue: 'Missing command field' }))
         return
       }
       setParseError('')
     } catch (e) {
-      setParseError('JSON 格式错误')
+      setParseError(t('mcp.jsonFormatError', { defaultValue: 'JSON format error' }))
     }
-  }, [jsonConfig])
+  }, [jsonConfig, t])
 
-  // 格式化 JSON
+  // Format JSON.
   const formatJson = () => {
     try {
       const parsed = JSON.parse(jsonConfig)
@@ -59,13 +59,13 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
     } catch {}
   }
 
-  // 保存
+  // Save.
   const handleSave = async () => {
     let parsed: any
     try {
       parsed = JSON.parse(jsonConfig)
     } catch (e: any) {
-      setError('JSON 格式错误: ' + e.message)
+      setError(t('mcp.jsonFormatErrorWithMessage', { message: e.message, defaultValue: `JSON format error: ${e.message}` }))
       return
     }
 
@@ -101,10 +101,10 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
         className={`relative overflow-hidden glass-card border border-border rounded-lg shadow-2xl w-[520px] max-h-[85vh] flex flex-col`}
         onClick={e => e.stopPropagation()}
       >
-        {/* 顶部渐变装饰 */}
+        {/* Top gradient accent */}
         <div className={`absolute top-0 left-0 right-0 h-24 ${accent.bgSoft} pointer-events-none`} />
         
-        {/* 标题 */}
+        {/* Title */}
         <div className={`relative flex items-center justify-between px-6 py-4 border-b border-border`}>
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-lg ${accent.shadow}`}>
@@ -117,13 +117,13 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
           </button>
         </div>
 
-        {/* 内容 */}
+        {/* Content */}
         <div className="relative flex-1 overflow-auto p-6 space-y-4">
-          {/* JSON 配置 */}
+          {/* JSON config */}
           <div className="flex-1">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
-                <label className={`text-xs text-muted-foreground`}>配置</label>
+                <label className={`text-xs text-muted-foreground`}>{t('gateway.config', { defaultValue: 'Configuration' })}</label>
                 {parseError && (
                   <span className="text-xs text-red-500 flex items-center gap-1">
                     <AlertCircle size={12} />
@@ -136,7 +136,7 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
                 className={`cursor-pointer text-xs text-muted-foreground ${accent.textHover} flex items-center gap-1 transition-colors`}
               >
                 <Wand2 size={12} />
-                格式化
+                {t('accounts.format', { defaultValue: 'Format' })}
               </button>
             </div>
             <Textarea
@@ -148,17 +148,21 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir }: any) {
             />
             <p className={`text-xs text-muted-foreground mt-2 flex items-start gap-1.5`}>
               <span className={`${accent.text} font-medium`}>💡</span>
-              <span>autoApprove 支持通配符 <code className={`px-1.5 py-0.5 ${accent.bgSoft} ${accent.text} rounded`}>["*"]</code> 自动批准该服务器的所有工具</span>
+              <span>
+                {t('mcp.autoApproveWildcardHint', { defaultValue: 'autoApprove supports the wildcard' })}{' '}
+                <code className={`px-1.5 py-0.5 ${accent.bgSoft} ${accent.text} rounded`}>["*"]</code>{' '}
+                {t('mcp.autoApproveWildcardHintSuffix', { defaultValue: 'to automatically approve all tools for this server' })}
+              </span>
             </p>
           </div>
 
-          {/* 错误提示 */}
+          {/* Error message */}
           {error && (
             <div className="text-red-500 text-xs bg-red-500/10 px-3 py-2 rounded-lg">{error}</div>
           )}
         </div>
 
-        {/* 底部按钮 */}
+        {/* Footer actions */}
         <div className={`relative flex justify-end gap-3 px-6 py-4 border-t border-border`}>
           <button
             onClick={onClose}

@@ -354,7 +354,7 @@ function SettingsGeneral({
         </SectionCard>
       </div>
 
-      {/* 应用数据目录 + 系统机器码（双栏并列）*/}
+      {/* App data directory and system machine GUID */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <SectionCard
           title={t('settings.appDataDir')}
@@ -369,7 +369,7 @@ function SettingsGeneral({
               <button
                 onClick={() => copyToClipboard(appDataDir, 'appDataDir')}
                 className="p-1.5 rounded border border-border hover:bg-muted/50 transition-colors flex-shrink-0"
-                title="复制路径"
+                title={t('settings.copyPath')}
               >
                 {copiedField === 'appDataDir' ? <Check size={13} className="text-green-500" /> : <Copy size={13} className="text-muted-foreground" />}
               </button>
@@ -385,7 +385,7 @@ function SettingsGeneral({
           </div>
         </SectionCard>
 
-        {/* 系统机器码 */}
+        {/* System machine GUID */}
         <SectionCard
           title={t('settings.systemMachineGuid')}
           accent="orange"
@@ -406,7 +406,7 @@ function SettingsGeneral({
               <button
                 onClick={() => copyToClipboard(systemMachineInfo.machineGuid, 'sysMachineGuid')}
                 className="p-1.5 rounded border border-border hover:bg-muted/50 transition-colors flex-shrink-0"
-                title="复制"
+                title={t('settings.copy')}
               >
                 {copiedField === 'sysMachineGuid' ? <Check size={13} className="text-green-500" /> : <Copy size={13} className="text-muted-foreground" />}
               </button>

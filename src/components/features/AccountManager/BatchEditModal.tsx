@@ -52,13 +52,13 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
   useEffect(() => {
     Promise.all([getTags(), getGroups()])
       .then(([tagsData, groupsData]) => {
-        setTags(tagsData)
-        setGroups(groupsData)
+        setTags(tagsData as TagDefinition[])
+        setGroups(groupsData as GroupDefinition[])
       })
       .catch(() => {})
   }, [])
 
-  // 点击外部关闭标签下拉
+  // Close the tag dropdown on outside click.
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (tagInputContainerRef.current && !tagInputContainerRef.current.contains(e.target as Node)) {
@@ -69,14 +69,14 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // 计算选中账号的共同标签和分组
+  // Calculate common tags and group across selected accounts.
   useEffect(() => {
     if (accounts.length === 0 || accountIds.length === 0) return
     
     const selectedAccounts = accounts.filter(a => accountIds.includes(a.id))
     if (selectedAccounts.length === 0) return
     
-    // 标签交集
+    // Tag intersection.
     const firstTags = new Set((selectedAccounts[0]?.tagLinks || []).map(link => link.tagId))
     const commonTags = selectedAccounts.slice(1).reduce((common, account) => {
       const accountTags = new Set((account.tagLinks || []).map(link => link.tagId))
@@ -84,7 +84,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
     }, firstTags)
     setSelectedTagIds([...commonTags])
     
-    // 分组（如果所有账号都有相同分组）
+    // Group, only when all selected accounts share one.
     const firstGroupId = selectedAccounts[0]?.groupId || ''
     const allSameGroup = selectedAccounts.every(a => (a.groupId || '') === firstGroupId)
     if (allSameGroup) {
@@ -151,7 +151,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
   const handleSubmit = async () => {
     setLoading(true)
     try {
-      // 批量设置标签和分组
+      // Batch-set tags and group.
       await Promise.all([
         ...accountIds.map(id => setAccountTags(id, selectedTagIds)),
         ...accountIds.map(id => setAccountGroup(id, selectedGroupId || null))
@@ -176,16 +176,16 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
     <DialogRoot open={true} onOpenChange={(open) => !open && onClose()}>
       <DialogContent maxWidth="560px">
         <DialogHeader icon={Edit} iconColor={accent.text} iconBg={accent.iconBadgeBg}>
-          <DialogTitle>批量编辑</DialogTitle>
-          <DialogDescription>{accountIds.length} 个账号</DialogDescription>
+          <DialogTitle>{t('accounts.batchEdit')}</DialogTitle>
+          <DialogDescription>{accountIds.length} {t('stats.accounts')}</DialogDescription>
         </DialogHeader>
 
         <DialogBody gap="lg">
-          {/* 分组设置 */}
+          {/* Group settings */}
           <div>
             <label className={`block text-sm font-semibold text-foreground mb-3 flex items-center gap-2`}>
               <Folder size={16} className={accent.text} />
-              分组
+              {t('groups.title')}
             </label>
             
             {showNewGroupInput ? (
@@ -203,7 +203,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                       setNewGroupName('')
                     }
                   }}
-                  placeholder="输入新分组名..."
+                  placeholder={t('group.createNew', { defaultValue: 'Create new group' })}
                   autoFocus
                   className={`flex-1 px-4 py-2.5 border-2 rounded-xl text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 transition-all outline-none`}
                 />
@@ -230,7 +230,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                   onChange={(e) => setSelectedGroupId(e.target.value)}
                   className={`flex-1 px-4 py-2.5 border-2 rounded-xl text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 transition-all outline-none cursor-pointer`}
                 >
-                  <option value="">无分组</option>
+                  <option value="">{t('groups.noGroup')}</option>
                   {groups.map(g => (
                     <option key={g.id} value={g.id}>{g.name}</option>
                   ))}
@@ -239,7 +239,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                   type="button" 
                   onClick={() => setShowNewGroupInput(true)}
                   className={`px-4 py-2.5 ${accent.solidBg} text-white rounded-xl ${accent.solidHoverBg} transition-all cursor-pointer`}
-                  title="创建新分组"
+                  title={t('group.createNew', { defaultValue: 'Create new group' })}
                 >
                   <Plus size={18} />
                 </button>
@@ -252,22 +252,22 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                   className="w-3 h-3 rounded-full" 
                   style={{ backgroundColor: selectedGroup.color || '#8b5cf6' }}
                 />
-                已选择：{selectedGroup.name}
+                {t('common.selected')}: {selectedGroup.name}
               </div>
             )}
           </div>
 
-          {/* 标签设置 */}
+          {/* Tag settings */}
           <div>
             <label className={`block text-sm font-semibold text-foreground mb-3 flex items-center gap-2`}>
               <Tag size={16} className={accent.text} />
-              标签
+              {t('tags.title')}
             </label>
             
-            {/* 已选标签 */}
+            {/* Selected tags */}
             <div className="flex flex-wrap gap-2 min-h-[36px] mb-3">
               {selectedTagIds.length === 0 ? (
-                <span className={`text-sm text-muted-foreground`}>未选择标签</span>
+                <span className={`text-sm text-muted-foreground`}>{t('tags.noTags')}</span>
               ) : (
                 selectedTagIds.map(tagId => {
                   const tag = tags.find(t => t.id === tagId)
@@ -276,7 +276,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                     <span key={tagId} className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full text-white cursor-pointer hover:opacity-80"
                       style={{ backgroundColor: tag.color || '#8b5cf6' }}
                       onClick={() => handleToggleTag(tagId)}
-                      title="点击移除"
+                      title={t('group.clickToRemove')}
                     >
                       {tag.name}
                       <X size={12} />
@@ -286,7 +286,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
               )}
             </div>
 
-            {/* 搜索/添加标签 */}
+            {/* Search / add tag */}
             <div className="flex gap-2">
               <div className="flex-1 relative" ref={tagInputContainerRef}>
                 <input
@@ -302,10 +302,10 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                       }
                     }
                   }}
-                  placeholder="搜索或输入新标签..."
+                  placeholder={t('tags.searchOrCreate', { defaultValue: 'Search or enter a new tag...' })}
                   className={`w-full px-4 py-2.5 border-2 rounded-xl text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 transition-all outline-none`}
                 />
-                {/* 搜索建议下拉 */}
+                {/* Search suggestions */}
                 {showTagDropdown && availableTags.length > 0 && (
                   <div className={`absolute top-full left-0 right-0 mt-1 glass-card border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto`}>
                     {filteredTags.map(tag => (
@@ -318,7 +318,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                     ))}
                     {filteredTags.length === 0 && newTagName.trim() && (
                       <div className={`px-3 py-2 text-sm text-muted-foreground`}>
-                        按回车创建 "{newTagName.trim()}"
+                        {t('tags.pressEnterToCreate', { name: newTagName.trim(), defaultValue: `Press Enter to create "${newTagName.trim()}"` })}
                       </div>
                     )}
                   </div>
@@ -329,13 +329,13 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                 onClick={handleAddTag} 
                 disabled={!newTagName.trim()}
                 className={`px-4 py-2.5 ${accent.solidBg} text-white rounded-xl text-sm ${accent.solidHoverBg} disabled:opacity-50 transition-all cursor-pointer`}
-                title="添加标签"
+                title={t('group.addTag')}
               >
                 <Plus size={18} />
               </button>
             </div>
             <p className={`text-xs text-muted-foreground mt-2 leading-relaxed`}>
-              输入搜索已有标签，或直接输入创建新标签
+              {t('tags.searchOrCreateHint', { defaultValue: 'Search existing tags, or type directly to create a new tag' })}
             </p>
           </div>
         </DialogBody>

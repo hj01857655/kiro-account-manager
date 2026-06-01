@@ -7,41 +7,42 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { useApp } from '@/hooks/useApp'
 
-// 预置过滤规则
+// Preset filter rules.
 const PRESET_RULES = [
   {
-    name: '过滤 Git 状态信息',
+    name: 'Filter Git status information',
     ruleType: 'lines-containing',
     matchPattern: 'git status',
     replace: ''
   },
   {
-    name: '过滤最近提交信息',
+    name: 'Filter recent commit information',
     ruleType: 'lines-containing',
     matchPattern: 'Recent commits:',
     replace: ''
   },
   {
-    name: '过滤助手知识截止日期',
+    name: 'Filter assistant knowledge cutoff',
     ruleType: 'lines-containing',
     matchPattern: 'Assistant knowledge cutoff',
     replace: ''
   },
   {
-    name: '过滤计费头信息',
+    name: 'Filter billing header information',
     ruleType: 'lines-containing',
     matchPattern: 'x-anthropic-billing-header:',
     replace: ''
   },
   {
-    name: '过滤快速模式标签',
+    name: 'Filter fast mode tags',
     ruleType: 'regex',
     matchPattern: '<fast_mode_info>.*?</fast_mode_info>',
     replace: ''
   },
   {
-    name: '过滤项目路径信息',
+    name: 'Filter project path information',
     ruleType: 'lines-containing',
     matchPattern: '.claude/projects/',
     replace: ''
@@ -57,6 +58,7 @@ interface PromptFilterRulesDialogProps {
 }
 
 function PromptFilterRulesDialog({ open, onOpenChange, promptFilterRules, setField, onSave }: PromptFilterRulesDialogProps) {
+  const { t } = useApp()
   const rules = promptFilterRules || []
 
   const handleToggle = (idx: number, checked: boolean) => {
@@ -119,17 +121,19 @@ function PromptFilterRulesDialog({ open, onOpenChange, promptFilterRules, setFie
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>提示词过滤规则</DialogTitle>
+          <DialogTitle>{t('gateway.promptFilterRules', { defaultValue: 'Prompt Filter Rules' })}</DialogTitle>
           <DialogDescription>
-            自定义正则表达式或关键字过滤规则，用于清理系统提示中的噪音内容
+            {t('gateway.promptFilterRulesDesc', { defaultValue: 'Configure regular expression or keyword filters to remove noisy content from system prompts.' })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* 现有规则列表 */}
+          {/* Existing rules */}
           {rules.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm font-medium">已配置规则 ({rules.length})</Label>
+              <Label className="text-sm font-medium">
+                {t('gateway.configuredRules', { count: rules.length, defaultValue: `Configured Rules (${rules.length})` })}
+              </Label>
               <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3 bg-muted/20">
                 {rules.map((rule: any, idx: number) => (
                   <div key={rule.id || idx} className="flex items-start gap-3 p-3 rounded-lg border bg-background">
@@ -142,15 +146,17 @@ function PromptFilterRulesDialog({ open, onOpenChange, promptFilterRules, setFie
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm">{rule.name}</span>
                         <Badge variant="outline" className="text-xs">
-                          {rule.ruleType === 'regex' ? '正则' : '包含关键字'}
+                          {rule.ruleType === 'regex'
+                            ? t('gateway.regex', { defaultValue: 'Regex' })
+                            : t('gateway.containsKeyword', { defaultValue: 'Contains keyword' })}
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground font-mono break-all">
-                        匹配: {rule.matchPattern}
+                        {t('gateway.match', { defaultValue: 'Match' })}: {rule.matchPattern}
                       </div>
                       {rule.ruleType === 'regex' && rule.replace && (
                         <div className="text-xs text-muted-foreground font-mono break-all">
-                          替换: {rule.replace}
+                          {t('gateway.replace', { defaultValue: 'Replace' })}: {rule.replace}
                         </div>
                       )}
                     </div>
@@ -168,63 +174,63 @@ function PromptFilterRulesDialog({ open, onOpenChange, promptFilterRules, setFie
             </div>
           )}
 
-          {/* 添加新规则 */}
+          {/* Add a new rule */}
           <div className="space-y-3 border rounded-lg p-4 bg-muted/10">
-            <Label className="text-sm font-medium">添加新规则</Label>
+            <Label className="text-sm font-medium">{t('gateway.addNewRule', { defaultValue: 'Add New Rule' })}</Label>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">规则名称</Label>
-                <Input id="dialog-filter-name" placeholder="例如：过滤 Git 状态" />
+                <Label className="text-xs text-muted-foreground">{t('gateway.ruleName', { defaultValue: 'Rule Name' })}</Label>
+                <Input id="dialog-filter-name" placeholder={t('gateway.ruleNameExample', { defaultValue: 'Example: filter Git status' })} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">规则类型</Label>
+                <Label className="text-xs text-muted-foreground">{t('gateway.ruleType', { defaultValue: 'Rule Type' })}</Label>
                 <Select defaultValue="lines-containing">
                   <SelectTrigger id="dialog-filter-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="lines-containing">包含关键字（删除匹配行）</SelectItem>
-                    <SelectItem value="regex">正则表达式（替换匹配内容）</SelectItem>
+                    <SelectItem value="lines-containing">{t('gateway.linesContaining', { defaultValue: 'Contains keyword (delete matching lines)' })}</SelectItem>
+                    <SelectItem value="regex">{t('gateway.regexReplace', { defaultValue: 'Regular expression (replace matches)' })}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">匹配模式</Label>
+              <Label className="text-xs text-muted-foreground">{t('gateway.matchPattern', { defaultValue: 'Match Pattern' })}</Label>
               <Textarea
                 id="dialog-filter-pattern"
-                placeholder="关键字模式：git status&#10;正则模式：&lt;fast_mode_info&gt;.*?&lt;/fast_mode_info&gt;"
+                placeholder={t('gateway.matchPatternPlaceholder', { defaultValue: 'Keyword mode: git status\nRegex mode: <fast_mode_info>.*?</fast_mode_info>' })}
                 rows={2}
                 className="font-mono text-xs"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">替换内容（仅正则类型，留空表示删除）</Label>
+              <Label className="text-xs text-muted-foreground">{t('gateway.replacementContent', { defaultValue: 'Replacement Content (regex only, leave empty to delete)' })}</Label>
               <Input
                 id="dialog-filter-replace"
-                placeholder="留空表示删除匹配内容"
+                placeholder={t('gateway.leaveEmptyToDelete', { defaultValue: 'Leave empty to delete matches' })}
                 className="font-mono text-xs"
               />
             </div>
             <div className="flex gap-2">
               <Button size="sm" onClick={handleAdd} className="flex-1">
                 <Plus size={14} className="mr-1" />
-                添加规则
+                {t('gateway.addRule', { defaultValue: 'Add Rule' })}
               </Button>
               <Button size="sm" variant="outline" onClick={handlePreset}>
                 <Filter size={14} className="mr-1" />
-                添加预置规则
+                {t('gateway.addPresetRules', { defaultValue: 'Add Preset Rules' })}
               </Button>
             </div>
           </div>
 
-          {/* 底部操作 */}
+          {/* Footer actions */}
           <div className="flex justify-end gap-2 pt-2 border-t">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              取消
+              {t('common.cancel', { defaultValue: 'Cancel' })}
             </Button>
             <Button onClick={handleSave}>
-              保存配置
+              {t('gateway.saveConfig', { defaultValue: 'Save Config' })}
             </Button>
           </div>
         </div>

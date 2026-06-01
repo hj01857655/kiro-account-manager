@@ -153,9 +153,9 @@ function AccountTable({
       { divider: true },
       { icon: Key , label: t('accountCard.refreshQuota'), onClick: () => onRefresh(account.id), disabled: Boolean(rowState.isRefreshing) },
       { icon: KeyRound , label: t('accountCard.refreshToken'), onClick: () => onRefreshToken?.(account.id), disabled: Boolean(rowState.isRefreshingToken) },
-      { icon: LogIn, label: isUnavailable ? `${statusMeta.label}账号不可切换` : t('accountCard.LogIn'), onClick: () => onLogin(account), disabled: Boolean(rowState.isSwitching) || isUnavailable },
+      { icon: LogIn, label: isUnavailable ? t('accountCard.unavailableCannotSwitch', { status: statusMeta.label }) : t('accountCard.LogIn'), onClick: () => onLogin(account), disabled: Boolean(rowState.isSwitching) || isUnavailable },
       { divider: true },
-      { label: account.enabled === false ? '启用账号' : '禁用账号', onClick: () => onToggleEnabled?.(account, account.enabled === false) },
+      { label: account.enabled === false ? t('accountCard.enableAccount') : t('accountCard.disableAccount'), onClick: () => onToggleEnabled?.(account, account.enabled === false) },
       { icon: Trash2, label: t('accountCard.delete'), onClick: () => onDelete(account.id), danger: true },
     ]
 
@@ -210,7 +210,7 @@ function AccountTable({
             </span>
           </label>
           <span className="text-xs text-muted-foreground">
-            {accounts.length === totalCount ? `共 ${totalCount} 个账号` : `${accounts.length} / ${totalCount} 个账号`}
+            {accounts.length === totalCount ? t('accounts.totalCount', { count: totalCount }) : t('accounts.displayCount', { current: accounts.length, total: totalCount })}
           </span>
         </div>
       )}

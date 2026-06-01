@@ -40,18 +40,18 @@ const QuotaCard = memo(({ title, used, quota, icon, status, expiry, colors, t }:
       <div className="flex items-center gap-2 mb-3">
         <div className={`w-2.5 h-2.5 rounded-full ${
           hasQuota && isActive
-            ? title.includes('试用')
+            ? icon === '⏰'
               ? 'bg-cyan-500 shadow-lg shadow-cyan-500/50'
-              : title.includes('奖励')
+              : icon === '🎁'
                 ? 'bg-purple-500 shadow-lg shadow-purple-500/50'
                 : 'bg-blue-500 shadow-lg shadow-blue-500/50'
             : 'bg-gray-400'
         }`}></div>
         <span className={`text-xs font-medium uppercase tracking-wide ${
           hasQuota && isActive
-            ? title.includes('试用')
+            ? icon === '⏰'
               ? 'text-cyan-500'
-              : title.includes('奖励')
+              : icon === '🎁'
                 ? 'text-purple-500'
                 : "text-muted-foreground"
             : "text-muted-foreground"
@@ -176,7 +176,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
       
       // 如果有警告，显示提示
       if (result.warning) {
-        await showError('同步警告', result.warning)
+        await showError(t('common.warning'), result.warning)
       }
       
       // 封禁账号额度为 0
@@ -186,7 +186,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
       setForm(prev => ({ ...prev, quota, used, status: updated.status }))
     } catch (e) {
       const errorMsg = String(e)
-      let status = '刷新失败'
+      let status = t('detail.refreshFailed')
       if (errorMsg.includes('BANNED')) {
         status = 'banned'
       } else if (errorMsg.includes('AUTH_ERROR') || errorMsg.includes('401') || errorMsg.includes('invalid')) {
@@ -220,7 +220,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
   const freeTrialQuota = trialActive ? (freeTrialInfo?.usageLimit || 0) : 0
   const freeTrialUsed = trialActive ? (freeTrialInfo?.currentUsage || 0) : 0
   
-  // 检查每个奖励是否过期（只计入未过期且状态为 ACTIVE 的奖励）
+  // Count only active, unexpired bonuses.
   let bonusQuota = 0, bonusUsed = 0
   bonuses.forEach(b => {
     const expiry = b.expiresAt ? b.expiresAt * 1000 : Infinity
@@ -238,13 +238,13 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
   return createPortal(
     <DialogRoot open={true} onOpenChange={(open) => !open && onClose()}>
       <DialogContent maxWidth="800px" showClose={false}>
-        {/* 顶部渐变背景 */}
+        {/* Top gradient background */}
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-br from-blue-500/5 via-purple-500/3 to-transparent pointer-events-none rounded-t-2xl" />
         
         <div className={`sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-6 py-4 rounded-t-2xl`}>
-          <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">账号详情</div>
+          <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">{t('detail.accountDetails', { defaultValue: 'Account Details' })}</div>
           <div className="flex items-start gap-3">
-            {/* 头像图标 */}
+            {/* Avatar icon */}
             <div className={`
               w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 shadow-md
               ${currentAccount.provider === 'Google'
@@ -257,7 +257,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
               <User size={22} className="text-white" strokeWidth={2} />
             </div>
             
-            {/* 账号信息 */}
+            {/* Account information */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <h2 className={`text-base font-semibold text-foreground truncate`}>
@@ -292,7 +292,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                 <span>{t('detail.addedAt')} {currentAccount.addedAt?.split(' ')[0]}</span>
               </div>
               
-              {/* 机器码 */}
+              {/* Machine ID */}
               {currentAccount.machineId && (
                 <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted/30`}>
                   <span className={`text-[10px] font-medium text-muted-foreground`}>Machine ID:</span>
@@ -309,7 +309,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                 </div>
               )}
             </div>
-            {/* 关闭按钮 */}
+            {/* Close button */}
             <button
               onClick={onClose}
               className="p-2 rounded-full hover:bg-muted transition-colors flex-shrink-0"
@@ -319,9 +319,9 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
           </div>
         </div>
         
-        {/* Body - 使用 DialogBody 的 noPadding，自己控制每个区域的 padding */}
+        {/* Body */}
         <DialogBody noPadding>
-          {/* 配额总览 */}
+          {/* Quota overview */}
           <div className={`border-b border-border px-6 py-4`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -372,7 +372,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
             </div>
             
             <div className="grid grid-cols-3 gap-3">
-              {/* 主配额卡片 */}
+              {/* Main quota card */}
               <QuotaCard
                 title={t('detail.mainQuota')}
                 used={form.used}
@@ -383,7 +383,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                 t={t}
               />
               
-              {/* 试用配额卡片 */}
+              {/* Trial quota card */}
               <QuotaCard
                 title={t('detail.freeTrial')}
                 used={freeTrialUsed}
@@ -395,7 +395,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                 t={t}
               />
               
-              {/* 奖励配额卡片 */}
+              {/* Bonus quota card */}
               <QuotaCard
                 title={t('detail.bonusTotal')}
                 used={bonusUsed}
@@ -451,11 +451,11 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
               </div>
             )}
             
-            {/* 订阅信息 */}
+            {/* Subscription information */}
             <div className="mt-6 pt-5 border-t border-border">
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-lg">📋</span>
-                <span className={`text-sm font-medium text-foreground`}>订阅信息</span>
+                <span className={`text-sm font-medium text-foreground`}>{t('detail.subscriptionInfo', { defaultValue: 'Subscription Information' })}</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className={`p-3 rounded-lg bg-muted/30`}>
@@ -487,23 +487,23 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                   </div>
                 </div>
                 <div className={`p-3 rounded-lg bg-muted/30`}>
-                  <div className={`text-xs text-muted-foreground mb-1`}>超额能力</div>
+                  <div className={`text-xs text-muted-foreground mb-1`}>{t('home.overageCapability', { defaultValue: 'Overage Capability' })}</div>
                   <div className={"text-foreground"}>
                     {currentAccount.usageData?.subscriptionInfo?.overageCapability === 'OVERAGE_CAPABLE' ? (
-                      <span className="text-green-500 font-medium">✓ 支持</span>
+                      <span className="text-green-500 font-medium">✓ {t('home.supported', { defaultValue: 'Supported' })}</span>
                     ) : (
-                      <span className={"text-muted-foreground"}>✗ 不支持</span>
+                      <span className={"text-muted-foreground"}>✗ {t('home.notSupported', { defaultValue: 'Not supported' })}</span>
                     )}
                   </div>
                 </div>
                 {currentAccount.usageData?.subscriptionInfo?.overageCapability === 'OVERAGE_CAPABLE' && (
                   <div className={`p-3 rounded-lg bg-muted/30`}>
-                    <div className={`text-xs text-muted-foreground mb-1`}>超额状态</div>
+                    <div className={`text-xs text-muted-foreground mb-1`}>{t('home.overageStatus', { defaultValue: 'Overage Status' })}</div>
                     <div className={"text-foreground"}>
                       {currentAccount.usageData?.overageConfiguration?.overageStatus === 'ENABLED' ? (
-                        <span className="text-green-500 font-medium">✓ 已开启</span>
+                        <span className="text-green-500 font-medium">✓ {t('home.enabled')}</span>
                       ) : (
-                        <span className={"text-muted-foreground"}>✗ 已关闭</span>
+                        <span className={"text-muted-foreground"}>✗ {t('home.disabled')}</span>
                       )}
                     </div>
                   </div>
@@ -511,25 +511,25 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                 {breakdown?.overageRate != null && (
                   <>
                     <div className={`p-3 rounded-lg bg-muted/30`}>
-                      <div className={`text-xs text-muted-foreground mb-1`}>超额费率</div>
+                      <div className={`text-xs text-muted-foreground mb-1`}>{t('home.overageRate', { defaultValue: 'Overage Rate' })}</div>
                       <div className={`text-foreground font-medium`}>
                         {breakdown.currency === 'USD' ? '$' : breakdown.currency}{breakdown.overageRate}/Credit
                       </div>
                     </div>
                     <div className={`p-3 rounded-lg bg-muted/30`}>
-                      <div className={`text-xs text-muted-foreground mb-1`}>超额上限</div>
+                      <div className={`text-xs text-muted-foreground mb-1`}>{t('home.overageCap', { defaultValue: 'Overage Cap' })}</div>
                       <div className={`text-foreground font-medium`}>
                         {breakdown.currency === 'USD' ? '$' : breakdown.currency}{breakdown.overageCap}
                       </div>
                     </div>
                     <div className={`p-3 rounded-lg bg-muted/30`}>
-                      <div className={`text-xs text-muted-foreground mb-1`}>当前超额</div>
+                      <div className={`text-xs text-muted-foreground mb-1`}>{t('home.currentOverage', { defaultValue: 'Current Overage' })}</div>
                       <div className={`text-foreground font-bold ${breakdown.currentOverages > 0 ? 'text-orange-500' : ''}`}>
                         {formatUsage(breakdown.currentOverages || 0)}
                       </div>
                     </div>
                     <div className={`p-3 rounded-lg bg-muted/30`}>
-                      <div className={`text-xs text-muted-foreground mb-1`}>超额费用</div>
+                      <div className={`text-xs text-muted-foreground mb-1`}>{t('home.overageCharges', { defaultValue: 'Overage Charges' })}</div>
                       <div className={`text-foreground font-bold ${breakdown.overageCharges > 0 ? 'text-orange-500' : ''}`}>
                         {breakdown.currency === 'USD' ? '$' : breakdown.currency}{breakdown.overageCharges?.toFixed(2) || '0.00'}
                       </div>
@@ -540,10 +540,10 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
             </div>
           </div>
 
-          {/* 基本信息 & 订阅详情 - 并排布局 */}
+          {/* Basic information and subscription details */}
           <div className="px-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* 基本信息 */}
+              {/* Basic information */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 font-bold text-sm text-foreground">
                   <User size={16} className="text-primary" />
@@ -573,11 +573,11 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                 </div>
               </section>
 
-              {/* 订阅详情 */}
+              {/* Subscription details */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 font-bold text-sm text-foreground">
                   <Shield size={16} className="text-primary" />
-                  订阅详情
+                  {t('detail.subscriptionDetails', { defaultValue: 'Subscription Details' })}
                 </h3>
                 <div className="bg-muted/30 border rounded-xl p-4 text-sm space-y-3">
                   <div className="flex justify-between items-center py-1 border-b border-border/50">
@@ -585,25 +585,25 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                     <span className="font-mono text-xs px-1.5 py-0.5 bg-muted rounded-md">us-east-1</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border/50">
-                    <span className="text-muted-foreground text-xs">Token 到期</span>
+                    <span className="text-muted-foreground text-xs">{t('home.expiresAt')}</span>
                     <span className="font-medium text-xs">{currentAccount.expiresAt || '-'}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border/50">
-                    <span className="text-muted-foreground text-xs">订阅类型</span>
+                    <span className="text-muted-foreground text-xs">{t('detail.subscriptionType')}</span>
                     <span className="font-mono text-xs">{currentAccount.usageData?.subscriptionInfo?.type || '-'}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border/50">
-                    <span className="text-muted-foreground text-xs">超额费率</span>
+                    <span className="text-muted-foreground text-xs">{t('home.overageRate', { defaultValue: 'Overage Rate' })}</span>
                     <span className="font-mono text-xs">
                       {breakdown?.overageRate ? `$${breakdown.overageRate}/${breakdown.unit === 'INVOCATIONS' ? 'Credit' : breakdown.unit}` : '-'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border/50">
-                    <span className="text-muted-foreground text-xs">资源类型</span>
+                    <span className="text-muted-foreground text-xs">{t('home.resourceType', { defaultValue: 'Resource Type' })}</span>
                     <span className="font-mono text-xs">{breakdown?.resourceType || '-'}</span>
                   </div>
                   <div className="flex justify-between items-center py-1">
-                    <span className="text-muted-foreground text-xs">可升级</span>
+                    <span className="text-muted-foreground text-xs">{t('home.upgradeable', { defaultValue: 'Upgradeable' })}</span>
                     <span className={`text-xs font-bold ${currentAccount.usageData?.subscriptionInfo?.upgradeCapability === 'UPGRADE_CAPABLE' ? 'text-green-600' : 'text-muted-foreground'}`}>
                       {currentAccount.usageData?.subscriptionInfo?.upgradeCapability === 'UPGRADE_CAPABLE' ? 'YES' : 'NO'}
                     </span>
@@ -613,7 +613,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
             </div>
           </div>
 
-          {/* 账户可用模型 */}
+          {/* Account available models */}
           <div className={`px-6 py-4`}>
             <div 
               className="flex items-center gap-2 cursor-pointer select-none"
@@ -630,7 +630,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                 onClick={(e) => { e.stopPropagation(); fetchModels(true) }}
                 disabled={modelsLoading}
                 className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors disabled:opacity-50"
-                title="强制刷新模型列表"
+                title={t('detail.forceRefreshModels', { defaultValue: 'Force refresh model list' })}
               >
                 <RefreshCw size={14} className={modelsLoading ? "animate-spin text-muted-foreground" : "text-muted-foreground"} />
               </button>

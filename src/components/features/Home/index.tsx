@@ -129,7 +129,7 @@ function Home({ onNavigate }: HomeProps) {
       iconBg: "bg-cyan-500/10 text-cyan-500", 
       iconColor: accent.text,
       value: mcpToolCount, 
-      label: 'MCP 工具', 
+      label: t('home.mcpTools'),
       delay: 'delay-500',
       onClick: () => onNavigate?.('kiroConfig'),
       warning: mcpToolCount > 50
@@ -143,7 +143,7 @@ function Home({ onNavigate }: HomeProps) {
   return (
     <div className="h-full overflow-auto glass-main p-6">
       <div className="w-full">
-        {/* Header（紧凑）*/}
+        {/* Header */}
         <div className="mb-4 flex items-center gap-2.5 animate-slide-in-left">
           <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-md ring-1 ring-primary/20`}>
             <Sparkles size={20} className="text-white" />
@@ -154,19 +154,19 @@ function Home({ onNavigate }: HomeProps) {
           </div>
         </div>
 
-        {/* 统计卡片 */}
+        {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
           {statCards.map((card, index) => (
             <StatCard key={index} {...card} />
           ))}
         </div>
 
-        {/* 主卡片：当前账号 | CLI 账号 */}
+        {/* Current IDE account and CLI account */}
         <Card className="card-glow animate-scale-in delay-300">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
             <div className="flex items-center gap-2">
               <Sparkles size={14} className={accent.text} />
-              <span className="text-sm font-semibold text-foreground">Kiro 账号</span>
+              <span className="text-sm font-semibold text-foreground">{t('home.kiroAccount', { defaultValue: 'Kiro Account' })}</span>
             </div>
             <TooltipProvider>
               <Tooltip>
@@ -188,10 +188,10 @@ function Home({ onNavigate }: HomeProps) {
 
           <CardContent className="p-0">
             <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr]">
-              {/* 左：当前 IDE 账号 */}
+              {/* Current IDE account */}
               <div className="p-4 flex flex-col gap-3">
                 <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
-                  当前 IDE 账号
+                  {t('home.currentIdeAccount', { defaultValue: 'Current IDE Account' })}
                 </span>
                 {currentAccount ? (
                   <CurrentAccountDetail
@@ -202,52 +202,52 @@ function Home({ onNavigate }: HomeProps) {
                   />
                 ) : (
                   <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm py-10">
-                    {localToken ? '未匹配到账号' : (
+                    {localToken ? t('home.noMatchingAccount', { defaultValue: 'No matching account' }) : (
                       ideInstallInfo?.ide_installed === false
                         ? (ideInstallInfo?.ide_executable_exists === false
-                            ? 'Kiro IDE 未安装'
-                            : 'Kiro IDE 已安装，未登录')
+                            ? t('home.kiroIdeNotInstalled', { defaultValue: 'Kiro IDE is not installed' })
+                            : t('home.kiroIdeInstalledNotLoggedIn', { defaultValue: 'Kiro IDE is installed but not logged in' }))
                         : t('home.notLoggedIn')
                     )}
                   </div>
                 )}
               </div>
 
-              {/* 右：CLI 账号 */}
+              {/* Current CLI account */}
               <div className="p-4 flex flex-col gap-3 bg-muted/20 border-t md:border-t-0 md:border-l border-border">
                 <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
                   <Terminal size={11} />
-                  当前 CLI 账号
+                  {t('home.currentCliAccount', { defaultValue: 'Current CLI Account' })}
                 </span>
                 {cliLoading ? (
                   <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                    加载中...
+                    {t('common.loading')}
                   </div>
                 ) : cliSnapshot ? (
-                  <CliAccountDetail snapshot={cliSnapshot} cliPath={cliPath} />
+                  <CliAccountDetail snapshot={cliSnapshot} cliPath={cliPath} t={t} />
                 ) : cliInstalled ? (
                   <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm flex-col gap-1.5 py-8">
                     <Terminal size={20} className="text-muted-foreground/50" />
-                    <span>CLI 已安装，未登录</span>
-                    <span className="text-[11px] text-muted-foreground/70">请运行 kiro-cli login 登录</span>
+                    <span>{t('home.cliInstalledNotLoggedIn', { defaultValue: 'CLI is installed but not logged in' })}</span>
+                    <span className="text-[11px] text-muted-foreground/70">{t('home.cliLoginHint', { defaultValue: 'Run kiro-cli login to sign in' })}</span>
                   </div>
                 ) : (
                   <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm flex-col gap-1.5 py-8">
                     <Terminal size={20} className="text-muted-foreground/50" />
-                    <span>CLI 未安装</span>
-                    <span className="text-[11px] text-muted-foreground/70">请安装 Kiro CLI 后重启</span>
+                    <span>{t('home.cliNotInstalled', { defaultValue: 'CLI is not installed' })}</span>
+                    <span className="text-[11px] text-muted-foreground/70">{t('home.cliInstallHint', { defaultValue: 'Install Kiro CLI and restart' })}</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* 底部跳转 */}
+            {/* Account navigation */}
             <button
               onClick={() => onNavigate?.('accounts')}
               className="w-full py-2.5 flex items-center justify-center gap-2 border-t border-border bg-primary/5 hover:bg-primary/10 text-primary text-sm font-medium transition-colors"
             >
               <ArrowRightLeft size={13} />
-              查看全部账号
+              {t('home.viewAllAccounts', { defaultValue: 'View all accounts' })}
             </button>
           </CardContent>
         </Card>
@@ -256,30 +256,29 @@ function Home({ onNavigate }: HomeProps) {
   )
 }
 
-// CLI 账号详情解析
-function CliAccountDetail({ snapshot, cliPath }: { snapshot: any; cliPath: string }) {
+function CliAccountDetail({ snapshot, cliPath, t }: { snapshot: any; cliPath: string; t: any }) {
   const entries = snapshot?.token_entries || []
   const deviceReg = snapshot?.device_registration
 
-  // 找到主 token 条目
+  // Primary token entry.
   const mainEntry = entries[0]
   const tokenData = mainEntry?.parsed_token
 
   if (!tokenData) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm flex-col gap-2">
-        <span>无有效 Token</span>
+        <span>{t('home.noValidToken', { defaultValue: 'No valid token' })}</span>
         <span className="text-[10px] font-mono truncate max-w-full">{cliPath}</span>
       </div>
     )
   }
 
-  // 判断认证类型
+  // Auth type.
   const isOidc = mainEntry.key?.includes('odic')
   const isSocial = mainEntry.key?.includes('social')
   const authMethod = isSocial ? 'Social' : isOidc ? 'IdC (BuilderId)' : 'Unknown'
 
-  // Token 过期判断
+  // Token expiration.
   let expiresStr = '-'
   let isExpired = false
   if (tokenData.expires_at) {
@@ -288,12 +287,12 @@ function CliAccountDetail({ snapshot, cliPath }: { snapshot: any; cliPath: strin
     isExpired = expiresDate.getTime() < Date.now()
   }
 
-  // 截断显示
+  // Truncate long values.
   const truncate = (s: string, len = 16) => s ? (s.length > len ? s.substring(0, len) + '...' : s) : '-'
 
   return (
     <div className="flex-1 flex flex-col gap-3">
-      {/* 状态 */}
+      {/* Status */}
       <div className="flex items-center gap-2 bg-muted/30 border border-border rounded-xl p-3">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold text-sm shrink-0">
           C
@@ -303,17 +302,17 @@ function CliAccountDetail({ snapshot, cliPath }: { snapshot: any; cliPath: strin
           <span className="text-[11px] text-muted-foreground font-mono truncate">{mainEntry.key}</span>
         </div>
         <Badge variant="default" className={`shrink-0 text-[10px] px-1.5 py-0 ${isExpired ? 'bg-red-500' : 'bg-green-500'}`}>
-          {isExpired ? '已过期' : '有效'}
+          {isExpired ? t('filter.statusExpired') : t('home.valid', { defaultValue: 'Valid' })}
         </Badge>
       </div>
 
-      {/* Token 信息 */}
+      {/* Token information */}
       <div className="bg-muted/30 border border-border rounded-xl p-3">
         <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2 block">Token</span>
         <div className="flex flex-col gap-1.5">
           <InfoRow label="Access Token" value={truncate(tokenData.access_token, 20)} mono />
           <InfoRow label="Refresh Token" value={truncate(tokenData.refresh_token, 20)} mono />
-          <InfoRow label="过期时间" value={expiresStr} valueClass={isExpired ? 'text-red-500' : 'text-green-500'} />
+          <InfoRow label={t('home.expiresAt')} value={expiresStr} valueClass={isExpired ? 'text-red-500' : 'text-green-500'} />
           <InfoRow label="Region" value={tokenData.region || 'us-east-1'} mono />
           {tokenData.start_url && (
             <InfoRow label="Start URL" value={truncate(tokenData.start_url, 24)} mono />
@@ -322,7 +321,7 @@ function CliAccountDetail({ snapshot, cliPath }: { snapshot: any; cliPath: strin
             <InfoRow label="OAuth Flow" value={tokenData.oauth_flow} />
           )}
           {tokenData.scopes && tokenData.scopes.length > 0 && (
-            <InfoRow label="Scopes" value={`${tokenData.scopes.length} 个`} />
+            <InfoRow label="Scopes" value={`${tokenData.scopes.length}`} />
           )}
         </div>
       </div>
@@ -339,10 +338,10 @@ function CliAccountDetail({ snapshot, cliPath }: { snapshot: any; cliPath: strin
         </div>
       )}
 
-      {/* 数据库路径 */}
+      {/* Database path */}
       <div className="bg-muted/30 border border-border rounded-xl p-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground">DB 路径</span>
+          <span className="text-[10px] text-muted-foreground">{t('home.dbPath', { defaultValue: 'DB Path' })}</span>
           <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[180px]" title={cliPath}>
             {cliPath.split(/[/\\]/).slice(-2).join('/')}
           </span>
@@ -380,7 +379,7 @@ function CurrentAccountDetail({ account, accent, maskEmail, t }: {
   const mainLimitPrecision = breakdown?.usageLimitWithPrecision ?? mainLimit
   const mainPercent = mainLimit > 0 ? Math.round((mainUsed / mainLimit) * 100) : 0
 
-  // 超额相关字段
+  // Overage-related fields.
   const currentOverages = breakdown?.currentOverages ?? 0
   const currentOveragesPrecision = breakdown?.currentOveragesWithPrecision ?? currentOverages
   const overageCap = breakdown?.overageCap ?? 0
@@ -410,7 +409,7 @@ function CurrentAccountDetail({ account, accent, maskEmail, t }: {
     return 'text-green-500'
   }
 
-  // 重置时间
+  // Reset time.
   let resetStr = ''
   let daysUntilReset: number | null = null
   let resetDateStr = ''
@@ -419,15 +418,15 @@ function CurrentAccountDetail({ account, accent, maskEmail, t }: {
     resetDateStr = resetDate.toLocaleDateString()
     const now = new Date()
     daysUntilReset = Math.max(0, Math.ceil((resetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-    resetStr = daysUntilReset === 0 ? '今日重置' : `${daysUntilReset}天后重置`
+    resetStr = daysUntilReset === 0 ? t('home.resetToday') : `${daysUntilReset} ${t('home.daysUntilReset')}`
   }
 
-  // 超额使用百分比（相对于超额上限）
+  // Overage usage percentage relative to the overage cap.
   const overagePercent = overageCap > 0 ? Math.round((currentOverages / overageCap) * 100) : 0
 
   return (
     <div className="flex-1 flex flex-col gap-3">
-      {/* 头部：邮箱 + 计划 + Provider */}
+      {/* Header: email, plan, and provider */}
       <div className="flex items-center gap-2 bg-muted/30 border border-border rounded-xl p-3">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0 ${
           provider === 'Google' ? 'bg-gradient-to-br from-red-500 to-orange-500' :
@@ -453,11 +452,11 @@ function CurrentAccountDetail({ account, accent, maskEmail, t }: {
         )}
       </div>
 
-      {/* 总配额进度 */}
+      {/* Total quota progress */}
       <div className="bg-muted/30 border border-border rounded-xl p-3">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs font-medium text-foreground">
-            本月用量 ({displayNamePlural})
+            {t('home.monthlyUsage')} ({displayNamePlural})
           </span>
           <div className="flex items-center gap-2">
             <span className={`text-sm font-bold font-mono ${getPercentClass(percent)}`}>{percent}%</span>
@@ -471,59 +470,60 @@ function CurrentAccountDetail({ account, accent, maskEmail, t }: {
             {isOverage ? mainLimitPrecision : mainUsedPrecision} / {mainLimitPrecision} {displayName}
           </span>
           {isOverage ? (
-            <span className="text-[11px] font-semibold text-purple-500">超额 {currentOveragesPrecision}</span>
+            <span className="text-[11px] font-semibold text-purple-500">{t('home.overage')} {currentOveragesPrecision}</span>
           ) : (
-            <span className={`text-[11px] font-semibold ${getPercentClass(percent)}`}>剩余 {remaining}</span>
+            <span className={`text-[11px] font-semibold ${getPercentClass(percent)}`}>{t('home.remaining', { defaultValue: 'Remaining' })} {remaining}</span>
           )}
         </div>
       </div>
 
-      {/* 超额详情（仅超额时显示） */}
+      {/* Overage details */}
       {currentOverages > 0 && (
         <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-3">
-          <span className="text-[10px] font-bold uppercase text-purple-500 tracking-wider mb-2 block">超额详情</span>
+          <span className="text-[10px] font-bold uppercase text-purple-500 tracking-wider mb-2 block">{t('home.overageDetails', { defaultValue: 'Overage Details' })}</span>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">超额用量</span>
+              <span className="text-[11px] text-muted-foreground">{t('home.overageUsage', { defaultValue: 'Overage Usage' })}</span>
               <span className="text-[11px] font-mono text-purple-500 font-semibold">{currentOveragesPrecision} / {overageCapPrecision}</span>
             </div>
-            {/* 超额进度条 */}
+            {/* Overage progress bar */}
             <div className="h-[3px] bg-purple-500/10 rounded-full overflow-hidden">
               <div className="h-full rounded-full bg-purple-500 transition-all" style={{ width: `${Math.min(overagePercent, 100)}%` }} />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">超额费用</span>
+              <span className="text-[11px] text-muted-foreground">{t('home.overageCharges', { defaultValue: 'Overage Charges' })}</span>
               <span className="text-[11px] font-mono text-purple-500 font-semibold">${overageCharges.toFixed(2)} {currency}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">费率</span>
+              <span className="text-[11px] text-muted-foreground">{t('home.rate')}</span>
               <span className="text-[11px] font-mono text-muted-foreground">${overageRate}/{displayName}</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* 额度明细（基础 + 试用 + 奖励） */}
+      {/* Quota breakdown */}
       {breakdown && (
         <div className="bg-muted/30 border border-border rounded-xl p-3">
-          <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2 block">额度明细</span>
+          <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2 block">{t('home.quotaDetails')}</span>
           <div className="flex flex-col gap-2">
-            {/* 基础配额 */}
-            <QuotaRow label="基础" used={mainUsed} limit={mainLimit} percent={mainPercent} color="blue" accent={accent} />
+            {/* Base quota */}
+            <QuotaRow label={t('home.base')} used={mainUsed} limit={mainLimit} percent={mainPercent} color="blue" accent={accent} t={t} />
 
-            {/* 试用配额 */}
+            {/* Trial quota */}
             {freeTrial && freeTrial.freeTrialStatus === 'ACTIVE' && freeTrial.usageLimit > 0 && (
               <QuotaRow
-                label="试用"
+                label={t('home.trial')}
                 used={freeTrial.currentUsage ?? 0}
                 limit={freeTrial.usageLimit}
                 percent={freeTrial.usageLimit > 0 ? Math.round((freeTrial.currentUsage ?? 0) / freeTrial.usageLimit * 100) : 0}
                 color="purple"
                 accent={accent}
+                t={t}
               />
             )}
 
-            {/* 奖励配额 */}
+            {/* Bonus quota */}
             {bonuses.filter((b: any) => {
               const now = Date.now()
               const expiry = b.expiresAt ? b.expiresAt * 1000 : Infinity
@@ -531,72 +531,73 @@ function CurrentAccountDetail({ account, accent, maskEmail, t }: {
             }).map((bonus: any, idx: number) => (
               <QuotaRow
                 key={idx}
-                label={bonus.displayName?.substring(0, 4) || `奖励${idx + 1}`}
+                label={bonus.displayName?.substring(0, 4) || `${t('home.bonus', { defaultValue: 'Bonus' })}${idx + 1}`}
                 used={Math.round(bonus.currentUsage ?? 0)}
                 limit={Math.round(bonus.usageLimit ?? 0)}
                 percent={bonus.usageLimit > 0 ? Math.round((bonus.currentUsage ?? 0) / bonus.usageLimit * 100) : 0}
                 color="amber"
                 accent={accent}
                 expiry={bonus.expiresAt}
+                t={t}
               />
             ))}
           </div>
         </div>
       )}
 
-      {/* 订阅 & 账号信息 两列 */}
+      {/* Subscription and account info */}
       <div className="grid grid-cols-2 gap-2">
-        {/* 订阅信息 */}
+        {/* Subscription info */}
         {subInfo && (
           <div className="bg-muted/30 border border-border rounded-xl p-3">
-            <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2 block">订阅</span>
+            <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2 block">{t('accounts.subscription', { defaultValue: 'Subscription' })}</span>
             <div className="flex flex-col gap-1.5">
-              <InfoRow label="类型" value={subInfo.subscriptionTitle || 'Free'} />
-              <InfoRow label="计划" value={subInfo.type?.replace('Q_DEVELOPER_STANDALONE_', '') || '-'} mono />
-              <InfoRow label="超额能力" value={subInfo.overageCapability === 'OVERAGE_CAPABLE' ? '✓ 支持' : '✗'} valueClass={subInfo.overageCapability === 'OVERAGE_CAPABLE' ? 'text-green-500' : ''} />
-              <InfoRow label="升级能力" value={subInfo.upgradeCapability === 'UPGRADE_CAPABLE' ? '✓ 可升级' : '✗'} valueClass={subInfo.upgradeCapability === 'UPGRADE_CAPABLE' ? 'text-green-500' : ''} />
+              <InfoRow label={t('home.type')} value={subInfo.subscriptionTitle || 'Free'} />
+              <InfoRow label={t('home.plan', { defaultValue: 'Plan' })} value={subInfo.type?.replace('Q_DEVELOPER_STANDALONE_', '') || '-'} mono />
+              <InfoRow label={t('home.overageCapability', { defaultValue: 'Overage Capability' })} value={subInfo.overageCapability === 'OVERAGE_CAPABLE' ? `✓ ${t('home.supported', { defaultValue: 'Supported' })}` : '✗'} valueClass={subInfo.overageCapability === 'OVERAGE_CAPABLE' ? 'text-green-500' : ''} />
+              <InfoRow label={t('home.upgradeCapability', { defaultValue: 'Upgrade Capability' })} value={subInfo.upgradeCapability === 'UPGRADE_CAPABLE' ? `✓ ${t('home.upgradeable', { defaultValue: 'Upgradeable' })}` : '✗'} valueClass={subInfo.upgradeCapability === 'UPGRADE_CAPABLE' ? 'text-green-500' : ''} />
               {overageConfig && (
-                <InfoRow label="超额开关" value={overageConfig.overageStatus === 'ENABLED' ? '⚡ 已开启' : '已关闭'} valueClass={overageConfig.overageStatus === 'ENABLED' ? 'text-purple-500 font-semibold' : ''} />
+                <InfoRow label={t('home.overageToggle', { defaultValue: 'Overage Toggle' })} value={overageConfig.overageStatus === 'ENABLED' ? `⚡ ${t('home.enabled')}` : t('home.disabled')} valueClass={overageConfig.overageStatus === 'ENABLED' ? 'text-purple-500 font-semibold' : ''} />
               )}
               {subInfo.subscriptionManagementTarget && (
-                <InfoRow label="管理" value={subInfo.subscriptionManagementTarget} mono />
+                <InfoRow label={t('home.management', { defaultValue: 'Management' })} value={subInfo.subscriptionManagementTarget} mono />
               )}
             </div>
           </div>
         )}
 
-        {/* 账号 & 资源信息 */}
+        {/* Account and resource info */}
         <div className="bg-muted/30 border border-border rounded-xl p-3">
-          <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2 block">账号 & 资源</span>
+          <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2 block">{t('home.accountAndResource', { defaultValue: 'Account & Resource' })}</span>
           <div className="flex flex-col gap-1.5">
             <InfoRow label="IDP" value={getProviderDisplayName(provider) || '-'} />
-            <InfoRow label="重置日" value={resetDateStr || '-'} />
+            <InfoRow label={t('home.resetDay', { defaultValue: 'Reset Day' })} value={resetDateStr || '-'} />
             {userInfo?.userId && (
-              <InfoRow label="用户ID" value={userInfo.userId.split('.').pop()?.substring(0, 12) || '-'} mono />
+              <InfoRow label={t('home.userId', { defaultValue: 'User ID' })} value={userInfo.userId.split('.').pop()?.substring(0, 12) || '-'} mono />
             )}
             {resourceType && (
-              <InfoRow label="资源类型" value={resourceType} mono />
+              <InfoRow label={t('home.resourceType', { defaultValue: 'Resource Type' })} value={resourceType} mono />
             )}
             {currency && (
-              <InfoRow label="货币" value={currency} />
+              <InfoRow label={t('home.currency', { defaultValue: 'Currency' })} value={currency} />
             )}
             {unit && (
-              <InfoRow label="计量单位" value={unit === 'INVOCATIONS' ? '调用次数' : unit} />
+              <InfoRow label={t('home.unit', { defaultValue: 'Unit' })} value={unit === 'INVOCATIONS' ? t('home.invocations', { defaultValue: 'Invocations' }) : unit} />
             )}
             {overageCap > 0 && (
-              <InfoRow label="超额上限" value={`${overageCapPrecision}`} />
+              <InfoRow label={t('home.overageCap', { defaultValue: 'Overage Cap' })} value={`${overageCapPrecision}`} />
             )}
             {overageRate > 0 && (
-              <InfoRow label="超额费率" value={`$${overageRate}/${displayName}`} mono />
+              <InfoRow label={t('home.overageRate', { defaultValue: 'Overage Rate' })} value={`$${overageRate}/${displayName}`} mono />
             )}
           </div>
         </div>
       </div>
 
-      {/* IDE Token 路径 */}
+      {/* IDE token path */}
       <div className="bg-muted/30 border border-border rounded-xl p-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground">Token 路径</span>
+          <span className="text-[10px] text-muted-foreground">{t('home.tokenPath', { defaultValue: 'Token Path' })}</span>
           <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[220px]" title="~/.aws/sso/cache/">
             .aws/sso/cache/
           </span>
@@ -606,8 +607,8 @@ function CurrentAccountDetail({ account, accent, maskEmail, t }: {
   )
 }
 
-// 配额行
-function QuotaRow({ label, used, limit, percent, color, accent, expiry }: {
+// Quota row.
+function QuotaRow({ label, used, limit, percent, color, accent, expiry, t }: {
   label: string;
   used: number;
   limit: number;
@@ -615,6 +616,7 @@ function QuotaRow({ label, used, limit, percent, color, accent, expiry }: {
   color: 'blue' | 'purple' | 'amber';
   accent: any;
   expiry?: number;
+  t: any;
 }) {
   const colorMap = {
     blue: { dot: 'bg-blue-500', bar: 'bg-blue-500', text: 'text-blue-600' },
@@ -627,7 +629,7 @@ function QuotaRow({ label, used, limit, percent, color, accent, expiry }: {
   return (
     <div className="flex items-center gap-2">
       <div className={`w-1.5 h-1.5 rounded-full ${c.dot} shrink-0`} />
-      <span className="text-[11px] text-muted-foreground w-10 shrink-0" title={expiryStr ? `${expiryStr} 到期` : ''}>{label}</span>
+      <span className="text-[11px] text-muted-foreground w-10 shrink-0" title={expiryStr ? `${expiryStr} ${t('home.expires')}` : ''}>{label}</span>
       <div className="flex-1 h-[3px] bg-muted rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${c.bar} transition-all`} style={{ width: `${Math.min(percent, 100)}%` }} />
       </div>

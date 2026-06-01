@@ -68,7 +68,7 @@ function GroupSelector({ groups, value, onChange, onGroupsChange }: GroupSelecto
           value={newGroupName}
           onChange={(e) => setNewGroupName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAddGroup()}
-          placeholder={t('groups.newGroupPlaceholder') || '输入新分组名...'}
+          placeholder={t('groups.newGroupPlaceholder')}
           className={`flex-1 px-4 py-2.5 border rounded-xl text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 outline-none`}
         />
         <button
@@ -95,7 +95,7 @@ function GroupSelector({ groups, value, onChange, onGroupsChange }: GroupSelecto
         onChange={(e) => onChange(e.target.value)}
         className={`flex-1 px-4 py-2.5 border rounded-xl text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 outline-none`}
       >
-        <option value="">{t('groups.noGroup') || '无分组'}</option>
+        <option value="">{t('groups.noGroup')}</option>
         {groups.map(g => (
           <option key={g.id} value={g.id}>{g.name}</option>
         ))}
@@ -197,11 +197,11 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
 
   const handleVerifyAndRefresh = async () => {
     if (!form.refreshToken) {
-      await showError(t('editAccount.verifyFailed'), '请填写 Refresh Token')
+      await showError(t('editAccount.verifyFailed'), t('editAccount.pleaseFillRefreshToken'))
       return
     }
     if (isIdCAccount && (!form.clientId || !form.clientSecret)) {
-      await showError(t('editAccount.verifyFailed'), '请填写 Client ID 和 Client Secret')
+      await showError(t('editAccount.verifyFailed'), t('editAccount.pleaseFillClientIdAndSecret'))
       return
     }
 
@@ -302,42 +302,42 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
 
           {/* Scrollable Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* 当前账号状态 */}
+          {/* Current account status */}
           {accountInfo && (
             <div className={`p-4 rounded-xl border space-y-3 ${accent.subtleBg} border-primary/10`}>
               <div className="flex items-center justify-between border-b border-primary/10 pb-2">
-                <span className="text-sm font-semibold text-foreground/80">当前账号状态</span>
+                <span className="text-sm font-semibold text-foreground/80">{t('editAccount.currentStatus', { defaultValue: 'Current Account Status' })}</span>
                 <div className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-medium flex items-center gap-1.5">
                   <CheckCircle size={14} />
-                  已验证
+                  {t('editAccount.verified', { defaultValue: 'Verified' })}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground text-xs block mb-1">邮箱</span>
+                  <span className="text-muted-foreground text-xs block mb-1">{t('accounts.email')}</span>
                   <span className="font-medium font-mono text-xs truncate block" title={accountInfo.email}>
                     {accountInfo.email}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs block mb-1">订阅计划</span>
+                  <span className="text-muted-foreground text-xs block mb-1">{t('editAccount.subscriptionPlan', { defaultValue: 'Subscription Plan' })}</span>
                   <span className="font-medium">{accountInfo.subscriptionType}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs block mb-1">使用额度</span>
+                  <span className="text-muted-foreground text-xs block mb-1">{t('editAccount.quotaUsage', { defaultValue: 'Quota Usage' })}</span>
                   <span className="font-medium">
                     {accountInfo.usage.current.toLocaleString()} / {accountInfo.usage.limit.toLocaleString()}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs block mb-1">剩余天数</span>
-                  <span className="font-medium">{accountInfo.daysRemaining ?? '-'} 天</span>
+                  <span className="text-muted-foreground text-xs block mb-1">{t('editAccount.daysRemaining', { defaultValue: 'Days Remaining' })}</span>
+                  <span className="font-medium">{accountInfo.daysRemaining ?? '-'} {t('home.days', { defaultValue: 'days' })}</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* 账号别名 */}
+          {/* Account alias */}
           <div>
             <label className={`block text-sm font-medium text-foreground mb-2`}>
               {t('accounts.remark')}
@@ -367,7 +367,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
               <button
                 onClick={() => handleCopy(form.refreshToken, 'refreshToken')}
                 className={`absolute right-3 top-3 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer`}
-                title={copiedField === 'refreshToken' ? '已复制' : '复制'}
+                title={copiedField === 'refreshToken' ? t('common.copied', { defaultValue: 'Copied' }) : t('common.copy')}
               >
                 {copiedField === 'refreshToken' ? <Check size={16} className="text-green-500" /> : <Copy size={16} className={"text-muted-foreground"} />}
               </button>
@@ -390,7 +390,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
               <button
                 onClick={() => handleCopy(form.machineId, 'machineId')}
                 className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer`}
-                title={copiedField === 'machineId' ? '已复制' : '复制'}
+                title={copiedField === 'machineId' ? t('common.copied', { defaultValue: 'Copied' }) : t('common.copy')}
               >
                 {copiedField === 'machineId' ? <Check size={16} className="text-green-500" /> : <Copy size={16} className={"text-muted-foreground"} />}
               </button>
@@ -406,7 +406,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="刷新 Token 需要"
+                    placeholder={t('editAccount.refreshTokenRequired', { defaultValue: 'Required to refresh token' })}
                     value={form.clientId}
                     onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                     className={`w-full px-4 py-3 pr-10 border rounded-xl text-sm text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 outline-none font-mono`}
@@ -414,7 +414,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
                   <button
                     onClick={() => handleCopy(form.clientId, 'clientId')}
                     className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer`}
-                    title={copiedField === 'clientId' ? '已复制' : '复制'}
+                    title={copiedField === 'clientId' ? t('common.copied', { defaultValue: 'Copied' }) : t('common.copy')}
                   >
                     {copiedField === 'clientId' ? <Check size={16} className="text-green-500" /> : <Copy size={16} className={"text-muted-foreground"} />}
                   </button>
@@ -426,7 +426,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
                 </label>
                 <div className="relative">
                   <textarea
-                    placeholder="刷新 Token 需要"
+                    placeholder={t('editAccount.refreshTokenRequired', { defaultValue: 'Required to refresh token' })}
                     value={form.clientSecret}
                     onChange={(e) => setForm({ ...form, clientSecret: e.target.value })}
                     rows={2}
@@ -435,7 +435,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
                   <button
                     onClick={() => handleCopy(form.clientSecret, 'clientSecret')}
                     className={`absolute right-3 top-3 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer`}
-                    title={copiedField === 'clientSecret' ? '已复制' : '复制'}
+                    title={copiedField === 'clientSecret' ? t('common.copied') : t('common.copy')}
                   >
                     {copiedField === 'clientSecret' ? <Check size={16} className="text-green-500" /> : <Copy size={16} className={"text-muted-foreground"} />}
                   </button>
@@ -454,12 +454,12 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
             {verifying ? (
               <>
                 <Loader2 size={16} className="mr-2 animate-spin" />
-                验证中...
+                {t('editAccount.verifying')}
               </>
             ) : (
               <>
                 <RefreshCw size={16} className="mr-2" />
-                验证并刷新凭证信息
+                {t('editAccount.verifyAndRefreshCredentials')}
               </>
             )}
           </Button>
@@ -468,7 +468,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
           <div>
             <div className={`text-sm font-medium mb-2 flex items-center gap-1.5 text-foreground`}>
               <Folder size={14} />
-              {t('groups.title') || '分组'}
+              {t('groups.title')}
             </div>
             <GroupSelector
               groups={groups}

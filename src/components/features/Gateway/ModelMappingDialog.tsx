@@ -5,8 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { useApp } from '@/hooks/useApp'
 
-// Kiro 内部模型格式（点号分隔）— 用于目标模型下拉
+// Kiro internal model format used by the target model dropdown.
 const TARGET_MODELS = [
   'claude-opus-4.8',
   'claude-opus-4.8-thinking',
@@ -30,9 +31,9 @@ const TARGET_MODELS = [
   'qwen3-coder-next',
 ]
 
-// 常见源模型名 — 用于源模型下拉
+// Common source model names used by the source model dropdown.
 const SOURCE_MODELS = [
-  // Claude（含 thinking 变体）
+  // Claude, including thinking variants.
   'claude-opus-4.8',
   'claude-opus-4.8-thinking',
   'claude-opus-4.7',
@@ -49,23 +50,23 @@ const SOURCE_MODELS = [
   'claude-haiku-4.5-thinking',
   'claude-sonnet-4',
   'claude-sonnet-4-thinking',
-  // GPT 5.5 系列
+  // GPT 5.5 series
   'gpt-5.5',
   'gpt-5.5-pro',
   'gpt-5.5-instant',
-  // GPT 5.4 系列
+  // GPT 5.4 series
   'gpt-5.4',
   'gpt-5.4-pro',
   'gpt-5.4-mini',
-  // GPT 5.3 系列
+  // GPT 5.3 series
   'gpt-5.3-codex',
   'gpt-5.3-codex-spark',
   'gpt-5.3-instant',
-  // GPT 5.2 系列
+  // GPT 5.2 series
   'gpt-5.2',
   'gpt-5.2-pro',
   'gpt-5.2-codex',
-  // GPT 5.1 系列
+  // GPT 5.1 series
   'gpt-5.1',
   'gpt-5.1-pro',
   'gpt-5.1-codex',
@@ -74,24 +75,24 @@ const SOURCE_MODELS = [
   'gpt-5.1-instant',
 ]
 
-// 预置 GPT/Codex → Claude 映射规则（5.5 ~ 5.1 系列）
+// Preset GPT/Codex -> Claude mapping rules.
 const PRESET_RULES = [
-  // GPT-5.5 系列 → Opus 4.7
+  // GPT-5.5 series -> Opus 4.7
   { source: 'gpt-5.5', target: 'claude-opus-4.8', name: 'GPT-5.5 → Opus 4.8' },  { source: 'gpt-5.5-pro', target: 'claude-opus-4.7', name: 'GPT-5.5-pro → Opus 4.7' },
   { source: 'gpt-5.5-instant', target: 'claude-sonnet-4.6', name: 'GPT-5.5-instant → Sonnet 4.6' },
-  // GPT-5.4 系列 → Opus/Sonnet 4.6
+  // GPT-5.4 series -> Opus/Sonnet 4.6
   { source: 'gpt-5.4', target: 'claude-opus-4.6', name: 'GPT-5.4 → Opus 4.6' },
   { source: 'gpt-5.4-pro', target: 'claude-opus-4.6', name: 'GPT-5.4-pro → Opus 4.6' },
   { source: 'gpt-5.4-mini', target: 'claude-sonnet-4.6', name: 'GPT-5.4-mini → Sonnet 4.6' },
-  // GPT-5.3 系列 → Opus 4.5 / Sonnet 4.5
+  // GPT-5.3 series -> Opus 4.5 / Sonnet 4.5
   { source: 'gpt-5.3-codex', target: 'claude-opus-4.5', name: 'GPT-5.3-codex → Opus 4.5' },
   { source: 'gpt-5.3-codex-spark', target: 'claude-sonnet-4.5', name: 'GPT-5.3-codex-spark → Sonnet 4.5' },
   { source: 'gpt-5.3-instant', target: 'claude-sonnet-4.5', name: 'GPT-5.3-instant → Sonnet 4.5' },
-  // GPT-5.2 系列 → Opus 4.5
+  // GPT-5.2 series -> Opus 4.5
   { source: 'gpt-5.2', target: 'claude-opus-4.5', name: 'GPT-5.2 → Opus 4.5' },
   { source: 'gpt-5.2-pro', target: 'claude-opus-4.5', name: 'GPT-5.2-pro → Opus 4.5' },
   { source: 'gpt-5.2-codex', target: 'claude-opus-4.5', name: 'GPT-5.2-codex → Opus 4.5' },
-  // GPT-5.1 系列 → Sonnet 4.5 / Haiku 4.5
+  // GPT-5.1 series -> Sonnet 4.5 / Haiku 4.5
   { source: 'gpt-5.1', target: 'claude-sonnet-4.5', name: 'GPT-5.1 → Sonnet 4.5' },
   { source: 'gpt-5.1-pro', target: 'claude-sonnet-4.5', name: 'GPT-5.1-pro → Sonnet 4.5' },
   { source: 'gpt-5.1-codex', target: 'claude-sonnet-4.5', name: 'GPT-5.1-codex → Sonnet 4.5' },
@@ -109,6 +110,7 @@ interface ModelMappingDialogProps {
 }
 
 function ModelMappingDialog({ open, onOpenChange, modelMappings, setField, onSave }: ModelMappingDialogProps) {
+  const { t } = useApp()
   const rules = modelMappings || []
 
   const handleToggle = (idx: number, checked: boolean) => {
@@ -162,18 +164,18 @@ function ModelMappingDialog({ open, onOpenChange, modelMappings, setField, onSav
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v && onSave) onSave() }}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>模型映射规则</DialogTitle>
+          <DialogTitle>{t('gateway.modelMappingRules', { defaultValue: 'Model Mapping Rules' })}</DialogTitle>
           <DialogDescription>
-            客户端请求的模型名会根据规则映射到 Kiro 内部模型
+            {t('gateway.modelMappingDesc', { defaultValue: 'Client-requested model names are mapped to Kiro internal models according to these rules.' })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 mt-2">
-          {/* 规则列表 */}
+          {/* Rule list */}
           <div className="border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
             {rules.length === 0 ? (
               <div className="p-6 text-center text-sm text-muted-foreground">
-                暂无规则
+                {t('gateway.noModelMappings', { defaultValue: 'No mapping rules yet' })}
               </div>
             ) : (
               rules.map((rule: any, idx: number) => (
@@ -187,7 +189,11 @@ function ModelMappingDialog({ open, onOpenChange, modelMappings, setField, onSav
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-medium truncate">{rule.name || rule.sourceModel}</span>
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                        {rule.ruleType === 'replace' ? '替换' : rule.ruleType === 'alias' ? '别名' : '负载均衡'}
+                        {rule.ruleType === 'replace'
+                          ? t('gateway.replace', { defaultValue: 'Replace' })
+                          : rule.ruleType === 'alias'
+                            ? t('gateway.alias', { defaultValue: 'Alias' })
+                            : t('gateway.loadBalancing', { defaultValue: 'Load Balancing' })}
                       </Badge>
                     </div>
                     <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
@@ -207,18 +213,20 @@ function ModelMappingDialog({ open, onOpenChange, modelMappings, setField, onSav
             )}
           </div>
 
-          {/* 添加新规则 */}
+          {/* Add a new rule */}
           <div className="space-y-2 p-3 border rounded-lg bg-muted/10">
-            <div className="text-xs font-medium text-muted-foreground">添加新规则</div>
+            <div className="text-xs font-medium text-muted-foreground">
+              {t('gateway.addNewRule', { defaultValue: 'Add New Rule' })}
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
-                <Input placeholder="源模型名" className="text-xs" id="dialog-mapping-source" list="model-list-source" />
+                <Input placeholder={t('gateway.sourceModelName', { defaultValue: 'Source model name' })} className="text-xs" id="dialog-mapping-source" list="model-list-source" />
                 <datalist id="model-list-source">
                   {SOURCE_MODELS.map(m => <option key={m} value={m} />)}
                 </datalist>
               </div>
               <div className="relative">
-                <Input placeholder="目标模型名" className="text-xs" id="dialog-mapping-target" list="model-list-target" />
+                <Input placeholder={t('gateway.targetModelName', { defaultValue: 'Target model name' })} className="text-xs" id="dialog-mapping-target" list="model-list-target" />
                 <datalist id="model-list-target">
                   {TARGET_MODELS.map(m => <option key={m} value={m} />)}
                 </datalist>
@@ -230,23 +238,25 @@ function ModelMappingDialog({ open, onOpenChange, modelMappings, setField, onSav
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="replace">替换 (replace)</SelectItem>
-                  <SelectItem value="alias">别名 (alias)</SelectItem>
+                  <SelectItem value="replace">{t('gateway.replace', { defaultValue: 'Replace' })} (replace)</SelectItem>
+                  <SelectItem value="alias">{t('gateway.alias', { defaultValue: 'Alias' })} (alias)</SelectItem>
                 </SelectContent>
               </Select>
               <Button size="sm" className="text-xs" onClick={handleAdd}>
                 <Plus size={14} className="mr-1" />
-                添加
+                {t('gateway.add', { defaultValue: 'Add' })}
               </Button>
             </div>
           </div>
 
-          {/* 预置规则 */}
+          {/* Preset rules */}
           <div className="flex items-center justify-between pt-1">
-            <div className="text-xs text-muted-foreground">快速添加 OpenAI/Codex 兼容映射</div>
+            <div className="text-xs text-muted-foreground">
+              {t('gateway.quickAddOpenAICodexMappings', { defaultValue: 'Quickly add OpenAI/Codex-compatible mappings' })}
+            </div>
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handlePreset}>
               <Zap size={12} className="mr-1" />
-              预置 GPT 映射
+              {t('gateway.presetGptMappings', { defaultValue: 'Preset GPT Mappings' })}
             </Button>
           </div>
         </div>

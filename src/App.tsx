@@ -15,15 +15,15 @@ import { PrivacyProvider } from './contexts/PrivacyContext'
 import { routes, internalRoutes } from './routes'
 import { getMountedRouteIds, shouldPersistRoute } from './utils/routePersistence'
 
-// 构建路由映射
+// Build route maps.
 const routeMap = Object.fromEntries(routes.map(r => [r.id, r.component]))
 const allRoutes = { ...routeMap, ...internalRoutes }
 
-// 页面加载骨架屏
 function PageLoading() {
+  const { t } = useApp()
   return (
     <div className="h-full flex items-center justify-center glass-main">
-      <div className="animate-pulse text-muted-foreground">加载中...</div>
+      <div className="animate-pulse text-muted-foreground">{t('common.loading')}</div>
     </div>
   )
 }
@@ -40,7 +40,7 @@ function App() {
   const { settings: appSettings, loading: settingsLoading } = useAppSettings()
   const { showError, showInfo } = useDialog()
 
-  // 保存当前页面到 localStorage
+  // Persist the current page.
   useEffect(() => {
     if (activeMenu && activeMenu !== 'callback') {
       localStorage.setItem('activeMenu', activeMenu)
@@ -77,21 +77,30 @@ function App() {
         setActiveMenu('accounts')
       })
       
-      // 后端自动运行，前端无需监听 settings-changed 和 app-settings-changed
+      // Backend tasks run automatically; no settings event listener is needed here.
       
       unlistenBanned = await listen<{ email: string }>('account-banned', (event) => {
         if (!mounted) return
-        showError('账号已封禁', `账号 ${event.payload.email} 已被封禁，无法继续使用`)
+        showError(
+          t('app.accountBanned'),
+          t('app.accountBannedMessage', { email: event.payload.email })
+        )
       })
 
       unlistenTokenInvalid = await listen<{ email: string }>('account-token-invalid', (event) => {
         if (!mounted) return
-        showInfo('Token 已失效', `账号 ${event.payload.email} 的 Token 已失效，请重新登录`)
+        showInfo(
+          t('app.tokenExpired'),
+          t('app.tokenExpiredMessage', { email: event.payload.email })
+        )
       })
 
       unlistenNetworkError = await listen<{ count: number, total: number }>('sync-network-error', (event) => {
         if (!mounted) return
-        showError('网络错误', `${event.payload.count}/${event.payload.total} 个账号同步失败，请检查网络连接`)
+        showError(
+          t('app.networkError'),
+          t('app.networkErrorMessage', { count: event.payload.count, total: event.payload.total })
+        )
       })
     }
 
@@ -104,7 +113,7 @@ function App() {
       if (unlistenTokenInvalid) unlistenTokenInvalid()
       if (unlistenNetworkError) unlistenNetworkError()
     }
-  }, [])
+  }, [showError, showInfo, t])
 
   const checkAuth = async () => {
     try {

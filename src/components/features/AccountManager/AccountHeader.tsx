@@ -36,8 +36,7 @@ interface AccountHeaderProps {
 }
 
 /**
- * 紧凑工具按钮：32x32，统一图标按钮样式。
- * 选中态用 accent 实色渐变，普通态用 glass-card border。
+ * Compact 32x32 icon button with shared styling.
  */
 interface IconButtonProps {
   onClick: () => void;
@@ -108,7 +107,7 @@ function AccountHeader({
   const searchRef = useRef<HTMLDivElement>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // 搜索防抖
+  // Debounced search.
   const handleSearchChange = useCallback((value: string) => {
     setLocalSearchTerm(value)
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
@@ -125,7 +124,7 @@ function AccountHeader({
     setLocalSearchTerm(searchTerm)
   }, [searchTerm])
 
-  // 点击外部关闭搜索框
+  // Collapse the search box on outside click.
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (searchExpanded && searchRef.current && !searchRef.current.contains(e.target as Node) && !localSearchTerm) {
@@ -147,7 +146,7 @@ function AccountHeader({
   return (
     <div className="border-b border-border bg-card/30 backdrop-blur-sm px-5 py-3">
       <div className="flex items-center justify-between gap-3">
-        {/* 左侧：标题 / 选中提示 */}
+        {/* Left: title / selection hint */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-md ring-1 ring-primary/20 flex-shrink-0`}>
             <Sparkles size={20} className="text-primary-foreground" />
@@ -158,7 +157,7 @@ function AccountHeader({
                 <h1 className="text-sm font-semibold text-foreground leading-tight">
                   {t('common.selected')} {selectedCount} {t('accounts.title')}
                 </h1>
-                <p className="text-[11px] text-muted-foreground leading-tight">批量操作模式</p>
+                <p className="text-[11px] text-muted-foreground leading-tight">{t('accounts.batchOperationMode')}</p>
               </>
             ) : (
               <>
@@ -169,11 +168,11 @@ function AccountHeader({
           </div>
         </div>
 
-        {/* 右侧：搜索 + 操作 */}
+        {/* Right: search and actions */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {!isBatchMode && (
             <>
-              {/* 搜索框 - 可收缩 */}
+              {/* Collapsible search */}
               <div ref={searchRef} className="relative">
                 {searchExpanded || localSearchTerm ? (
                   <div className="relative">
@@ -193,7 +192,7 @@ function AccountHeader({
                           onSearchChange('')
                         }}
                         className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted/50 transition-colors cursor-pointer"
-                        title="清空"
+                        title={t('settings.clear')}
                       >
                         <X size={12} className="text-muted-foreground" />
                       </button>
@@ -210,7 +209,7 @@ function AccountHeader({
                 )}
               </div>
 
-              {/* 排序按钮组 */}
+              {/* Sort controls */}
               <div className="flex gap-1 border border-border rounded-md p-0.5 bg-card/40">
                 {sortOptions.map(({ key, label, icon: Icon }) => {
                   const isActive = sortBy.startsWith(key)
@@ -241,7 +240,7 @@ function AccountHeader({
                 })}
               </div>
 
-              {/* 视图切换 */}
+              {/* View toggle */}
               <div className="flex gap-0.5 border border-border rounded-md p-0.5 bg-card/40">
                 <IconButton
                   onClick={() => onViewModeChange('card')}
@@ -263,7 +262,7 @@ function AccountHeader({
                 </IconButton>
               </div>
 
-              {/* 筛选面板 */}
+              {/* Filter panel */}
               <FilterDropdown
                 filters={advancedFilters}
                 onFiltersChange={onAdvancedFiltersChange}
@@ -280,19 +279,19 @@ function AccountHeader({
             </>
           )}
 
-          {/* 批量操作 */}
+          {/* Batch actions */}
           {isBatchMode && (
             <>
               <IconButton
                 onClick={() => onSelectAll()}
-                title="全选"
+                title={t('common.selectAll')}
                 accent={accent}
               >
                 <CheckSquare size={14} className={accent.text} />
               </IconButton>
               <IconButton
                 onClick={onDeselectAll}
-                title="取消全选"
+                title={t('session.deselectAll')}
                 accent={accent}
               >
                 <Square size={14} />
@@ -300,10 +299,10 @@ function AccountHeader({
               <button
                 onClick={onBatchEdit}
                 className={`px-3 h-8 text-xs font-medium rounded-md inline-flex items-center gap-1.5 cursor-pointer text-white shadow-sm bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} hover:opacity-90 transition-opacity`}
-                title="批量编辑（标签和分组）"
+                title={t('accounts.batchEditTagsAndGroups')}
               >
                 <Edit size={13} />
-                批量编辑 ({selectedCount})
+                {t('accounts.batchEdit')} ({selectedCount})
               </button>
               <button
                 onClick={onBatchDelete}
@@ -316,7 +315,7 @@ function AccountHeader({
             </>
           )}
 
-          {/* 通用操作按钮组 */}
+          {/* Common actions */}
           <div className="flex gap-1 ml-1">
             <IconButton onClick={onImport} title={t('accounts.import')} accent={accent}>
               <Upload size={14} className={accent.text} />

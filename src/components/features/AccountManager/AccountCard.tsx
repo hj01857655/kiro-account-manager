@@ -128,7 +128,7 @@ const AccountCard = memo(function AccountCard({
             size="sm"
             checked={account.enabled !== false}
             onCheckedChange={(checked) => onToggleEnabled?.(account, checked)}
-            title="启用/禁用账号"
+            title={t('accountCard.enableDisableAccount', { defaultValue: 'Enable/disable account' })}
           />
         </div>
         {account.usageData?.subscriptionInfo?.overageCapability === 'OVERAGE_CAPABLE' && (
@@ -139,7 +139,7 @@ const AccountCard = memo(function AccountCard({
               checked={account.usageData?.overageConfiguration?.overageStatus === 'ENABLED'}
               disabled={isTogglingOverage}
               onCheckedChange={(checked) => onToggleOverage?.(account, checked)}
-              title="超额开关"
+              title={t('accountCard.overageToggle', { defaultValue: 'Overage toggle' })}
             />
           </div>
         )}
@@ -177,7 +177,7 @@ const AccountCard = memo(function AccountCard({
           </div>
         </div>
 
-        {/* Plan + Provider + 分组 + 标签（一行 wrap） */}
+        {/* Plan, provider, group, and tags */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${(subPlan.toUpperCase().includes('ENTERPRISE'))
             ? 'bg-orange-500 text-white'
@@ -221,7 +221,7 @@ const AccountCard = memo(function AccountCard({
               : percent > 50 ? 'text-orange-500'
               : 'text-green-500'
             }`}>
-              {(breakdown?.currentOverages ?? 0) > 0 ? '超额' : `${Math.round(percent)}%`}
+              {(breakdown?.currentOverages ?? 0) > 0 ? t('home.overage') : `${Math.round(percent)}%`}
             </span>
           </div>
           <div className="h-1 bg-muted rounded-full overflow-hidden mb-1.5">
@@ -242,9 +242,9 @@ const AccountCard = memo(function AccountCard({
                 : `${formatUsage(used)} / ${formatUsage(quota)}`}
             </span>
             {(breakdown?.currentOverages ?? 0) > 0 ? (
-              <span className="text-purple-500 font-bold">超额 {formatUsage(breakdown!.currentOverages)}</span>
+              <span className="text-purple-500 font-bold">{t('home.overage')} {formatUsage(breakdown!.currentOverages)}</span>
             ) : (
-              <span className="text-muted-foreground">剩余 {formatUsage(Math.max(0, quota - used))}</span>
+              <span className="text-muted-foreground">{t('home.remaining', { defaultValue: 'Remaining' })} {formatUsage(Math.max(0, quota - used))}</span>
             )}
           </div>
           {breakdown?.currentOverages != null && breakdown.currentOverages > 0 && (
@@ -269,7 +269,7 @@ const AccountCard = memo(function AccountCard({
           )}
           {(breakdown?.currentOverages === 0 || breakdown?.currentOverages == null) && account.usageData?.overageConfiguration?.overageStatus === 'ENABLED' && account.usageData?.subscriptionInfo?.overageCapability === 'OVERAGE_CAPABLE' && (
             <div className="flex items-center justify-between text-[10px] pt-1.5 mt-1.5 border-t border-border/30">
-              <span className="text-green-500 font-medium">⚡ 超额已开启{breakdown?.overageCap ? ` (上限 ${formatUsage(breakdown.overageCap)})` : ''}</span>
+              <span className="text-green-500 font-medium">⚡ {t('accountCard.overageEnabled', { defaultValue: 'Overage enabled' })}{breakdown?.overageCap ? ` (${t('accountCard.cap', { defaultValue: 'cap' })} ${formatUsage(breakdown.overageCap)})` : ''}</span>
               {breakdown?.overageRate != null && (
                 <span className="text-muted-foreground">${breakdown.overageRate}/credit</span>
               )}
@@ -279,12 +279,12 @@ const AccountCard = memo(function AccountCard({
             <div className="flex items-center justify-between text-[10px] pt-2 mt-2 border-t border-border/30 gap-2">
               {account.expiresAt && (
                 <span className={`flex items-center gap-1 ${cardData.isExpired ? 'text-red-500 font-bold bg-red-500/10 px-1.5 py-0.5 rounded' : 'text-muted-foreground'}`}>
-                  {cardData.isExpired && '⚠️ '}Token: {new Date(account.expiresAt.replace(/\//g, '-')).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  {cardData.isExpired && '⚠️ '}Token: {new Date(account.expiresAt.replace(/\//g, '-')).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
               {nextDateReset && (
                 <span className="text-muted-foreground whitespace-nowrap">
-                  {new Date(nextDateReset * 1000).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}重置
+                  {t('accountCard.resetDate', { date: new Date(nextDateReset * 1000).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' }) })}
                 </span>
               )}
             </div>

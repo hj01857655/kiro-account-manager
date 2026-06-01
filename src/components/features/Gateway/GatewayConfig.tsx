@@ -11,6 +11,7 @@ import { GatewaySurfaceCard } from './GatewayShared'
 import ModelMappingDialog from './ModelMappingDialog'
 import ApiKeysDialog from './ApiKeysDialog'
 import PromptFilterRulesDialog from './PromptFilterRulesDialog'
+import { useApp } from '@/hooks/useApp'
 
 interface GatewayConfigProps {
   config: any;
@@ -41,6 +42,7 @@ function GatewayConfig({
   onShowClientConfig,
   hasConfiguredClients = false,
 }: GatewayConfigProps) {
+  const { t } = useApp()
   const [showModelMappingDialog, setShowModelMappingDialog] = useState(false)
   const [showApiKeysDialog, setShowApiKeysDialog] = useState(false)
   const [showPromptFilterRulesDialog, setShowPromptFilterRulesDialog] = useState(false)
@@ -50,15 +52,15 @@ function GatewayConfig({
       <GatewaySurfaceCard>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-4">
-            {/* Section 1: 网络与路由 */}
+            {/* Section 1: network and routing */}
             <div className="space-y-3">
               <div className="text-sm font-medium text-foreground flex items-center gap-2">
                 <div className="w-1 h-4 bg-primary rounded-full"></div>
-                网络与路由
+                {t('gateway.networkConfig', { defaultValue: 'Network Configuration' })}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label>监听地址</Label>
+                  <Label>{t('gateway.listenAddress', { defaultValue: 'Listen Address' })}</Label>
                   <Input
                     value={config.host}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('host', e.target.value || '127.0.0.1')}
@@ -67,7 +69,7 @@ function GatewayConfig({
                   {fieldErrors.host && <div className="text-xs text-red-500">{fieldErrors.host}</div>}
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>端口</Label>
+                  <Label>{t('gateway.port', { defaultValue: 'Port' })}</Label>
                   <Input
                     type="number"
                     value={config.port}
@@ -129,9 +131,13 @@ function GatewayConfig({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
                   <div className="flex flex-col gap-0.5">
-                    <Label className="text-sm">多账号轮询</Label>
+                    <Label className="text-sm">{t('gateway.accountPool', { defaultValue: 'Account Pool' })}</Label>
                     <span className="text-xs text-muted-foreground">
-                      {config.accountMode === 'pool' ? '使用所有可用账号' : config.accountMode === 'group' ? '使用分组账号' : '固定单账号'}
+                      {config.accountMode === 'pool'
+                        ? t('gateway.useAllAvailableAccounts', { defaultValue: 'Use all available accounts' })
+                        : config.accountMode === 'group'
+                          ? t('gateway.useSpecifiedGroupAccounts', { defaultValue: 'Use accounts from the selected group' })
+                          : t('gateway.fixedUseSingleAccount', { defaultValue: 'Use a fixed single account' })}
                     </span>
                   </div>
                   <Switch
@@ -141,24 +147,24 @@ function GatewayConfig({
                 </div>
                 {(config.accountMode === 'pool' || config.accountMode === 'group') ? (
                   <div className="flex flex-col gap-1.5">
-                    <Label>路由策略</Label>
+                    <Label>{t('gateway.routingStrategy', { defaultValue: 'Routing Strategy' })}</Label>
                     <Select value={config.strategy} onValueChange={(v: string) => setField('strategy', v || 'round_robin')}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="round_robin"><div className="flex items-center gap-2"><RotateCw size={14} /><span>轮询</span></div></SelectItem>
-                        <SelectItem value="most_quota"><div className="flex items-center gap-2"><TrendingUp size={14} /><span>优先剩余额度</span></div></SelectItem>
-                        <SelectItem value="random"><div className="flex items-center gap-2"><Shuffle size={14} /><span>随机</span></div></SelectItem>
+                        <SelectItem value="round_robin"><div className="flex items-center gap-2"><RotateCw size={14} /><span>{t('gateway.roundRobin', { defaultValue: 'Round Robin' })}</span></div></SelectItem>
+                        <SelectItem value="most_quota"><div className="flex items-center gap-2"><TrendingUp size={14} /><span>{t('gateway.priorityRemainingQuota', { defaultValue: 'Priority Remaining Quota' })}</span></div></SelectItem>
+                        <SelectItem value="random"><div className="flex items-center gap-2"><Shuffle size={14} /><span>{t('gateway.random', { defaultValue: 'Random' })}</span></div></SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1.5">
-                    <Label>指定账号</Label>
+                    <Label>{t('gateway.specifyAccount', { defaultValue: 'Specify Account' })}</Label>
                     <Select value={config.accountId} onValueChange={(v: string) => setField('accountId', v)}>
                       <SelectTrigger className={fieldErrors.accountId ? 'border-red-500' : ''}>
-                        <SelectValue placeholder="选择一个账号" />
+                        <SelectValue placeholder={t('gateway.selectAnAccount', { defaultValue: 'Select an account' })} />
                       </SelectTrigger>
                       <SelectContent>
                         {accountOptions.map((opt: any) => (
@@ -172,11 +178,11 @@ function GatewayConfig({
               </div>
             </div>
 
-            {/* Section 2: 客户端认证与模型 */}
+            {/* Section 2: client authentication and models */}
             <div className="space-y-3">
               <div className="text-sm font-medium text-foreground flex items-center gap-2">
                 <div className="w-1 h-4 bg-primary rounded-full"></div>
-                客户端认证与模型
+                {t('gateway.clientAuth', { defaultValue: 'Client Authentication' })} & {t('gateway.model', { defaultValue: 'Model' })}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
@@ -185,29 +191,31 @@ function GatewayConfig({
                       const rawKeys = (config.clientApiKeysText || '').split(/[\n,]+/).map((k: string) => k.trim()).filter(Boolean)
                       const enabledCount = rawKeys.filter((k: string) => !k.startsWith('#disabled#')).length
                       return rawKeys.length > 0
-                        ? `${rawKeys.length} 个 Key，${enabledCount} 个启用`
-                        : '暂无 API Key'
+                        ? `${rawKeys.length} keys, ${enabledCount} enabled`
+                        : t('gateway.noApiKeys', { defaultValue: 'No API Keys yet' })
                     })()}
                   </div>
                   <Button size="sm" variant="outline" className="h-7 text-sm" onClick={() => setShowApiKeysDialog(true)}>
-                    管理 Keys
+                    {t('gateway.clientApiKeys', { defaultValue: 'Client API Keys' })}
                   </Button>
                 </div>
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                   <div className="text-sm text-muted-foreground">
                     {config.modelMappings?.length > 0
-                      ? `${config.modelMappings.length} 条映射规则，${config.modelMappings.filter((r: any) => r.enabled).length} 条启用`
-                      : '暂无映射规则'}
+                      ? `${config.modelMappings.length} mapping rules, ${config.modelMappings.filter((r: any) => r.enabled).length} enabled`
+                      : t('gateway.noModelMappings', { defaultValue: 'No mapping rules yet' })}
                   </div>
                   <Button size="sm" variant="outline" className="h-7 text-sm" onClick={() => setShowModelMappingDialog(true)}>
                     <Shuffle size={12} className="mr-1" />
-                    映射规则
+                    {t('gateway.modelMappingRules', { defaultValue: 'Mapping Rules' })}
                   </Button>
                 </div>
                 {onShowClientConfig && (
                   <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                     <div className="text-sm text-muted-foreground">
-                      {hasConfiguredClients ? '✓ 已配置客户端' : '写入客户端配置'}
+                      {hasConfiguredClients
+                        ? t('gateway.clientsConfigured', { defaultValue: 'Clients configured' })
+                        : t('gateway.writeClientConfig', { defaultValue: 'Write client config' })}
                     </div>
                     <Button
                       size="sm"
@@ -216,7 +224,9 @@ function GatewayConfig({
                       onClick={onShowClientConfig}
                     >
                       <Zap size={12} className="mr-1" />
-                      {hasConfiguredClients ? '重新配置' : '配置客户端'}
+                      {hasConfiguredClients
+                        ? t('gateway.reconfigure', { defaultValue: 'Reconfigure' })
+                        : t('gateway.configureClients', { defaultValue: 'Configure Clients' })}
                     </Button>
                   </div>
                 )}
@@ -224,47 +234,47 @@ function GatewayConfig({
               {fieldErrors.clientApiKeysText && <div className="text-xs text-red-500">{fieldErrors.clientApiKeysText}</div>}
             </div>
 
-            {/* Section 3: 提示词过滤 */}
+            {/* Section 3: prompt filtering */}
             <div className="space-y-3">
               <div className="text-sm font-medium text-foreground flex items-center gap-2">
                 <div className="w-1 h-4 bg-primary rounded-full"></div>
-                提示词过滤
+                {t('gateway.promptFiltering', { defaultValue: 'Prompt Filtering' })}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-sm">精简CC提示</Label>
+                  <Label className="text-sm">{t('gateway.filterClaudeCode', { defaultValue: 'Trim Claude Code Prompt' })}</Label>
                   <Switch checked={!!config.filterClaudeCode} onCheckedChange={(checked: boolean) => setField('filterClaudeCode', checked)} />
                 </div>
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-sm">去边界标记</Label>
+                  <Label className="text-sm">{t('gateway.stripBoundaries', { defaultValue: 'Strip Boundary Markers' })}</Label>
                   <Switch checked={!!config.filterStripBoundaries} onCheckedChange={(checked: boolean) => setField('filterStripBoundaries', checked)} />
                 </div>
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-sm">去环境噪音</Label>
+                  <Label className="text-sm">{t('gateway.removeEnvNoise', { defaultValue: 'Remove Environment Noise' })}</Label>
                   <Switch checked={!!config.filterEnvNoise} onCheckedChange={(checked: boolean) => setField('filterEnvNoise', checked)} />
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                 <div className="text-sm text-muted-foreground">
                   {config.promptFilterRules?.length > 0
-                    ? `${config.promptFilterRules.length} 条自定义规则，${config.promptFilterRules.filter((r: any) => r.enabled).length} 条启用`
-                    : '暂无自定义规则'}
+                    ? `${config.promptFilterRules.length} custom rules, ${config.promptFilterRules.filter((r: any) => r.enabled).length} enabled`
+                    : t('gateway.noCustomRules', { defaultValue: 'No custom rules yet' })}
                 </div>
                 <Button size="sm" variant="outline" className="h-7 text-sm" onClick={() => setShowPromptFilterRulesDialog(true)}>
-                  管理规则
+                  {t('gateway.manageRules', { defaultValue: 'Manage Rules' })}
                 </Button>
               </div>
             </div>
 
-            {/* Section 4: 安全与高级 */}
+            {/* Section 4: security and advanced */}
             <div className="space-y-3">
               <div className="text-sm font-medium text-foreground flex items-center gap-2">
                 <div className="w-1 h-4 bg-primary rounded-full"></div>
-                安全与高级
+                {t('gateway.securityAndAccess', { defaultValue: 'Security and Access' })}
               </div>
               <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-sm">仅本机</Label>
+                  <Label className="text-sm">{t('gateway.localOnly', { defaultValue: 'Local only' })}</Label>
                   <Switch
                     checked={!!config.localOnly}
                     onCheckedChange={(checked: boolean) => {
@@ -273,15 +283,15 @@ function GatewayConfig({
                   />
                 </div>
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-sm">自动启动</Label>
+                  <Label className="text-sm">{t('gateway.autoStart', { defaultValue: 'Auto Start' })}</Label>
                   <Switch checked={!!config.enabled} onCheckedChange={handleAutoStartToggle} />
                 </div>
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-sm">响应缓存</Label>
+                  <Label className="text-sm">{t('gateway.responseCache', { defaultValue: 'Response Cache' })}</Label>
                   <Switch checked={!!config.responseCacheEnabled} onCheckedChange={(checked: boolean) => setField('responseCacheEnabled', checked)} />
                 </div>
                 <div className="flex flex-col gap-0.5 p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-xs text-muted-foreground">缓存TTL(秒)</Label>
+                  <Label className="text-xs text-muted-foreground">{t('gateway.cacheTtlSeconds', { defaultValue: 'Cache TTL (seconds)' })}</Label>
                   <Input
                     type="number"
                     value={config.responseCacheTtl}
@@ -293,7 +303,7 @@ function GatewayConfig({
                   />
                 </div>
                 <div className="flex flex-col gap-0.5 p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-xs text-muted-foreground">阈值%</Label>
+                  <Label className="text-xs text-muted-foreground">{t('gateway.switchThreshold', { defaultValue: 'Switch Threshold (%)' })}</Label>
                   <Input
                     type="number"
                     value={config.threshold}
@@ -307,7 +317,7 @@ function GatewayConfig({
 
               {!config.localOnly && (
                 <div className="flex flex-col gap-1.5">
-                  <Label>IP 白名单</Label>
+                  <Label>{t('gateway.ipWhitelistAllowRemoteAccess', { defaultValue: 'IP Whitelist' })}</Label>
                   <Textarea
                     placeholder={'192.168.1.10\n10.0.0.0/24'}
                     rows={2}

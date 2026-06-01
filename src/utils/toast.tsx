@@ -1,5 +1,6 @@
 // Toast 通知工具
 import toast from 'react-hot-toast'
+import i18n from 'i18next'
 
 // 用于防止重复显示相同消息
 const activeToasts = new Map()
@@ -106,8 +107,8 @@ export const showInfo = (message, options = {}) => {
 /**
  * 加载提示
  */
-export const showLoading = (message = '加载中...', options = {}) => {
-  return toast.loading(message, {
+export const showLoading = (message = '', options = {}) => {
+  return toast.loading(message || i18n.t('common.loading'), {
     position: 'top-center',
     style: {
       background: '#6366f1',
@@ -124,9 +125,9 @@ export const showPromise = (promise, messages: any = {}) => {
   return toast.promise(
     promise,
     {
-      loading: messages.loading || '处理中...',
-      success: messages.success || '操作成功',
-      error: messages.error || '操作失败'},
+      loading: messages.loading || i18n.t('common.loading'),
+      success: messages.success || i18n.t('common.success'),
+      error: messages.error || i18n.t('common.error')},
     {
       position: 'top-center',
       style: {
@@ -139,7 +140,7 @@ export const showPromise = (promise, messages: any = {}) => {
  * 注意：确认对话框请使用 DialogContext 的 showConfirm
  * import { useDialog } from '@/contexts/DialogContext'
  * const { showConfirm } = useDialog()
- * const confirmed = await showConfirm('标题', '消息')
+ * const confirmed = await showConfirm('Title', 'Message')
  */
 
 export default toast

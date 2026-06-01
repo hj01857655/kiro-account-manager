@@ -50,7 +50,7 @@ function PowersPanel({ onCountChange }: any) {
       setRegistries(regs)
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Powers 失败', e, { userMessage: t('powers.loadFailed') || '加载 Powers 失败' })
+      handleUiError('load Powers failed', e, { userMessage: t('powers.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -62,7 +62,7 @@ function PowersPanel({ onCountChange }: any) {
       const data = await invoke<any[]>('get_recommended_powers')
       setRecommended(data)
     } catch (e) {
-      handleUiError('加载推荐 Powers 失败', e, { userMessage: t('powers.loadRecommendedFailed') || '加载推荐 Powers 失败' })
+      handleUiError('load recommended Powers failed', e, { userMessage: t('powers.loadRecommendedFailed') })
     } finally {
       setRecLoading(false)
     }
@@ -82,7 +82,7 @@ function PowersPanel({ onCountChange }: any) {
       // 更新推荐列表中的安装状态
       setRecommended(prev => prev.map(r => r.name === power.name ? { ...r, installed: false } : r))
     } catch (e) {
-      handleUiError('卸载 Power 失败', e, { userMessage: t('powers.uninstallFailed') || '卸载失败' })
+      handleUiError('uninstall Power failed', e, { userMessage: t('powers.uninstallFailed') })
     }
   }
 
@@ -109,7 +109,7 @@ function PowersPanel({ onCountChange }: any) {
       onCountChange?.(data?.length || 0)
       showSuccess(t('powers.installSuccess'), rec.displayName || rec.name)
     } catch (e) {
-      handleUiError('安装 Power 失败', e, { userMessage: t('powers.installFailed') || '安装失败' })
+      handleUiError('install Power failed', e, { userMessage: t('powers.installFailed') })
     } finally {
       setInstalling(null)
     }

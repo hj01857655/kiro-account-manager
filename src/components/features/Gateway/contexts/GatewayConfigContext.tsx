@@ -7,7 +7,7 @@ import {
 } from '../gatewayPageState'
 import { createGatewayFieldErrors } from '../gatewayPageUtils'
 
-// 生成 API Key 的辅助函数（与 index.tsx 中的实现保持一致）
+// Generate API keys consistently with index.tsx.
 function generateApiKey(): string {
   const random = crypto?.randomUUID?.().replace(/-/g, '') || `${Date.now()}${Math.random().toString(36).slice(2)}`
   return `sk-${random}`

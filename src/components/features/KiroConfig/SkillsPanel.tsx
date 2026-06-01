@@ -39,17 +39,17 @@ const buildSkillContent = (name: string, description: string, body: string) => {
 }
 
 // scope 徽章
-const ScopeBadge = ({ scope, accent }: any) => {
+const ScopeBadge = ({ scope, accent, t }: any) => {
   if (scope === 'project') {
     return (
       <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-500 border border-amber-500/30">
-        <FolderOpen size={10} />项目
+        <FolderOpen size={10} />{t('common.project')}
       </span>
     )
   }
   return (
     <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${accent.scopeBadge}`}>
-      <Globe size={10} />用户
+      <Globe size={10} />{t('common.user')}
     </span>
   )
 }
@@ -86,7 +86,7 @@ function SkillsPanel({ onCountChange, projectDir }: any) {
       setSkills(data)
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Skills 失败', e, { userMessage: t('skills.loadFailed') || '加载 Skills 失败' })
+      handleUiError('load Skills failed', e, { userMessage: t('skills.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -131,7 +131,7 @@ function SkillsPanel({ onCountChange, projectDir }: any) {
       setSelectedSkill({ ...selectedSkill, content: fullContent })
       setHasChanges(false)
     } catch (e) {
-      handleUiError('保存 Skill 失败', e, { userMessage: t('skills.saveFailed') || '保存失败' })
+      handleUiError('save Skill failed', e, { userMessage: t('skills.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -154,12 +154,12 @@ function SkillsPanel({ onCountChange, projectDir }: any) {
         setHasChanges(false)
       }
     } catch (e) {
-      handleUiError('删除 Skill 失败', e, { userMessage: t('skills.deleteFailed') || '删除失败' })
+      handleUiError('delete Skill failed', e, { userMessage: t('skills.deleteFailed') })
     }
   }
 
   const handleCreate = async (skillName: string, description: string, scope: string) => {
-    const body = '\n<!-- 在此编写 Skill 指令 -->\n'
+    const body = `\n${t('skills.instructionPlaceholder')}\n`
     const content = buildSkillContent(skillName, description, body)
     try {
       const newSkill = await invoke<any>('create_skill', {
@@ -174,7 +174,7 @@ function SkillsPanel({ onCountChange, projectDir }: any) {
       setShowCreateModal(false)
       handleSelect(newSkill)
     } catch (e) {
-      handleUiError('创建 Skill 失败', e, { userMessage: t('skills.createFailed') || '创建失败' })
+      handleUiError('create Skill failed', e, { userMessage: t('skills.createFailed') })
     }
   }
 
@@ -217,7 +217,7 @@ function SkillsPanel({ onCountChange, projectDir }: any) {
       upsertImportedSkill(imported)
       showSuccess(t('skills.importSuccess'), `${imported.name}`)
     } catch (e) {
-      handleUiError('导入本地 Skill 失败', e, { userMessage: t('skills.importFailed') || '导入失败' })
+      handleUiError('import local Skill failed', e, { userMessage: t('skills.importFailed') })
     }
   }
 
@@ -236,7 +236,7 @@ function SkillsPanel({ onCountChange, projectDir }: any) {
       setShowGithubImportModal(false)
       showSuccess(t('skills.importSuccess'), `${imported.name}`)
     } catch (e) {
-      handleUiError('从 GitHub 导入 Skill 失败', e, { userMessage: t('skills.importGithubFailed') || '导入失败' })
+      handleUiError('import Skill from GitHub failed', e, { userMessage: t('skills.importGithubFailed') })
     }
   }
 
@@ -335,7 +335,7 @@ function SkillsPanel({ onCountChange, projectDir }: any) {
                             <span className={`text-xs text-muted-foreground truncate block mt-0.5`}>{parsed.description}</span>
                           )}
                         </div>
-                        <ScopeBadge scope={skill.scope} accent={accent} />
+                        <ScopeBadge scope={skill.scope} accent={accent} t={t} />
                       </div>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(skill) }}
@@ -374,7 +374,7 @@ function SkillsPanel({ onCountChange, projectDir }: any) {
             <div className={`p-3 border-b border-border flex items-center justify-between`}>
               <div className="flex items-center gap-2">
                 <h3 className={`font-semibold text-foreground`}>{selectedSkill.name}/SKILL.md</h3>
-                <ScopeBadge scope={selectedSkill.scope} accent={accent} />
+                <ScopeBadge scope={selectedSkill.scope} accent={accent} t={t} />
                 {hasChanges && <span className="text-xs text-orange-500">● {t('skills.unsaved')}</span>}
               </div>
               <button

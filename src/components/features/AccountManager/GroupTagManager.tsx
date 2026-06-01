@@ -118,7 +118,7 @@ export function TagSelector({ selectedTagIds, onChange, allTags = null }) {
             onChange={(e) => setNewTagName(e.target.value)}
             onFocus={() => setShowDropdown(true)}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-            placeholder={t('tags.searchOrCreate') || '搜索或输入新标签...'}
+            placeholder={t('tags.searchOrCreate')}
             className={`w-full px-3 py-1.5 text-sm border rounded-lg bg-background border-input text-foreground ${colors.inputFocus} focus:ring-2`}
           />
           {/* 搜索建议下拉 - 聚焦就显示 */}
@@ -137,7 +137,7 @@ export function TagSelector({ selectedTagIds, onChange, allTags = null }) {
               ))}
               {filteredTags.length === 0 && newTagName.trim() && (
                 <div className={`px-3 py-2 text-sm text-muted-foreground`}>
-                  按回车创建 "{newTagName.trim()}"
+                  {t('tags.pressEnterToCreate', { name: newTagName.trim() })}
                 </div>
               )}
             </div>
@@ -153,7 +153,7 @@ export function TagSelector({ selectedTagIds, onChange, allTags = null }) {
           <Plus size={14} />
         </button>
       </div>
-      <p className={`text-xs text-muted-foreground mt-1.5`}>{t('tags.hint') || '输入搜索已有标签，或直接输入创建新标签'}</p>
+      <p className={`text-xs text-muted-foreground mt-1.5`}>{t('tags.hint')}</p>
     </div>
   )
 }
@@ -206,7 +206,7 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
     const trimmed = newName.trim().slice(0, 20)
     if (!trimmed) return
     if (items.some(item => item.name === trimmed)) {
-      await showError(t('common.error'), isTagMode ? (t('tags.duplicateName') || '标签名已存在') : (t('groups.duplicateName') || '分组名已存在'))
+      await showError(t('common.error'), isTagMode ? t('tags.duplicateName') : t('groups.duplicateName'))
       return
     }
     try {
@@ -223,10 +223,10 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
   // 删除
   const handleDelete = async (id) => {
     const item = items.find(i => i.id === id)
-    const title = isTagMode ? (t('tags.deleteTag') || '删除标签') : (t('groups.deleteGroup') || '删除分组')
+    const title = isTagMode ? t('tags.deleteTag') : t('groups.deleteGroup')
     const msg = isTagMode
-      ? `${t('tags.confirmDelete') || '确定删除标签'} "${item?.name}"?`
-      : `${t('groups.confirmDelete') || '确定删除分组'} "${item?.name}"?`
+      ? `${t('tags.confirmDelete')} "${item?.name}"?`
+      : `${t('groups.confirmDelete')} "${item?.name}"?`
     const confirmed = await showConfirm(title, msg)
     if (!confirmed) return
     try {
@@ -249,7 +249,7 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
     const trimmed = editForm.name.trim().slice(0, 20)
     if (!trimmed) return
     if (items.some(i => i.id !== editingId && i.name === trimmed)) {
-      await showError(t('common.error'), isTagMode ? (t('tags.duplicateName') || '标签名已存在') : (t('groups.duplicateName') || '分组名已存在'))
+      await showError(t('common.error'), isTagMode ? t('tags.duplicateName') : t('groups.duplicateName'))
       return
     }
     try {
@@ -279,7 +279,7 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
         {/* 头部 + Tab */}
         <div className={`px-5 py-4 border-b border-border`}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className={`font-medium text-foreground`}>{t('tags.manage') || '管理标签和分组'}</h3>
+            <h3 className={`font-medium text-foreground`}>{t('tags.manage')}</h3>
             <button onClick={onClose} className={`p-1.5 hover:opacity-80 rounded-lg`}>
               <X size={18} className={"text-muted-foreground"} />
             </button>
@@ -294,7 +294,7 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
                 }`}
             >
               <Tag size={16} />
-              {t('tags.title') || '标签'}
+              {t('tags.title')}
             </button>
             <button
               onClick={() => handleTabChange('groups')}
@@ -304,7 +304,7 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
                 }`}
             >
               <Folder size={16} />
-              {t('groups.title') || '分组'}
+              {t('groups.title')}
             </button>
           </div>
         </div>
@@ -317,7 +317,7 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder={isTagMode ? (t('tags.newTagPlaceholder') || '输入新标签...') : (t('groups.newGroupPlaceholder') || '输入新分组...')}
+              placeholder={isTagMode ? t('tags.newTagPlaceholder') : t('groups.newGroupPlaceholder')}
               className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-background border-input text-foreground ${colors.inputFocus} focus:ring-2`}
             />
             <input
@@ -354,7 +354,7 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
             <div className={`text-center py-8 text-muted-foreground`}>{t('common.loading')}</div>
           ) : items.length === 0 ? (
             <div className={`text-center py-8 text-muted-foreground`}>
-              {isTagMode ? (t('tags.noTags') || '暂无标签') : (t('groups.noGroups') || '暂无分组')}
+              {isTagMode ? t('tags.noTags') : t('groups.noGroups')}
             </div>
           ) : (
             <div className="space-y-2">

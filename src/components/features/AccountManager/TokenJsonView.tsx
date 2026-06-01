@@ -1,6 +1,6 @@
 // Token 凭证 JSON 视图组件
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Copy, Check, ChevronDown, Key, Clock } from 'lucide-react'
+import { Copy, Check, ChevronDown, Key } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import { getThemeAccent } from '../KiroConfig/themeAccent'
 
@@ -11,7 +11,7 @@ function buildCredentialsJson(account) {
 }
 
 // 可折叠的字符串值
-function CollapsibleValue({ value, colors, threshold = 50 }) {
+function CollapsibleValue({ value, colors, t, threshold = 50 }) {
   const [expanded, setExpanded] = useState(false)
   const isLong = value.length > threshold
   
@@ -33,14 +33,14 @@ function CollapsibleValue({ value, colors, threshold = 50 }) {
           transition-all duration-200 font-medium
         `}
       >
-        {expanded ? '收起' : `展开 +${value.length - threshold}`}
+        {expanded ? t('common.collapse') : t('common.expandMore', { count: value.length - threshold })}
       </button>
     </span>
   )
 }
 
 // JSON 渲染（带折叠，支持嵌套对象和数组）
-function JsonRenderer({ json, colors, accent, indent = 0 }) {
+function JsonRenderer({ json, colors, accent, t, indent = 0 }) {
   const entries = Object.entries(json).filter(([_, value]) => value !== undefined)
   const pad = '  '.repeat(indent)
   const padInner = '  '.repeat(indent + 1)
@@ -54,7 +54,7 @@ function JsonRenderer({ json, colors, accent, indent = 0 }) {
           <span className={`${accent.text} font-semibold`}>"{key}"</span>
           <span className={"text-muted-foreground"}>: </span>
           {typeof value === 'string' ? (
-            <CollapsibleValue value={value} colors={colors} />
+            <CollapsibleValue value={value} colors={colors} t={t} />
           ) : value === null || value === undefined ? (
             <span className="text-orange-500 font-medium">null</span>
           ) : typeof value === 'boolean' ? (
@@ -107,9 +107,9 @@ export function TokenJsonView({ account, defaultExpanded = false }) {
       >
         <div className="flex items-center gap-2">
           <Key size={16} className={"text-muted-foreground"} />
-          <span className={`text-sm font-medium text-foreground`}>{t('detail.tokenCredentials') || 'Token 凭证'}</span>
+          <span className={`text-sm font-medium text-foreground`}>{t('detail.tokenCredentials')}</span>
           <span className={`text-xs px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground font-mono`}>
-            {Object.keys(credentialsJson).length} 字段
+            {Object.keys(credentialsJson).length} {t('common.fields')}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -127,7 +127,7 @@ export function TokenJsonView({ account, defaultExpanded = false }) {
       {expanded && (
         <div className="px-6 pb-4">
           <div className="p-3 rounded-lg bg-muted/20 border border-border max-h-64 overflow-auto font-mono text-xs leading-relaxed">
-            <JsonRenderer json={credentialsJson} colors={colors} accent={accent} />
+            <JsonRenderer json={credentialsJson} colors={colors} accent={accent} t={t} />
           </div>
         </div>
       )}

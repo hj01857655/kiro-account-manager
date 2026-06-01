@@ -82,7 +82,7 @@ interface GatewayPathCardProps {
   actions?: React.ReactNode;
 }
 
-export function GatewayPathCard({ title = '日志目录', value, actions }: GatewayPathCardProps) {
+export function GatewayPathCard({ title = 'Log Directory', value, actions }: GatewayPathCardProps) {
   return (
     <GatewaySubCard>
       <p className="text-xs font-semibold">{title}</p>

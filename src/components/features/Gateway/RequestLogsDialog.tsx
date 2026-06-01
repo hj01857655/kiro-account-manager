@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { Activity, RefreshCw, XCircle, Trash2, Database } from 'lucide-react'
+import { useApp } from '@/hooks/useApp'
 
 interface ProcessedRequestLog {
   id: string
@@ -54,6 +55,7 @@ interface RequestLogsDialogProps {
 }
 
 export function RequestLogsDialog({ open, onOpenChange, logLevel, onLogLevelChange, logRequests, onLogRequestsChange, onSave }: RequestLogsDialogProps) {
+  const { t } = useApp()
   const [requestLogs, setRequestLogs] = useState<ProcessedRequestLog[]>([])
   const [requestStats, setRequestStats] = useState<GatewayRequestStats | null>(null)
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null)
@@ -130,26 +132,28 @@ export function RequestLogsDialog({ open, onOpenChange, logLevel, onLogLevelChan
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v && onSave) onSave() }}>
       <DialogContent className="sm:max-w-[950px]">
         <DialogHeader>
-          <DialogTitle>请求日志</DialogTitle>
-          <DialogDescription>实时查看网关请求记录、缓存与统计</DialogDescription>
+          <DialogTitle>{t('gateway.requestLogs', { defaultValue: 'Request Logs' })}</DialogTitle>
+          <DialogDescription>
+            {t('gateway.requestLogsDialogDesc', { defaultValue: 'View gateway request records, cache usage, and statistics in real time.' })}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          {/* 顶部：统计 + 缓存 + 操作 */}
+          {/* Summary, cache, and actions */}
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-3">
               <Activity size={16} />
               {requestStats && (
                 <div className="flex items-center gap-2 text-sm">
-                  <span>总 <strong>{requestStats.total}</strong></span>
-                  <span className="text-green-600">成功 <strong>{requestStats.success}</strong></span>
-                  <span className="text-red-600">错误 <strong>{requestStats.error}</strong></span>
+                  <span>{t('gateway.total', { defaultValue: 'Total' })} <strong>{requestStats.total}</strong></span>
+                  <span className="text-green-600">{t('gateway.successOnly', { defaultValue: 'Success' })} <strong>{requestStats.success}</strong></span>
+                  <span className="text-red-600">{t('gateway.errorCount', { defaultValue: 'Errors' })} <strong>{requestStats.error}</strong></span>
                   {requestStats.totalInputTokens > 0 && (
                     <span className="text-muted-foreground">
-                      {(requestStats.totalInputTokens / 1000).toFixed(1)}K入/{(requestStats.totalOutputTokens / 1000).toFixed(1)}K出
+                      {(requestStats.totalInputTokens / 1000).toFixed(1)}K in/{(requestStats.totalOutputTokens / 1000).toFixed(1)}K out
                       {requestStats.totalCacheReadTokens > 0 && (
                         <span className="text-blue-600">
-                          /{(requestStats.totalCacheReadTokens / 1000).toFixed(1)}K缓存读
+                          /{(requestStats.totalCacheReadTokens / 1000).toFixed(1)}K cache read
                         </span>
                       )}
                     </span>
@@ -160,7 +164,7 @@ export function RequestLogsDialog({ open, onOpenChange, logLevel, onLogLevelChan
             <div className="flex gap-1.5 items-center flex-wrap">
               <input
                 type="text"
-                placeholder="搜索..."
+                placeholder={t('gateway.searchPlaceholder', { defaultValue: 'Search...' })}
                 className="text-sm border rounded px-2 py-1 w-28"
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
@@ -170,21 +174,21 @@ export function RequestLogsDialog({ open, onOpenChange, logLevel, onLogLevelChan
                 value={activeFilter}
                 onChange={(e) => setActiveFilter(e.target.value as any)}
               >
-                <option value="all">全部</option>
-                <option value="success">成功</option>
-                <option value="error">错误</option>
+                <option value="all">{t('gateway.allResults', { defaultValue: 'All Results' })}</option>
+                <option value="success">{t('gateway.successOnly', { defaultValue: 'Success Only' })}</option>
+                <option value="error">{t('gateway.errorOnly', { defaultValue: 'Error Only' })}</option>
               </select>
               <select
                 className="text-sm border rounded px-2 py-1"
                 value={displayLimit}
                 onChange={(e) => { setDisplayLimit(Number(e.target.value)); fetchRequestLogs(Number(e.target.value)) }}
               >
-                <option value={50}>50条</option>
-                <option value={100}>100条</option>
-                <option value={200}>200条</option>
+                <option value={50}>50 {t('gateway.records', { defaultValue: 'records' })}</option>
+                <option value={100}>100 {t('gateway.records', { defaultValue: 'records' })}</option>
+                <option value={200}>200 {t('gateway.records', { defaultValue: 'records' })}</option>
               </select>
               <Button variant="outline" size="sm" className="h-7 px-2" onClick={async () => { await invoke('clear_gateway_request_logs'); setRequestLogs([]); setRequestStats(null) }} disabled={requestLogs.length === 0}>
-                清空
+                {t('gateway.clearLogs', { defaultValue: 'Clear Logs' })}
               </Button>
               <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => {
                 const content = filteredLogs.map(log => `[${log.timestamp}] ${log.status} ${log.path} ${log.model || '-'} ${log.duration}ms in:${log.inputTokens || 0} out:${log.outputTokens || 0} cR:${log.cacheReadTokens || 0} cW:${log.cacheCreationTokens || 0}${log.error ? ' ERR:' + log.error : ''}`).join('\n')
@@ -195,21 +199,21 @@ export function RequestLogsDialog({ open, onOpenChange, logLevel, onLogLevelChan
                 a.download = `gateway-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.log`
                 a.click()
                 URL.revokeObjectURL(url)
-              }} disabled={filteredLogs.length === 0} title="导出日志">
-                导出
+              }} disabled={filteredLogs.length === 0} title={t('gateway.exportLogs', { defaultValue: 'Export Logs' })}>
+                {t('gateway.export', { defaultValue: 'Export' })}
               </Button>
-              <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => invoke('open_gateway_log_dir')} title="打开日志目录">
+              <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => invoke('open_gateway_log_dir')} title={t('gateway.openLogDir', { defaultValue: 'Open log directory' })}>
                 📂
               </Button>
               <div className="flex items-center gap-1.5">
                 <Switch size="sm" checked={logRequests} onCheckedChange={onLogRequestsChange} />
-                <span className="text-sm text-muted-foreground">记录</span>
+                <span className="text-sm text-muted-foreground">{t('gateway.logRequests', { defaultValue: 'Log requests' })}</span>
               </div>
               <select
                 className="text-sm border rounded px-2 py-1"
                 value={logLevel}
                 onChange={(e) => onLogLevelChange(e.target.value)}
-                title="日志级别"
+                title={t('gateway.logLevel', { defaultValue: 'Log Level' })}
               >
                 <option value="debug">debug</option>
                 <option value="info">info</option>
@@ -222,28 +226,30 @@ export function RequestLogsDialog({ open, onOpenChange, logLevel, onLogLevelChan
             </div>
           </div>
 
-          {/* 日志表格 */}
+          {/* Log table */}
           <div className="border rounded-lg">
             <div className="h-[60vh] min-h-[300px] overflow-auto">
               <table className="w-full text-xs font-mono">
                 <thead className="sticky top-0 bg-muted/80 backdrop-blur z-10">
                   <tr className="border-b">
-                    <th className="px-2 py-1.5 text-left w-[130px]">时间</th>
-                    <th className="px-2 py-1.5 text-left">路径</th>
-                    <th className="px-2 py-1.5 text-left">模型</th>
-                    <th className="px-2 py-1.5 text-center w-[50px]">状态</th>
-                    <th className="px-2 py-1.5 text-right w-[55px]">输入</th>
-                    <th className="px-2 py-1.5 text-right w-[55px]">输出</th>
-                    <th className="px-2 py-1.5 text-right w-[65px]" title="缓存读取">缓存读</th>
-                    <th className="px-2 py-1.5 text-right w-[65px]" title="缓存写入">缓存写</th>
-                    <th className="px-2 py-1.5 text-right w-[55px]">耗时</th>
+                    <th className="px-2 py-1.5 text-left w-[130px]">{t('gateway.time', { defaultValue: 'Time' })}</th>
+                    <th className="px-2 py-1.5 text-left">{t('gateway.path', { defaultValue: 'Path' })}</th>
+                    <th className="px-2 py-1.5 text-left">{t('gateway.model', { defaultValue: 'Model' })}</th>
+                    <th className="px-2 py-1.5 text-center w-[50px]">{t('gateway.status', { defaultValue: 'Status' })}</th>
+                    <th className="px-2 py-1.5 text-right w-[55px]">{t('gateway.input', { defaultValue: 'Input' })}</th>
+                    <th className="px-2 py-1.5 text-right w-[55px]">{t('gateway.output', { defaultValue: 'Output' })}</th>
+                    <th className="px-2 py-1.5 text-right w-[65px]" title={t('gateway.cacheRead', { defaultValue: 'Cache Read' })}>{t('gateway.cacheReadShort', { defaultValue: 'Cache R' })}</th>
+                    <th className="px-2 py-1.5 text-right w-[65px]" title={t('gateway.cacheWrite', { defaultValue: 'Cache Write' })}>{t('gateway.cacheWriteShort', { defaultValue: 'Cache W' })}</th>
+                    <th className="px-2 py-1.5 text-right w-[55px]">{t('gateway.duration', { defaultValue: 'Duration' })}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLogs.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-16 text-muted-foreground font-sans text-sm">
-                        {requestLogs.length === 0 ? '等待第一个请求...' : '无匹配结果'}
+                        {requestLogs.length === 0
+                          ? t('gateway.waitingForFirstRequest', { defaultValue: 'Waiting for the first request...' })
+                          : t('gateway.noMatchingResults', { defaultValue: 'No matching results' })}
                       </td>
                     </tr>
                   ) : (
@@ -263,12 +269,12 @@ export function RequestLogsDialog({ open, onOpenChange, logLevel, onLogLevelChan
                             <span className={log.status >= 400 ? 'text-red-500 font-semibold' : 'text-green-600'}>
                               {log.status}
                             </span>
-                            {log.stream && <span className="ml-0.5 text-blue-400" title="流式">⇣</span>}
+                            {log.stream && <span className="ml-0.5 text-blue-400" title={t('gateway.streamingOnly', { defaultValue: 'Streaming' })}>⇣</span>}
                           </td>
                           <td className="px-2 py-1.5 text-right text-muted-foreground">{log.inputTokens?.toLocaleString() || '-'}</td>
                           <td className="px-2 py-1.5 text-right text-muted-foreground">{log.outputTokens?.toLocaleString() || '-'}</td>
-                          <td className="px-2 py-1.5 text-right text-blue-600" title="缓存读取 tokens">{log.cacheReadTokens?.toLocaleString() || '-'}</td>
-                          <td className="px-2 py-1.5 text-right text-purple-600" title="缓存写入 tokens">{log.cacheCreationTokens?.toLocaleString() || '-'}</td>
+                          <td className="px-2 py-1.5 text-right text-blue-600" title={t('gateway.cacheReadTokens', { defaultValue: 'Cache read tokens' })}>{log.cacheReadTokens?.toLocaleString() || '-'}</td>
+                          <td className="px-2 py-1.5 text-right text-purple-600" title={t('gateway.cacheWriteTokens', { defaultValue: 'Cache write tokens' })}>{log.cacheCreationTokens?.toLocaleString() || '-'}</td>
                           <td className="px-2 py-1.5 text-right">
                             <span className={log.duration > 3000 ? 'text-orange-500' : 'text-muted-foreground'}>{log.duration}ms</span>
                           </td>

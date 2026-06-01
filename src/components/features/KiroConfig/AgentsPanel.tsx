@@ -71,17 +71,17 @@ const buildAgentContent = ({ name, description, tools, model, includeMcpJson, in
 const formatSize = (bytes: number) => bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
 
 // scope 徽章
-const ScopeBadge = ({ scope, accent }: any) => {
+const ScopeBadge = ({ scope, accent, t }: any) => {
   if (scope === 'project') {
     return (
       <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-500 border border-amber-500/30">
-        <FolderOpen size={10} />项目
+        <FolderOpen size={10} />{t('common.project')}
       </span>
     )
   }
   return (
     <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${accent.scopeBadge}`}>
-      <Globe size={10} />用户
+      <Globe size={10} />{t('common.user')}
     </span>
   )
 }
@@ -97,7 +97,7 @@ const AVAILABLE_TOOL_TAGS = [
 
 // Kiro v0.10.32 可用的模型
 const AVAILABLE_MODELS = [
-  { value: 'default', label: '默认（跟随主对话）' },
+  { value: 'default', labelKey: 'agents.defaultModel' },
   { value: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
   { value: 'claude-sonnet-4', label: 'Claude Sonnet 4' },
   { value: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
@@ -148,7 +148,7 @@ function AgentsPanel({ onCountChange, projectDir }: any) {
       setAgents(data)
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Custom Agents 失败', e, { userMessage: t('agents.loadFailed') || '加载 Custom Agents 失败' })
+      handleUiError('load Custom Agents failed', e, { userMessage: t('agents.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -198,7 +198,7 @@ function AgentsPanel({ onCountChange, projectDir }: any) {
       setSelectedAgent({ ...selectedAgent, content: fullContent })
       setHasChanges(false)
     } catch (e) {
-      handleUiError('保存 Custom Agent 失败', e, { userMessage: t('agents.saveFailed') || '保存失败' })
+      handleUiError('save Custom Agent failed', e, { userMessage: t('agents.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -221,13 +221,13 @@ function AgentsPanel({ onCountChange, projectDir }: any) {
         setHasChanges(false)
       }
     } catch (e) {
-      handleUiError('删除 Custom Agent 失败', e, { userMessage: t('agents.deleteFailed') || '删除失败' })
+      handleUiError('delete Custom Agent failed', e, { userMessage: t('agents.deleteFailed') })
     }
   }
 
   const handleCreate = async (agentName: string, description: string, tools: string[], model: string, scope: string) => {
     const fileName = agentName.endsWith('.md') ? agentName : `${agentName}.md`
-    const body = '\n<!-- 在此编写 Agent 的系统提示词 -->\n'
+    const body = `\n${t('agents.systemPromptPlaceholder')}\n`
     const content = buildAgentContent({ name: agentName.replace('.md', ''), description, tools, model, includeMcpJson: false, includePowers: false }, body)
     try {
       const newAgent = await invoke<any>('create_custom_agent', {
@@ -242,7 +242,7 @@ function AgentsPanel({ onCountChange, projectDir }: any) {
       setShowCreateModal(false)
       handleSelect(newAgent)
     } catch (e) {
-      handleUiError('创建 Custom Agent 失败', e, { userMessage: t('agents.createFailed') || '创建失败' })
+      handleUiError('create Custom Agent failed', e, { userMessage: t('agents.createFailed') })
     }
   }
 
@@ -327,7 +327,7 @@ function AgentsPanel({ onCountChange, projectDir }: any) {
                             <span className={`text-xs text-muted-foreground truncate block mt-0.5`}>{parsed.description}</span>
                           )}
                         </div>
-                        <ScopeBadge scope={agent.scope} accent={accent} />
+                        <ScopeBadge scope={agent.scope} accent={accent} t={t} />
                       </div>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(agent) }}
@@ -372,7 +372,7 @@ function AgentsPanel({ onCountChange, projectDir }: any) {
             <div className={`p-3 border-b border-border flex items-center justify-between`}>
               <div className="flex items-center gap-2">
                 <h3 className={`font-semibold text-foreground`}>{selectedAgent.fileName}</h3>
-                <ScopeBadge scope={selectedAgent.scope} accent={accent} />
+                <ScopeBadge scope={selectedAgent.scope} accent={accent} t={t} />
                 {hasChanges && <span className="text-xs text-orange-500">● {t('agents.unsaved')}</span>}
               </div>
               <button
@@ -419,7 +419,7 @@ function AgentsPanel({ onCountChange, projectDir }: any) {
                   <MultiSelect
                     value={editState.tools}
                     onChange={(v) => updateEditState('tools', v)}
-                    options={AVAILABLE_TOOL_TAGS.map(tag => ({ value: tag, label: tag === '*' ? '* (全部工具)' : tag }))}
+                    options={AVAILABLE_TOOL_TAGS.map(tag => ({ value: tag, label: tag === '*' ? `* (${t('agents.allTools')})` : tag }))}
                     placeholder={t('agents.selectTools')}
                     searchable
                     clearable
@@ -440,7 +440,7 @@ function AgentsPanel({ onCountChange, projectDir }: any) {
                     </SelectTrigger>
                     <SelectContent className="">
                       {AVAILABLE_MODELS.map(m => (
-                        <SelectItem key={m.value} value={m.value} className="">{m.label}</SelectItem>
+                        <SelectItem key={m.value} value={m.value} className="">{m.labelKey ? t(m.labelKey) : m.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -562,7 +562,7 @@ function CreateAgentModal({ onCreate, onClose, accent, surface, accentGradientBu
             <MultiSelect
               value={tools}
               onChange={handleToolsChange}
-              options={AVAILABLE_TOOL_TAGS.map(tag => ({ value: tag, label: tag === '*' ? '* (全部工具)' : tag }))}
+              options={AVAILABLE_TOOL_TAGS.map(tag => ({ value: tag, label: tag === '*' ? `* (${t('agents.allTools')})` : tag }))}
               placeholder={t('agents.selectTools')}
               searchable clearable
               className={`text-foreground bg-background border-input ${colors.inputFocus}`}
@@ -580,7 +580,7 @@ function CreateAgentModal({ onCreate, onClose, accent, surface, accentGradientBu
               </SelectTrigger>
               <SelectContent className="">
                 {AVAILABLE_MODELS.map(m => (
-                  <SelectItem key={m.value} value={m.value} className="">{m.label}</SelectItem>
+                  <SelectItem key={m.value} value={m.value} className="">{m.labelKey ? t(m.labelKey) : m.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

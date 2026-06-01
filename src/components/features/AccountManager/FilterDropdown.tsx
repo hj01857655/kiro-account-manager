@@ -11,7 +11,7 @@ import { isPointerInsideContainer } from './utils/pointerInside'
 import React from 'react'
 
 const SUBSCRIPTION_OPTIONS = [
-  { value: '', label: '全部' },
+  { value: '', label: 'All' },
   { value: 'FREE', label: 'FREE' },
   { value: 'KIRO FREE', label: 'KIRO FREE' },
   { value: 'KIRO PRO', label: 'KIRO PRO' },
@@ -19,22 +19,22 @@ const SUBSCRIPTION_OPTIONS = [
   { value: 'KIRO POWER', label: 'KIRO POWER' },
 ]
 const STATUS_OPTIONS = [
-  { value: '', label: '全部' },
-  { value: 'normal', label: '正常' },
-  { value: 'capped', label: '封顶' },
-  { value: 'banned', label: '封禁' },
-  { value: 'invalid', label: '失效' },
-  { value: 'expired', label: '过期' },
+  { value: '', label: 'All' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'capped', label: 'Capped' },
+  { value: 'banned', label: 'Banned' },
+  { value: 'invalid', label: 'Invalid' },
+  { value: 'expired', label: 'Expired' },
 ]
 const PROVIDER_OPTIONS = [
-  { value: '', label: '全部' },
+  { value: '', label: 'All' },
   { value: 'Google', label: 'Google' },
   { value: 'Github', label: 'Github' },
   { value: 'BuilderId', label: 'BuilderId' },
   { value: 'Enterprise', label: 'Enterprise' },
 ]
 const USAGE_RANGE_OPTIONS = [
-  { value: '', label: '全部' },
+  { value: '', label: 'All' },
   { value: '0-500', label: '0-500' },
   { value: '500-1000', label: '500-1000' },
   { value: '1000-2000', label: '1000-2000' },
@@ -67,7 +67,7 @@ function SectionCard({ title, subtitle, children }: { title: string; subtitle?: 
   )
 }
 
-function FilterField({ label, hint, active, accent, children, fullWidth = false }: any) {
+function FilterField({ label, hint, active, accent, children, fullWidth = false, activeLabel = 'Set' }: any) {
   return (
     <div
       className={`
@@ -89,7 +89,7 @@ function FilterField({ label, hint, active, accent, children, fullWidth = false 
         </div>
         {active && (
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${accent.bgSoft} ${accent.text}`}>
-            已设置
+            {activeLabel}
           </span>
         )}
       </div>
@@ -98,7 +98,7 @@ function FilterField({ label, hint, active, accent, children, fullWidth = false 
   )
 }
 
-function FilterSelect({ label, hint, value, options, onChange, onClear, accent }: any) {
+function FilterSelect({ label, hint, value, options, onChange, onClear, accent, activeLabel, clearLabel = 'Clear' }: any) {
   const displayValue = Array.isArray(value) ? (value[0] || '') : (value || '')
   const hasValue = displayValue !== ''
 
@@ -108,6 +108,7 @@ function FilterSelect({ label, hint, value, options, onChange, onClear, accent }
       hint={hint}
       active={hasValue}
       accent={accent}
+      activeLabel={activeLabel}
     >
       <div className="relative">
         <select
@@ -135,7 +136,7 @@ function FilterSelect({ label, hint, value, options, onChange, onClear, accent }
               onClear?.()
             }}
             className={`cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted/50 hover:bg-red-500/10 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500/60`}
-            title="清空"
+            title={clearLabel}
           >
             <X size={12} className="text-red-500" strokeWidth={2.5} />
           </button>
@@ -179,7 +180,8 @@ function FilterDropdown({
     selectedGroup,
     selectedTag,
     allGroups,
-    allTags})
+    allTags,
+    t})
 
   const clearAll = () => {
     onFiltersChange({ subscriptions: [], statuses: [], providers: [], usageRange: null })
@@ -238,13 +240,13 @@ function FilterDropdown({
                     onClick={clearAll}
                     className="cursor-pointer text-[11px] text-red-500 hover:bg-red-500/10 px-2 py-1 rounded-md transition-colors"
                   >
-                    清空
+                    {t('settings.clear')}
                   </button>
                 )}
                 <button
                   onClick={() => setOpen(false)}
                   className="cursor-pointer h-7 w-7 rounded-md inline-flex items-center justify-center hover:bg-muted/50 text-muted-foreground transition-colors"
-                  aria-label="关闭"
+                  aria-label={t('settings.close')}
                 >
                   <X size={14} />
                 </button>
@@ -267,24 +269,24 @@ function FilterDropdown({
 
           <div className="p-3 space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar max-w-full">
             {allTags.length > 0 && (
-              <SectionCard title="标签">
+              <SectionCard title={t('tags.title')}>
                 <div>
                   <SearchableTagSelect
                     tags={allTags}
                     value={selectedTag}
                     onChange={onTagFilter}
-                    placeholder={t('tags.searchPlaceholder') || '搜索标签...'}
+                    placeholder={t('tags.searchPlaceholder')}
                     showAllOption={true}
                     showNoneOption={true}
                     allLabel={t('tags.all')}
                     noneLabel={t('tags.noTags')}
-                    hasLabel={t('tags.hasTags') || '有标签'}
+                    hasLabel={t('tags.hasTags')}
                   />
                 </div>
               </SectionCard>
             )}
 
-            <SectionCard title="条件筛选">
+            <SectionCard title={t('filter.advanced')}>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <FilterSelect
                   label={t('filter.subscription')}
@@ -293,6 +295,8 @@ function FilterDropdown({
                   onChange={(value: string) => onFiltersChange({ ...filters, subscriptions: [value] })}
                   onClear={() => onFiltersChange({ ...filters, subscriptions: [] })}
                   accent={accent}
+                  activeLabel={t('filter.set')}
+                  clearLabel={t('settings.clear')}
                 />
 
                 <FilterSelect
@@ -302,6 +306,8 @@ function FilterDropdown({
                   onChange={(value: string) => onFiltersChange({ ...filters, statuses: [value] })}
                   onClear={() => onFiltersChange({ ...filters, statuses: [] })}
                   accent={accent}
+                  activeLabel={t('filter.set')}
+                  clearLabel={t('settings.clear')}
                 />
 
                 <FilterSelect
@@ -311,34 +317,39 @@ function FilterDropdown({
                   onChange={(value: string) => onFiltersChange({ ...filters, providers: [value] })}
                   onClear={() => onFiltersChange({ ...filters, providers: [] })}
                   accent={accent}
+                  activeLabel={t('filter.set')}
+                  clearLabel={t('settings.clear')}
                 />
 
                 <FilterSelect
-                  label="使用量"
+                  label={t('filter.usage')}
                   value={filters.usageRange || ''}
                   options={USAGE_RANGE_OPTIONS}
                   onChange={(value: string) => onFiltersChange({ ...filters, usageRange: value })}
                   onClear={() => onFiltersChange({ ...filters, usageRange: null })}
                   accent={accent}
+                  activeLabel={t('filter.set')}
+                  clearLabel={t('settings.clear')}
                 />
 
                 {allGroups.length > 0 && (
                   <FilterField
-                    label={t('groups.title') || '分组'}
+                    label={t('groups.title')}
                     active={Boolean(selectedGroup)}
                     accent={accent}
+                    activeLabel={t('filter.set')}
                     fullWidth
                   >
                     <SearchableTagSelect
                       tags={allGroups}
                       value={selectedGroup}
                       onChange={onGroupFilter}
-                      placeholder={t('groups.searchPlaceholder') || '搜索分组...'}
+                      placeholder={t('groups.searchPlaceholder')}
                       showAllOption={true}
                       showNoneOption={true}
-                      allLabel={t('groups.all') || '全部'}
-                      noneLabel={t('groups.noGroup') || '无分组'}
-                      hasLabel={t('groups.hasGroup') || '有分组'}
+                      allLabel={t('groups.all')}
+                      noneLabel={t('groups.noGroup')}
+                      hasLabel={t('groups.hasGroup')}
                     />
                   </FilterField>
                 )}
@@ -351,7 +362,7 @@ function FilterDropdown({
               onClick={() => setOpen(false)}
               className={`cursor-pointer rounded-md px-3 h-8 text-xs font-medium ${accent.text} ${accent.bgSoft} hover:opacity-90 transition-colors`}
             >
-              完成
+              {t('common.finish')}
             </button>
           </div>
 

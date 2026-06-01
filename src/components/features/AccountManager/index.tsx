@@ -209,7 +209,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
       } else if (errorMsg.includes('401') || errorMsg.includes('invalid')) {
         showError(t('accounts.tokenInvalid'))
       } else if (errorMsg.includes('error sending request') || errorMsg.includes('connection') || errorMsg.includes('network') || errorMsg.includes('timeout')) {
-        showError('❌ 网络连接失败\n\n可能原因：\n• 网络不稳定\n• 代理设置有误\n• 防火墙拦截\n\n解决方法：\n1. 检查网络连接\n2. 检查代理设置\n3. 关闭防火墙或添加白名单')
+        showError(t('accounts.networkConnectionFailed'))
       } else {
         showError(errorMsg.slice(0, 100))
       }
@@ -224,19 +224,19 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
       const account = await invoke<any>('refresh_account_token', { id })
       patchAccountLocally(account)
       clearAvailableModelsState(id)
-      showSuccess('Token 刷新成功')
+      showSuccess(t('accounts.refreshSuccess'))
       return { success: true, account }
     } catch (e) {
       const errorMsg = String(e)
       if (errorMsg.includes('BANNED')) {
-        showError('账号已封禁')
+        showError(t('accounts.accountBanned'))
       } else if (errorMsg.includes('AUTH_ERROR')) {
         // AUTH_ERROR: 静默处理，不弹窗（账号已自动标记为 invalid）
         console.log('[Refresh] Token 已失效，已自动标记账号状态')
       } else if (errorMsg.includes('401') || errorMsg.includes('invalid')) {
-        showError('Token 无效，刷新失败')
+        showError(t('accounts.tokenInvalid'))
       } else if (errorMsg.includes('error sending request') || errorMsg.includes('connection') || errorMsg.includes('network') || errorMsg.includes('timeout')) {
-        showError('❌ 网络连接失败\n\n可能原因：\n• 网络不稳定\n• 代理设置有误\n• 防火墙拦截\n\n解决方法：\n1. 检查网络连接\n2. 检查代理设置\n3. 关闭防火墙或添加白名单')
+        showError(t('accounts.networkConnectionFailed'))
       } else {
         showError(errorMsg.slice(0, 100))
       }
@@ -244,7 +244,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
     } finally {
       setRefreshingTokenId(null)
     }
-  }, [clearAvailableModelsState, patchAccountLocally])
+  }, [clearAvailableModelsState, patchAccountLocally, t])
 
   // 获取所有标签（从标签定义中获取）
   const allTags = useMemo(() => {
@@ -420,9 +420,9 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
       // 失败时回滚
       patchAccountLocally({ ...account, enabled: !enabled })
       console.error('Toggle enabled failed:', e)
-      showError('启用/禁用切换失败', String(e))
+      showError(t('common.error'), String(e))
     }
-  }, [patchAccountLocally])
+  }, [patchAccountLocally, t])
 
   // 切换超额开关
   const handleToggleOverage = useCallback(async (account: any, enabled: boolean) => {
@@ -460,11 +460,11 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
         }
       })
       console.error('Failed to toggle overage:', e)
-      showError('超额开关切换失败', String(e))
+      showError(t('common.error'), String(e))
     } finally {
       setTogglingOverageId(null)
     }
-  }, [patchAccountLocally])
+  }, [patchAccountLocally, t])
 
   // 删除单个账号
   const handleDelete = useCallback(async (id: string) => {
@@ -474,8 +474,8 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
     
     if (isCurrent) {
       const confirmed = await showConfirm(
-        '⚠️ 删除当前账号',
-        '您正在删除当前使用的账号！\n\n删除后 Kiro IDE 将无法使用，需要重新登录。\n\n确定要删除吗？'
+        t('accounts.deleteCurrentAccount'),
+        t('accounts.deleteCurrentAccountMessage')
       )
       if (!confirmed) return
     } else {
@@ -491,7 +491,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
   const handleDeleteRemote = useCallback(async (account: any) => {
     const confirmed = await showConfirm(
       '⚠️ ' + t('accountCard.deleteRemote'),
-      '远程删除将从 AWS 服务端注销此账号！\n\n此操作不可恢复，账号将永久失效。\n\n' + t('accountCard.deleteRemoteConfirm')
+      t('accounts.deleteRemoteWarning') + '\n\n' + t('accountCard.deleteRemoteConfirm')
     )
     if (confirmed) {
       try {
@@ -513,8 +513,8 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
 
     if (includesCurrent) {
       const confirmed = await showConfirm(
-        '⚠️ 批量删除包含当前账号',
-        `您选择了 ${selectedIds.length} 个账号，其中包含当前使用的账号！\n\n删除后 Kiro IDE 将无法使用，需要重新登录。\n\n确定要删除吗？`
+        t('accounts.batchDeleteIncludesCurrent'),
+        t('accounts.batchDeleteIncludesCurrentMessage', { count: selectedIds.length })
       )
       if (!confirmed) return
     } else {
@@ -539,7 +539,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
         onImport={() => setShowImportModal(true)}
         onExport={async () => {
           if (selectedIds.length === 0) {
-            showError(t('accounts.exportSelectFirst') || '请先选择要导出的账号')
+            showError(t('accounts.exportSelectFirst'))
             return
           }
           await handleExport(selectedIds)
@@ -548,7 +548,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
         onRefresh={loadAccounts}
         onRefreshAll={async () => {
           if (selectedIds.length === 0) {
-            showError(t('accounts.refreshSelectFirst') || '请先选择要刷新的账号')
+            showError(t('accounts.refreshSelectFirst'))
             return
           }
           await batchRefreshAccounts(selectedIds, accounts)
@@ -586,12 +586,12 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
               </svg>
             </div>
             <h3 className="text-base font-semibold text-foreground mb-1.5">
-              {searchTerm || selectedGroup || selectedTag || selectedStatus ? '没有找到匹配的账号' : '还没有账号'}
+              {searchTerm || selectedGroup || selectedTag || selectedStatus ? t('common.noMatches') : t('accounts.noAccounts')}
             </h3>
             <p className="text-xs text-muted-foreground mb-5">
               {searchTerm || selectedGroup || selectedTag || selectedStatus
-                ? '试试调整筛选条件或搜索关键词'
-                : '导入账号开始管理你的 Kiro IDE 账户'}
+                ? t('accounts.adjustFiltersHint')
+                : t('accounts.importAccountHint')}
             </p>
             {!searchTerm && !selectedGroup && !selectedTag && !selectedStatus && (
               <button
@@ -599,7 +599,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
                 className={`px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r ${accent.gradientFrom} ${accent.gradientTo} shadow-md hover:shadow-lg transition-all duration-200 inline-flex items-center gap-1.5 cursor-pointer`}
               >
                 <Upload size={14} />
-                导入账号
+                {t('accounts.import')}
               </button>
             )}
           </div>
@@ -730,7 +730,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
       )}
 
       
-      {/* 切换账号弹窗 */}
+      {/* Switch account dialog */}
       {switchDialog && (
         <ConfirmModal
           type={switchDialog.type}
@@ -743,7 +743,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
             : t('common.ok')}
           customContent={switchDialog.type === 'confirm' ? (
             <div className="flex items-center gap-3 mt-3 p-3 rounded-xl bg-muted/30 border border-border">
-              <span className="text-xs text-muted-foreground font-medium shrink-0">切换目标</span>
+              <span className="text-xs text-muted-foreground font-medium shrink-0">{t('switch.target', { defaultValue: 'Switch Target' })}</span>
               <div className="flex gap-1.5 flex-1">
                 {(['ide', 'cli', 'both'] as const).map(target => (
                   <button

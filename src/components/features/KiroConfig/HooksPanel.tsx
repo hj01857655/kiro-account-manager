@@ -50,7 +50,7 @@ function HooksPanel({ onCountChange, projectDir }: any) {
       setHooks(data)
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Hooks 失败', e, { userMessage: t('hooks.loadFailed') || '加载 Hooks 失败' })
+      handleUiError('load Hooks failed', e, { userMessage: t('hooks.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -87,7 +87,7 @@ function HooksPanel({ onCountChange, projectDir }: any) {
       setSelectedHook({ ...selectedHook, content: editContent })
       setHasChanges(false)
     } catch (e) {
-      handleUiError('保存 Hook 失败', e, { userMessage: t('hooks.saveFailed') || '保存失败' })
+      handleUiError('save Hook failed', e, { userMessage: t('hooks.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -110,7 +110,7 @@ function HooksPanel({ onCountChange, projectDir }: any) {
         setHasChanges(false)
       }
     } catch (e) {
-      handleUiError('删除 Hook 失败', e, { userMessage: t('hooks.deleteFailed') || '删除失败' })
+      handleUiError('delete Hook failed', e, { userMessage: t('hooks.deleteFailed') })
     }
   }
 
@@ -147,7 +147,7 @@ function HooksPanel({ onCountChange, projectDir }: any) {
   },
   "then": {
     "type": "askAgent",
-    "prompt": "请在这里填写执行说明"
+    "prompt": "${t('hooks.promptPlaceholder')}"
   },
   "workspaceFolderName": "",
   "shortName": "${baseName}",
@@ -167,7 +167,7 @@ function HooksPanel({ onCountChange, projectDir }: any) {
       handleSelect(newHook)
       return true
     } catch (e) {
-      handleUiError('创建 Hook 失败', e, { userMessage: t('hooks.createFailed') || '创建失败' })
+      handleUiError('create Hook failed', e, { userMessage: t('hooks.createFailed') })
       return false
     }
   }

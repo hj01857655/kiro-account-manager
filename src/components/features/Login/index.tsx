@@ -320,7 +320,7 @@ function Login({ onLogin }: LoginProps) {
             <Button variant="secondary" onClick={() => setShowEnterpriseModal(false)}>
               {t('login.cancel')}
             </Button>
-            <Button onClick={handleEnterpriseLogin}>{t('common.continue') || '继续'}</Button>
+            <Button onClick={handleEnterpriseLogin}>{t('common.continue')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

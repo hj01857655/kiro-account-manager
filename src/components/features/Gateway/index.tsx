@@ -101,11 +101,11 @@ function GatewayPage() {
   const hasUnsavedChanges = configSnapshot !== savedConfigSnapshot
   const hasRuntimeChanges = !!status.running && !!appliedRuntimeSnapshot && runtimeSnapshot !== appliedRuntimeSnapshot
 
-  // 自动保存 + 自动重启（防抖 1.5 秒）
+  // Auto-save and auto-restart after a short debounce.
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null)
   const isInitialLoad = useRef(true)
   useEffect(() => {
-    // 跳过初始加载
+    // Skip the initial load.
     if (isInitialLoad.current) {
       isInitialLoad.current = false
       return
@@ -172,15 +172,16 @@ function GatewayPage() {
 
   const consoleHighlights = useMemo(() => ([
     {
-      label: '当前入口',
+      label: t('gateway.currentEndpoint', { defaultValue: 'Current Endpoint' }),
       value: effectiveBaseUrl},
     {
-      label: '客户端 Key',
+      label: t('gateway.clientKey', { defaultValue: 'Client Key' }),
       value: effectiveSecuritySummary.apiKeyState},
     {
-      label: '路由模式',
+      label: t('gateway.routingMode', { defaultValue: 'Routing Mode' }),
       value: effectiveRoutingSummary.modeLabel},
   ]), [
+    t,
     effectiveBaseUrl,
     effectiveSecuritySummary.apiKeyState,
     effectiveRoutingSummary.modeLabel,
@@ -289,11 +290,11 @@ function GatewayPage() {
     if (!hasFieldErrors) {
       return false
     }
-    pushError('请先修正表单错误后再继续')
+    pushError(t('gateway.fixFormErrors', { defaultValue: 'Please fix form errors before continuing' }))
     return true
   }
 
-  // 静默保存（Dialog 关闭时用，不校验、不重启）
+  // Silent save for dialog close handlers; it does not validate or restart.
   const handleSilentSave = async () => {
     try {
       await saveGatewayConfig(config)
@@ -309,7 +310,7 @@ function GatewayPage() {
     try {
       await saveGatewayConfig(config)
       setSavedConfigSnapshot(buildGatewayConfigSnapshot(config))
-      // 保存成功后，如果网关正在运行则自动重启使配置生效
+      // Restart automatically after saving when the gateway is already running.
       if (status.running) {
         await stopGateway()
         const st = await startGateway(config)
@@ -377,14 +378,14 @@ function GatewayPage() {
   const handleAutoStartToggle = async (checked: boolean) => {
     setField('enabled', checked)
     
-    // 延迟执行，确保 setField 先更新状态
+    // Delay execution so setField updates state first.
     setTimeout(async () => {
       try {
-        // 先保存配置
+        // Save the config first.
         await saveGatewayConfig({ ...config, enabled: checked })
         setSavedConfigSnapshot(buildGatewayConfigSnapshot({ ...config, enabled: checked }))
         
-        // 如果勾选自动启动且配置有效，立即启动反代
+        // Start immediately when auto-start is enabled and the config is valid.
         if (checked && !hasFieldErrors) {
           setSaving(true)
           const st = await startGateway({ ...config, enabled: checked })
@@ -394,7 +395,7 @@ function GatewayPage() {
           setLastStatusSyncAt(formatGatewayTimestamp())
           setSaving(false)
         } else if (!checked && status.running) {
-          // 如果取消自动启动且反代正在运行，停止反代
+          // Stop the reverse proxy when auto-start is disabled while it is running.
           setSaving(true)
           await stopGateway()
           setStatus(prev => ({ ...prev, running: false }))
@@ -447,7 +448,9 @@ function GatewayPage() {
           <Stack gap="sm">
             <Group justify="space-between" align="center">
               <Group gap="xs">
-                <Text fw={700} className="text-foreground text-base">Kiro API 反代</Text>
+                <Text fw={700} className="text-foreground text-base">
+                  {t('gateway.kiroApiReverseProxy', { defaultValue: 'Kiro API Reverse Proxy' })}
+                </Text>
                 {!status.running ? (
                   <Button
                     size="sm"
@@ -456,7 +459,7 @@ function GatewayPage() {
                     className="bg-green-500 hover:bg-green-600 text-white h-7 px-2.5 text-xs"
                   >
                     <Play size={12} className="mr-1" />
-                    启动
+                    {t('settings.start', { defaultValue: 'Start' })}
                   </Button>
                 ) : (
                   <Button
@@ -466,15 +469,19 @@ function GatewayPage() {
                     className="bg-red-500 hover:bg-red-600 text-white h-7 px-2.5 text-xs"
                   >
                     <Square size={12} className="mr-1" />
-                    停止
+                    {t('settings.stop', { defaultValue: 'Stop' })}
                   </Button>
                 )}
-                <Badge color={status.running ? 'green' : 'gray'}>{status.running ? '运行中' : '已停止'}</Badge>
+                <Badge color={status.running ? 'green' : 'gray'}>
+                  {status.running
+                    ? t('gateway.running', { defaultValue: 'Running' })
+                    : t('gateway.stopped', { defaultValue: 'Stopped' })}
+                </Badge>
               </Group>
               <Group gap="xs">
                 <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setShowRequestLogs(true)} disabled={!status.running}>
                   <ScrollText size={12} className="mr-1" />
-                  请求日志
+                  {t('gateway.requestLogs', { defaultValue: 'Request Logs' })}
                 </Button>
               </Group>
             </Group>
@@ -507,18 +514,18 @@ function GatewayPage() {
 
         <RequestLogsDialog open={showRequestLogs} onOpenChange={setShowRequestLogs} logLevel={config.logLevel} onLogLevelChange={(v) => setField('logLevel', v)} logRequests={config.logRequests} onLogRequestsChange={(v) => setField('logRequests', v)} onSave={handleSilentSave} />
 
-        {/* 快速配置客户端弹窗 */}
+        {/* Quick client configuration dialog */}
         <Dialog open={showClientConfig} onOpenChange={setShowClientConfig}>
           <DialogContent className="sm:max-w-[480px]">
             <DialogHeader className="">
-              <DialogTitle className="">⚡ 快速配置客户端</DialogTitle>
+              <DialogTitle className="">⚡ {t('gateway.configureClients', { defaultValue: 'Configure Clients' })}</DialogTitle>
               <DialogDescription className="">
-                一键将反代地址写入客户端配置文件，配置前自动备份
+                {t('gateway.configureClientsDesc', { defaultValue: 'Write the reverse proxy endpoint to client config files in one step. Existing files are backed up first.' })}
               </DialogDescription>
             </DialogHeader>
 
             <div className="flex flex-col gap-4 mt-2">
-              {/* 客户端选择 */}
+              {/* Client selection */}
               <div className="flex gap-3">
                 {[
                   { id: 'claudeCode', label: 'Claude Code CLI', desc: '~/.claude/settings.json' },
@@ -541,9 +548,11 @@ function GatewayPage() {
                 ))}
               </div>
 
-              {/* 配置预览 */}
+              {/* Configuration preview */}
               <div className="bg-muted/30 border border-border rounded-xl p-3">
-                <Text size="xs" className="text-muted-foreground mb-2">将写入的配置：</Text>
+                <Text size="xs" className="text-muted-foreground mb-2">
+                  {t('gateway.configToWrite', { defaultValue: 'Configuration to write:' })}
+                </Text>
                 <div className="flex flex-col gap-2 font-mono text-[11px]">
                   {selectedClients.includes('claudeCode') && (
                     <div className="flex flex-col gap-0.5 p-2 rounded-lg bg-muted/30">
@@ -562,17 +571,19 @@ function GatewayPage() {
                 </div>
               </div>
 
-              {/* 执行按钮 */}
+              {/* Execute button */}
               <Button
                 onClick={handleConfigureClients}
                 disabled={selectedClients.length === 0 || clientConfigLoading}
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 <Zap size={16} className="mr-1" />
-                {clientConfigLoading ? '配置中...' : `一键配置 ${selectedClients.length} 个客户端`}
+                {clientConfigLoading
+                  ? t('gateway.configuring', { defaultValue: 'Configuring...' })
+                  : t('gateway.configureClientCount', { count: selectedClients.length, defaultValue: `Configure ${selectedClients.length} clients` })}
               </Button>
 
-              {/* 结果展示 */}
+              {/* Results */}
               {clientConfigResults.length > 0 && (
                 <div className="flex flex-col gap-2">
                   {clientConfigResults.map((result: any, idx: number) => (

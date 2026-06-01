@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { useApp } from '@/hooks/useApp'
 
 interface ApiKeysDialogProps {
   open: boolean
@@ -14,6 +15,7 @@ interface ApiKeysDialogProps {
 }
 
 function ApiKeysDialog({ open, onOpenChange, clientApiKeysText, setConfig, onSave }: ApiKeysDialogProps) {
+  const { t } = useApp()
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [editingKey, setEditingKey] = useState('')
 
@@ -78,24 +80,26 @@ function ApiKeysDialog({ open, onOpenChange, clientApiKeysText, setConfig, onSav
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) { setEditingIdx(null); onSave?.() } }}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>客户端 API Keys</DialogTitle>
-          <DialogDescription>管理客户端认证密钥，禁用的 Key 不会被使用</DialogDescription>
+          <DialogTitle>{t('gateway.clientApiKeys', { defaultValue: 'Client API Keys' })}</DialogTitle>
+          <DialogDescription>
+            {t('gateway.clientAuthDescription', { defaultValue: 'Manage client authentication keys. Disabled keys will not be used.' })}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3 mt-2">
           <div className="flex gap-2 justify-end">
             <Button size="sm" variant="outline" onClick={generateKey} className="h-7 text-xs gap-1">
-              <Dice6 size={12} /> 随机生成
+              <Dice6 size={12} /> {t('gateway.generate', { defaultValue: 'Generate' })}
             </Button>
             <Button size="sm" variant="outline" onClick={addKey} className="h-7 text-xs gap-1">
-              <Plus size={12} /> 添加
+              <Plus size={12} /> {t('gateway.add', { defaultValue: 'Add' })}
             </Button>
           </div>
 
           <div className="border rounded-lg overflow-hidden max-h-[350px] overflow-y-auto">
             {keys.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                暂无 API Key，点击"随机生成"创建
+                {t('gateway.noApiKeys', { defaultValue: 'No API Keys yet, click Generate to create one' })}
               </div>
             ) : (
               keys.map((item, idx) => (
@@ -117,7 +121,7 @@ function ApiKeysDialog({ open, onOpenChange, clientApiKeysText, setConfig, onSav
                       updateKeys(newKeys)
                     }}
                     className="h-7 text-xs w-[70px]"
-                    placeholder="名称"
+                    placeholder={t('gateway.keyNamePlaceholder', { defaultValue: 'Name' })}
                   />
                   {editingIdx === idx ? (
                     <>

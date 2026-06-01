@@ -13,7 +13,7 @@ import type { Account, TagDefinition, GroupDefinition } from '../../../types/acc
 
 const ROW_HEIGHT = 48
 
-/** 紧凑徽章：统一各列徽章样式，避免每处复制一遍 class */
+/** Compact badge shared across table columns. */
 function Pill({ tone = 'muted', className = '', title, children }: {
   tone?: 'muted' | 'primary' | 'red' | 'orange' | 'green' | 'slate'
   className?: string
@@ -119,9 +119,9 @@ const ListRow = memo(function ListRow({
       ? { icon: LogOut, label: t('accountCard.LogOut'), onClick: () => onLogout(account), disabled: isSwitching, danger: true }
       : { icon: LogIn, label: t('accountCard.LogIn'), onClick: () => onLogin(account), disabled: isSwitching || isUnavailable },
     { divider: true },
-    { label: account.enabled === false ? '启用账号' : '禁用账号', onClick: () => onToggleEnabled?.(account, account.enabled === false) },
+    { label: account.enabled === false ? t('accountCard.enableAccount') : t('accountCard.disableAccount'), onClick: () => onToggleEnabled?.(account, account.enabled === false) },
     ...(overageCapability === 'OVERAGE_CAPABLE' ? [
-      { label: overageStatus === 'ENABLED' ? '关闭超额' : '开启超额', onClick: () => onToggleOverage?.(account, overageStatus !== 'ENABLED'), disabled: isTogglingOverage },
+      { label: overageStatus === 'ENABLED' ? t('accountCard.disableOverage') : t('accountCard.enableOverage'), onClick: () => onToggleOverage?.(account, overageStatus !== 'ENABLED'), disabled: isTogglingOverage },
     ] : []),
     { icon: Trash2, label: t('accountCard.delete'), onClick: () => onDelete(account.id), danger: true },
     ...(account.provider !== 'Enterprise' && !isBanned && onDeleteRemote ? [
@@ -158,7 +158,7 @@ const ListRow = memo(function ListRow({
         className="shrink-0 cursor-pointer"
       />
 
-      {/* 邮箱 + 备注 */}
+      {/* Email and remark */}
       <div className="w-36 shrink-0 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium truncate text-foreground">
@@ -176,12 +176,12 @@ const ListRow = memo(function ListRow({
         {getProviderDisplayName(account.provider) || '—'}
       </Pill>
 
-      {/* 订阅 */}
+      {/* Subscription */}
       <Pill tone={subscriptionTone} className="w-16 shrink-0">
         {subscriptionTitle || 'Free'}
       </Pill>
 
-      {/* 配额 */}
+      {/* Quota */}
       <div className="w-24 shrink-0">
         <div className="flex items-center justify-between">
           <span className={`text-[11px] font-bold ${isOverage ? 'text-purple-500' : used >= limit && limit > 0 ? 'text-red-500' : 'text-foreground'}`}>
@@ -205,12 +205,12 @@ const ListRow = memo(function ListRow({
         )}
         {!isOverage && overageCapability === 'OVERAGE_CAPABLE' && (
           <span className={`text-[9px] mt-0.5 block ${overageStatus === 'ENABLED' ? 'text-green-500' : 'text-muted-foreground'}`}>
-            {overageStatus === 'ENABLED' ? '⚡超额已开' : '⚡可开超额'}
+            {overageStatus === 'ENABLED' ? t('accountCard.overageEnabledShort') : t('accountCard.overageAvailableShort')}
           </span>
         )}
       </div>
 
-      {/* 状态 */}
+      {/* Status */}
       <Pill
         tone={statusMeta.key === 'active' ? 'green' : 'red'}
         className="w-12 shrink-0 uppercase"
@@ -218,7 +218,7 @@ const ListRow = memo(function ListRow({
         {statusMeta.label}
       </Pill>
 
-      {/* 过期 / 试用 */}
+      {/* Expiration / trial */}
       <div className="w-28 shrink-0 text-[10px] text-muted-foreground leading-tight">
         {account.expiresAt ? (
           <span className={isExpired ? 'text-red-500 font-bold' : ''}>
@@ -226,13 +226,13 @@ const ListRow = memo(function ListRow({
           </span>
         ) : '—'}
         {trialExpiry && (
-          <span className="text-orange-500 ml-1" title="试用到期">
+          <span className="text-orange-500 ml-1" title={t('accounts.trialExpiring')}>
             · {new Date(trialExpiry * 1000).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
           </span>
         )}
       </div>
 
-      {/* 分组 */}
+      {/* Group */}
       <div className="w-16 shrink-0">
         {account.groupId
           ? (() => {
@@ -250,13 +250,13 @@ const ListRow = memo(function ListRow({
           : <span className="text-xs text-muted-foreground">—</span>}
       </div>
 
-      {/* 标签 */}
+      {/* Tags */}
       <div className="flex-[1.5] min-w-[80px] min-w-0">
         {account.tagLinks && account.tagLinks.length > 0 ? (
           <div className="flex items-center gap-1 flex-wrap">
             {account.tagLinks.slice(0, 3).map(tagLink => {
               const tag = tagMap.get(tagLink.tagId)
-              const tagName = tag?.name || tagLink.tagName || '标签'
+              const tagName = tag?.name || tagLink.tagName || t('tags.title')
               const tagColor = tag?.color || '#888888'
               return (
                 <span
@@ -273,7 +273,7 @@ const ListRow = memo(function ListRow({
         ) : <span className="text-xs text-muted-foreground">—</span>}
       </div>
 
-      {/* 操作按钮（hover 时绝对定位浮起，避免占用列宽） */}
+      {/* Floating row actions on hover. */}
       <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-card/95 backdrop-blur-sm rounded-md shadow-sm border border-border px-1 py-1">
         {isCurrent ? (
           <button
@@ -448,28 +448,28 @@ function AccountListView({
           </span>
         </label>
         <span className="text-xs text-muted-foreground">
-          {accounts.length === totalCount ? `共 ${totalCount} 个账号` : `${accounts.length} / ${totalCount} 个账号`}
+          {accounts.length === totalCount ? `${totalCount} ${t('stats.accounts')}` : `${accounts.length} / ${totalCount} ${t('stats.accounts')}`}
         </span>
       </div>
 
-      {/* 表头 */}
+      {/* Table header */}
       <div className="flex items-center gap-3 px-3 h-9 bg-muted/50 border border-border rounded-t-md text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
         <div className="w-4" />
-        <div className="w-36">邮箱</div>
-        <div className="w-16 text-center">来源</div>
-        <div className="w-16 text-center">订阅</div>
+        <div className="w-36">{t('accounts.email')}</div>
+        <div className="w-16 text-center">{t('accounts.provider')}</div>
+        <div className="w-16 text-center">{t('accounts.subscription')}</div>
         <button type="button" onClick={() => handleSort('usage')} className="w-24 text-left hover:text-primary transition-colors">
-          配额<SortIcon field="usage" />
+          {t('accounts.quota')}<SortIcon field="usage" />
         </button>
-        <div className="w-12 text-center">状态</div>
+        <div className="w-12 text-center">{t('accounts.status')}</div>
         <button type="button" onClick={() => handleSort('trial')} className="w-28 text-left hover:text-primary transition-colors">
-          过期 / 试用<SortIcon field="trial" />
+          {t('accounts.expiryTrial', { defaultValue: 'Expiry / Trial' })}<SortIcon field="trial" />
         </button>
-        <div className="w-16">分组</div>
-        <div className="flex-[1.5] min-w-[80px]">标签</div>
+        <div className="w-16">{t('groups.title')}</div>
+        <div className="flex-[1.5] min-w-[80px]">{t('tags.title')}</div>
       </div>
 
-      {/* 列表 */}
+      {/* List */}
       <div ref={scrollRef} className="flex-1 overflow-auto border border-t-0 border-border rounded-b-md bg-card/30 no-scrollbar">
         <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
           {rowVirtualizer.getVirtualItems().map((vRow) => {

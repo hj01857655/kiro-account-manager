@@ -55,7 +55,7 @@ function KiroConfig() {
         setProjectDir(selected as string)
       }
     } catch (e) {
-      handleUiError('选择项目目录失败', e, { userMessage: '选择项目目录失败' })
+      handleUiError('select project directory failed', e, { userMessage: t('kiroConfig.selectProjectDirFailed') })
     }
   }
 
@@ -174,4 +174,3 @@ function KiroConfig() {
 }
 
 export default KiroConfig
-

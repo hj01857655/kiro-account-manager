@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, emit, UnlistenFn } from '@tauri-apps/api/event'
+import i18n from 'i18next'
 import { isUnavailableStatus } from '../../../../utils/accountStatus'
 import { normalizeAccountForUi, getSafeAccountDisplayName } from '../utils/accountRuntime'
 import { Account } from '../../../../types/account'
@@ -89,15 +90,15 @@ export function useAccounts() {
         const idx = updatedAccounts.findIndex(a => a.id === account.id)
         if (idx !== -1) updatedAccounts[idx] = updated
         success = true
-        message = '同步成功'
+        message = i18n.t('accounts.refreshSuccess')
       } catch (e) {
         const errorMsg = String(e)
         const idx = updatedAccounts.findIndex(a => a.id === account.id)
         if (errorMsg.includes('BANNED')) {
-          message = '账号已封禁'
+          message = i18n.t('accounts.accountBanned')
           if (idx !== -1) updatedAccounts[idx] = { ...updatedAccounts[idx], status: 'banned' }
         } else if (errorMsg.includes('AUTH_ERROR') || errorMsg.includes('401') || errorMsg.includes('invalid')) {
-          message = '账号已失效'
+          message = i18n.t('accounts.tokenInvalid')
           if (idx !== -1) updatedAccounts[idx] = { ...updatedAccounts[idx], status: 'invalid' }
         } else {
           message = errorMsg.slice(0, 30)
@@ -171,7 +172,7 @@ export function useAccounts() {
       const filePath = await save({
         defaultPath: `${defaultDir}${sep}${defaultName}`,
         filters: [{ name: 'JSON', extensions: ['json'] }],
-        title: '导出账号数据'
+        title: i18n.t('accounts.export')
       })
       
       if (!filePath) return

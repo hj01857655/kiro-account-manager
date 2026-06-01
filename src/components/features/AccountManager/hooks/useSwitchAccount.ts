@@ -35,7 +35,7 @@ export function useSwitchAccount(onLocalTokenChange) {
   const handleSwitchAccount = useCallback((account) => {
     if (isUnavailableStatus(account)) {
       const statusMeta = getAccountStatusMeta(account, t)
-      setSwitchDialog({ type: 'error', title: t('switch.failed'), message: `账号当前状态为${statusMeta.label}，请重新登录或恢复后再切换`, account: null })
+      setSwitchDialog({ type: 'error', title: t('switch.failed'), message: t('accounts.accountCannotSwitch', { status: statusMeta.label }), account: null })
       return
     }
     if (!account.accessToken || !account.refreshToken) {
@@ -72,8 +72,8 @@ export function useSwitchAccount(onLocalTokenChange) {
     setSwitchDialog(null)
     setSwitchingId(account.id)
 
-    // 退出登录分支：login 写入登录态，logout 删除登录态。无需检测 IDE 安装/刷新 token，
-    // 后端命令对"本来就没登录"幂等返回成功。
+    // Logout is the inverse of login: login writes local auth state, logout removes it.
+    // The backend command is idempotent when the IDE is already logged out.
     if (mode === 'logout') {
       try {
         if (switchTarget === 'ide' || switchTarget === 'both') {
@@ -242,20 +242,20 @@ export function useSwitchAccount(onLocalTokenChange) {
       if (remaining > 0) {
         message += ` (${t('switch.remaining')} ${remaining})`
       } else {
-        message += ` (已用完)`
+        message += ` (${t('accounts.capped')})`
       }
       message += `\n`
       message += `🏷️ ${t('switch.type')}: ${provider}`
       if (subTitle) message += ` (${subTitle})`
       message += `\n`
-      message += `🎯 切换目标: ${switchTarget === 'both' ? 'IDE + CLI' : switchTarget === 'cli' ? 'CLI' : 'IDE'}`
+      message += `🎯 ${t('switch.target')}: ${switchTarget === 'both' ? 'IDE + CLI' : switchTarget === 'cli' ? 'CLI' : 'IDE'}`
       message += `\n`
       if (overageEnabled && currentOverages > 0) {
-        message += `⚡ 超额: ${currentOverages} credits ($${overageCharges.toFixed(2)}) | 费率: $${overageRate}/credit | 上限: ${overageCap}`
+        message += `⚡ ${t('home.currentOverage')}: ${currentOverages} credits ($${overageCharges.toFixed(2)}) | ${t('home.overageRate')}: $${overageRate}/credit | ${t('home.overageCap')}: ${overageCap}`
       } else if (overageEnabled) {
-        message += `⚡ 超额: 已开启，未超额`
+        message += `⚡ ${t('home.overage')}: ${t('home.enabled')}, ${t('home.currentOverage')} 0`
       } else {
-        message += `⚡ 超额: 未开启`
+        message += `⚡ ${t('home.overage')}: ${t('home.disabled')}`
       }
 
       setSwitchDialog({

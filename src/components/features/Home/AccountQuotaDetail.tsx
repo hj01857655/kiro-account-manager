@@ -300,7 +300,7 @@ function AccountInfo({ currentAccount, userInfo, breakdown, nextDateReset, accen
         {breakdown?.overageRate && (
           <Group justify="space-between">
             <Text size="xs" className={"text-muted-foreground"}>{t('home.rate')}</Text>
-            <Text size="xs" className={"text-foreground"}>${breakdown.overageRate}/次</Text>
+            <Text size="xs" className={"text-foreground"}>${breakdown.overageRate}/{t('home.invocations')}</Text>
           </Group>
         )}
         <Group justify="space-between">
@@ -351,7 +351,7 @@ function QuotaBreakdown({ mainUsed, mainLimit, mainPercent, freeTrial, bonuses, 
         {bonuses.map((bonus, idx) => (
           <QuotaRow
             key={idx}
-            label={bonus.displayName?.substring(0, 4) || `奖励${idx+1}`} 
+            label={bonus.displayName?.substring(0, 4) || `${t('home.bonus')}${idx + 1}`}
             used={Math.round(bonus.currentUsage ?? 0)} 
             limit={Math.round(bonus.usageLimit ?? 0)} 
             percent={bonus.usageLimit > 0 ? ((bonus.currentUsage ?? 0) / bonus.usageLimit * 100) : 0}
@@ -395,7 +395,7 @@ function QuotaRow({ label, used, limit, percent, color, expiry, accent, colors, 
   return (
     <div className="flex items-center gap-2">
       <div className={`w-2 h-2 rounded-full ${c.dot} shrink-0`} />
-      <span className={`text-xs ${c.text} w-14 shrink-0`} title={expiryStr ? `${expiryStr} ${t?.('home.expires') || '到期'}` : ''}>{label}</span>
+      <span className={`text-xs ${c.text} w-14 shrink-0`} title={expiryStr ? `${expiryStr} ${t('home.expires')}` : ''}>{label}</span>
       <div className={`flex-1 h-1.5 ${c.barBg} rounded-full overflow-hidden`}>
         <div className={`h-full rounded-full ${c.bar} transition-all`} style={{ width: `${percent}%` }} />
       </div>

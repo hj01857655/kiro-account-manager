@@ -63,16 +63,16 @@ function FileButton({ onChange, accept, children }: any) {
   )
 }
 
-function validateAccount(item: any, index: number) {
+function validateAccount(item: any, index: number, t: any) {
   const errors = []
   const refreshToken = item.refreshToken
   if (!refreshToken) {
-    errors.push(`第 ${index + 1} 条: 缺少 refreshToken`)
+    errors.push(t('accounts.validationMissingRefreshToken', { index: index + 1 }))
     return { valid: false, errors, type: null }
   }
 
   if (!refreshToken.startsWith('aor')) {
-    errors.push(`第 ${index + 1} 条: refreshToken 格式无效（应以 aor 开头）`)
+    errors.push(t('accounts.validationInvalidRefreshTokenFormat', { index: index + 1 }))
     return { valid: false, errors, type: null }
   }
 
@@ -84,7 +84,7 @@ function validateAccount(item: any, index: number) {
   if (!provider) {
     if (isSocial) {
       // Social 账号必须明确指定 provider
-      errors.push(`第 ${index + 1} 条: Social 账号必须指定 provider (Google/Github)`)
+      errors.push(t('accounts.validationSocialProviderRequired', { index: index + 1 }))
       return { valid: false, errors, type: null }
     } else {
       // IdC 账号：通过 startUrl 判断是 Enterprise 还是 BuilderId
@@ -95,28 +95,28 @@ function validateAccount(item: any, index: number) {
   const normalizedProvider = normalizeProviderId(provider)
   const validProviders = ['Google', 'Github', 'BuilderId', 'Enterprise']
   if (!validProviders.includes(normalizedProvider)) {
-    errors.push(`第 ${index + 1} 条: provider 必须是 ${validProviders.join('/')}`)
+    errors.push(t('accounts.validationInvalidProvider', { index: index + 1, providers: validProviders.join('/') }))
     return { valid: false, errors, type: null }
   }
 
   if (isSocial && !(normalizedProvider === 'Google' || isGitHubProvider(normalizedProvider))) {
-    errors.push(`第 ${index + 1} 条: Social 账号的 provider 应为 Google/Github`)
+    errors.push(t('accounts.validationSocialProviderInvalid', { index: index + 1 }))
     return { valid: false, errors, type: null }
   }
 
   if (isIdC && !['BuilderId', 'Enterprise'].includes(normalizedProvider)) {
-    errors.push(`第 ${index + 1} 条: IdC 账号的 provider 应为 BuilderId/Enterprise`)
+    errors.push(t('accounts.validationIdcProviderInvalid', { index: index + 1 }))
     return { valid: false, errors, type: null }
   }
 
   // Enterprise 账号必须提供 region 和 startUrl
   if (normalizedProvider === 'Enterprise') {
     if (!item.region || !item.region.trim()) {
-      errors.push(`第 ${index + 1} 条: Enterprise 账号必须提供 region 字段`)
+      errors.push(t('accounts.validationEnterpriseRegionRequired', { index: index + 1 }))
       return { valid: false, errors, type: null }
     }
     if (!item.startUrl || !item.startUrl.trim()) {
-      errors.push(`第 ${index + 1} 条: Enterprise 账号必须提供 startUrl 字段`)
+      errors.push(t('accounts.validationEnterpriseStartUrlRequired', { index: index + 1 }))
       return { valid: false, errors, type: null }
     }
   }
@@ -259,7 +259,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
       const errors: string[] = []
 
       data.forEach((item, index) => {
-        const result = validateAccount(item, index)
+        const result = validateAccount(item, index, t)
         if (result.valid) {
           valid.push({ ...item, _type: result.type, _index: index, _inferredProvider: result.inferredProvider })
         } else {
@@ -270,7 +270,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
 
       setParseResult({ valid, invalid, errors })
     } catch (e: any) {
-      setParseResult({ valid: [], invalid: [], errors: [`JSON 解析失败: ${e.message}`] })
+      setParseResult({ valid: [], invalid: [], errors: [t('accounts.jsonParseFailed', { message: e.message })] })
     }
   }
 
@@ -348,7 +348,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
       } catch (e) {
         const errorMsg = String(e)
         if (errorMsg.includes('BANNED')) {
-          return { success: false, index: item._index + 1, error: '账号已封禁', banned: true }
+          return { success: false, index: item._index + 1, error: t('accounts.accountBanned'), banned: true }
         }
         return { success: false, index: item._index + 1, error: errorMsg.slice(0, 50) }
       }
@@ -423,7 +423,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
       } catch (e) {
         const errorMsg = String(e)
         if (errorMsg.includes('BANNED')) {
-          return { success: false, error: '账号已封禁', banned: true }
+          return { success: false, error: t('accounts.accountBanned'), banned: true }
         }
         return { success: false, error: errorMsg.slice(0, 80) }
       }
@@ -470,16 +470,16 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
         setKiroCliResult({
           success: true,
           isNew: result.is_new,
-          email: result.account?.email || result.account?.userId || '未知账号'
+          email: result.account?.email || result.account?.userId || t('accounts.unknownAccount')
         })
 
         onSuccess?.({
-          added: result.is_new ? [{ email: result.account?.email || result.account?.userId || '未知账号', account: result.account }] : [],
-          updated: result.is_new ? [] : [{ email: result.account?.email || result.account?.userId || '未知账号', account: result.account }]})
+          added: result.is_new ? [{ email: result.account?.email || result.account?.userId || t('accounts.unknownAccount'), account: result.account }] : [],
+          updated: result.is_new ? [] : [{ email: result.account?.email || result.account?.userId || t('accounts.unknownAccount'), account: result.account }]})
       } else {
         setKiroCliResult({
           success: false,
-          error: result.error || '导入失败'
+          error: result.error || t('import.importFailed')
         })
       }
     } catch (e) {
@@ -497,7 +497,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
     {result.added && result.added.length > 0 && (
       <Alert variant="success">
         <CheckCircle size={20} />
-        <div className={`font-medium text-foreground`}>✅ 新增 {result.added.length} 个账号</div>
+        <div className={`font-medium text-foreground`}>✅ {t('import.addedAccounts', { defaultValue: 'Added accounts' })}: {result.added.length}</div>
         {result.added.length > 0 && (
           <div className={`text-sm mt-2 text-foreground`}>{result.added.map((s: any) => s.email).join(', ')}</div>
         )}
@@ -507,7 +507,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
     {result.updated && result.updated.length > 0 && (
       <Alert variant="info">
         <CheckCircle size={20} />
-        <div className={`font-medium text-foreground`}>📝 更新 {result.updated.length} 个账号</div>
+        <div className={`font-medium text-foreground`}>📝 {t('import.updatedAccounts', { defaultValue: 'Updated accounts' })}: {result.updated.length}</div>
         {result.updated.length > 0 && (
           <div className={`text-sm mt-2 text-foreground`}>{result.updated.map((s: any) => s.email).join(', ')}</div>
         )}
@@ -517,7 +517,7 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
     {result.failed && result.failed.length > 0 && (
       <Alert variant="destructive">
         <AlertCircle size={20} />
-        <div className={`font-medium text-foreground`}>❌ 失败 {result.failed.length} 个</div>
+        <div className={`font-medium text-foreground`}>❌ {t('import.failedCount', { defaultValue: 'Failed' })}: {result.failed.length}</div>
         <Stack gap={4} mt="xs" p={0}>
           {result.failed.map((f: any, i: number) => (
             <div key={i} className={`text-sm text-foreground`}>{f.error}</div>
@@ -538,7 +538,7 @@ return (
           </div>
           <div>
             <DialogTitle>{t('import.title')}</DialogTitle>
-            <DialogDescription>{t('import.subtitle') || '批量导入账号数据'}</DialogDescription>
+            <DialogDescription>{t('import.subtitle')}</DialogDescription>
           </div>
         </div>
       </DialogHeader>
@@ -554,9 +554,9 @@ return (
                 <div className={`text-sm font-medium text-foreground`}>
                   {kiroCliResult.success
                     ? (kiroCliResult.isNew
-                      ? `✅ 新增账号: ${kiroCliResult.email}`
-                      : `📝 更新账号: ${kiroCliResult.email}`)
-                    : '❌ 导入失败'}
+                      ? `✅ ${t('import.addedAccount', { defaultValue: 'Added account' })}: ${kiroCliResult.email}`
+                      : `📝 ${t('import.updatedAccount', { defaultValue: 'Updated account' })}: ${kiroCliResult.email}`)
+                    : `❌ ${t('import.importFailed', { defaultValue: 'Import failed' })}`}
                 </div>
                 {kiroCliResult.error && (
                   <div className={`text-xs mt-1 text-muted-foreground`}>{kiroCliResult.error}</div>
@@ -573,10 +573,10 @@ return (
                 </div>
                 <div>
                   <div className={`font-medium text-foreground`}>
-                    {importing ? t('import.importing') : kiroImporting ? '正在从 Kiro 导入...' : '正在从 kiro-cli 导入...'}
+                    {importing ? t('import.importing') : kiroImporting ? t('import.importingFromKiro', { defaultValue: 'Importing from Kiro...' }) : t('import.importingFromKiroCli', { defaultValue: 'Importing from kiro-cli...' })}
                   </div>
                   <div className={`text-sm text-muted-foreground`}>
-                    {kiroCliImporting ? '请稍候...' : `${(importing ? importProgress : kiroProgress).current}/${(importing ? importProgress : kiroProgress).total}`}
+                    {kiroCliImporting ? t('common.pleaseWait', { defaultValue: 'Please wait...' }) : `${(importing ? importProgress : kiroProgress).current}/${(importing ? importProgress : kiroProgress).total}`}
                   </div>
                 </div>
               </div>
@@ -646,7 +646,7 @@ return (
                         setJsonText(formatted)
                         parseJson(formatted)
                       } catch {
-                        // 如果解析失败，尝试格式化为数组
+                        // If parsing fails, try formatting as an array.
                         try {
                           const text = jsonText.trim()
                           if (text && !text.startsWith('[')) {
@@ -658,16 +658,16 @@ return (
                       }
                     }}
                   >
-                    格式化
+                    {t('accounts.format')}
                   </LegacyButton>
                   <LegacyButton color="blue" size="sm" onClick={() => { const text = JSON.stringify([{ refreshToken: "", provider: "Google" }], null, 2); setJsonText(text); parseJson(text) }}>
-                    Social 模板
+                    {t('accounts.socialTemplate')}
                   </LegacyButton>
                   <LegacyButton color="violet" size="sm" onClick={() => { const text = JSON.stringify([{ refreshToken: "", clientId: "", clientSecret: "", provider: "BuilderId" }], null, 2); setJsonText(text); parseJson(text) }}>
-                    BuilderId 模板
+                    {t('accounts.builderIdTemplate')}
                   </LegacyButton>
                   <LegacyButton color="grape" size="sm" onClick={() => { const text = JSON.stringify([{ refreshToken: "", clientId: "", clientSecret: "", provider: "Enterprise" }], null, 2); setJsonText(text); parseJson(text) }}>
-                    Enterprise 模板
+                    {t('accounts.enterpriseTemplate')}
                   </LegacyButton>
                 </Group>
 
@@ -709,9 +709,9 @@ return (
             <TabsContent value="kiro" className="px-6 pb-4 pt-4 outline-none">
               <Stack gap="lg">
                 <Alert variant="info">
-                  <div className={`text-sm font-medium text-foreground`}>从 Kiro IDE 导入账号</div>
+                  <div className={`text-sm font-medium text-foreground`}>{t('import.importFromKiroIde', { defaultValue: 'Import accounts from Kiro IDE' })}</div>
                   <div className={`text-xs mt-1 text-muted-foreground`}>
-                    自动读取 Kiro IDE 缓存的账号信息（~/.aws/sso/cache/kiro-auth-token.json）
+                    {t('import.importFromKiroIdeDesc', { defaultValue: 'Automatically reads cached Kiro IDE account information (~/.aws/sso/cache/kiro-auth-token.json)' })}
                   </div>
                 </Alert>
 
@@ -719,13 +719,13 @@ return (
                   <div className={`p-5 rounded-xl bg-muted/30 border border-border`}>
                     <div className="flex items-center gap-3">
                       <Loader2 size={20} className={`animate-spin ${accent.text}`} />
-                      <div className={`text-sm text-foreground`}>正在检测 Kiro IDE 账号...</div>
+                      <div className={`text-sm text-foreground`}>{t('import.detectingKiroAccounts', { defaultValue: 'Detecting Kiro IDE accounts...' })}</div>
                     </div>
                   </div>
                 ) : kiroError ? (
                   <Alert variant="destructive">
                     <AlertCircle size={16} />
-                    <div className={`text-sm font-medium text-foreground`}>检测失败</div>
+                    <div className={`text-sm font-medium text-foreground`}>{t('import.detectionFailed', { defaultValue: 'Detection failed' })}</div>
                     <div className={`text-xs mt-1 text-muted-foreground`}>{kiroError}</div>
                     <LegacyButton
                       color="red"
@@ -734,14 +734,14 @@ return (
                       leftSection={<RefreshCw size={14} />}
                       onClick={detectKiroAccounts}
                     >
-                      重新检测
+                      {t('import.detectAgain', { defaultValue: 'Detect again' })}
                     </LegacyButton>
                   </Alert>
                 ) : kiroAccounts.length > 0 ? (
                   <>
                     <Alert variant="success">
                       <CheckCircle size={16} />
-                      <div className={`text-sm font-medium text-foreground`}>检测到 {kiroAccounts.length} 个账号</div>
+                      <div className={`text-sm font-medium text-foreground`}>{t('import.detectedAccounts', { count: kiroAccounts.length, defaultValue: `Detected ${kiroAccounts.length} accounts` })}</div>
                     </Alert>
 
                     <div className={`p-4 rounded-xl bg-muted/30 border border-border max-h-[240px] overflow-y-auto`}>
@@ -769,9 +769,9 @@ return (
                 ) : (
                   <Alert variant="default">
                     <AlertCircle size={16} />
-                    <div className={`text-sm text-foreground`}>未检测到 Kiro IDE 账号</div>
+                    <div className={`text-sm text-foreground`}>{t('import.noKiroAccountsDetected', { defaultValue: 'No Kiro IDE accounts detected' })}</div>
                     <div className={`text-xs mt-1 text-muted-foreground`}>
-                      请先在 Kiro IDE 中登录账号
+                      {t('import.loginKiroIdeFirst', { defaultValue: 'Please log in to Kiro IDE first' })}
                     </div>
                   </Alert>
                 )}
@@ -854,7 +854,7 @@ return (
                               {...props}
                               className="px-4"
                             >
-                              浏览
+                              {t('import.browse')}
                             </LegacyButton>
                           )}
                         </FileButton>

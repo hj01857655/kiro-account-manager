@@ -28,12 +28,12 @@ test('buildFilterSummaryItems resolves readable labels', () => {
     allTags: [{ id: 'tag-1', name: '高频' }]})
 
   assert.deepEqual(items, [
-    { key: 'group', label: '分组', value: '主力组' },
-    { key: 'tag', label: '标签', value: '高频' },
-    { key: 'subscription', label: '订阅', value: 'KIRO PRO' },
-    { key: 'status', label: '状态', value: '正常' },
-    { key: 'provider', label: '登录方式', value: 'Google' },
-    { key: 'usageRange', label: '使用量', value: '500-1000' },
+    { key: 'group', label: 'Groups', value: '主力组' },
+    { key: 'tag', label: 'Tags', value: '高频' },
+    { key: 'subscription', label: 'Subscription', value: 'KIRO PRO' },
+    { key: 'status', label: 'Status', value: 'Active' },
+    { key: 'provider', label: 'Provider', value: 'Google' },
+    { key: 'usageRange', label: 'Usage', value: '500-1000' },
   ])
 })
 
@@ -50,8 +50,8 @@ test('buildFilterSummaryItems handles special pseudo values', () => {
     allTags: []})
 
   assert.deepEqual(items, [
-    { key: 'group', label: '分组', value: '无分组' },
-    { key: 'tag', label: '标签', value: '有标签' },
+    { key: 'group', label: 'Groups', value: 'No group' },
+    { key: 'tag', label: 'Tags', value: 'Has tags' },
   ])
 })
 
@@ -60,6 +60,6 @@ test('resolveGroupFilterLabel resolves normal and pseudo group values', () => {
     resolveGroupFilterLabel('group-1', [{ id: 'group-1', name: '主力组' }]),
     '主力组'
   )
-  assert.equal(resolveGroupFilterLabel('__has__', []), '有分组')
+  assert.equal(resolveGroupFilterLabel('__has__', []), 'Has group')
   assert.equal(resolveGroupFilterLabel(null, []), '')
 })

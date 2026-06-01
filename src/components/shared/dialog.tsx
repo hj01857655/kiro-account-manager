@@ -10,7 +10,7 @@ interface DialogRootProps {
 }
 
 /**
- * DialogRoot - 弹窗根组件
+ * DialogRoot - dialog root component.
  */
 const DialogRoot = ({ open, onOpenChange, children }: DialogRootProps) => {
   return (
@@ -29,7 +29,7 @@ interface DialogOverlayProps {
 }
 
 /**
- * DialogOverlay - 背景遮罩
+ * DialogOverlay - backdrop overlay.
  */
 const DialogOverlay = React.forwardRef<HTMLDivElement, DialogOverlayProps>(({ className, ...props }, ref) => {
   return (
@@ -100,7 +100,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(({
               )}
             >
               <X size={18} className="text-muted-foreground" />
-              <span className="sr-only">关闭</span>
+              <span className="sr-only">Close</span>
             </CloseButton>
           )}
         </DialogPanel>
