@@ -555,7 +555,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
               </label>
             </div>
 
-            <div className={proxyForm.enabled ? 'space-y-4' : 'space-y-4 opacity-60'}>
+            <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                   {t('editAccount.proxyQuickInput')}
