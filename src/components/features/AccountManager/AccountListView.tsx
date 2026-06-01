@@ -204,7 +204,10 @@ const ListRow = memo(function ListRow({
           </div>
         )}
         {!isOverage && overageCapability === 'OVERAGE_CAPABLE' && (
-          <span className={`text-[9px] mt-0.5 block ${overageStatus === 'ENABLED' ? 'text-green-500' : 'text-muted-foreground'}`}>
+          <span
+            className={`text-[9px] mt-0.5 block truncate ${overageStatus === 'ENABLED' ? 'text-green-500' : 'text-muted-foreground'}`}
+            title={overageStatus === 'ENABLED' ? t('accountCard.overageEnabled') : t('accountCard.overageAvailableShort')}
+          >
             {overageStatus === 'ENABLED' ? t('accountCard.overageEnabledShort') : t('accountCard.overageAvailableShort')}
           </span>
         )}
@@ -455,18 +458,18 @@ function AccountListView({
       {/* Table header */}
       <div className="flex items-center gap-3 px-3 h-9 bg-muted/50 border border-border rounded-t-md text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
         <div className="w-4" />
-        <div className="w-36">{t('accounts.email')}</div>
-        <div className="w-16 text-center">{t('accounts.provider')}</div>
-        <div className="w-16 text-center">{t('accounts.subscription')}</div>
-        <button type="button" onClick={() => handleSort('usage')} className="w-24 text-left hover:text-primary transition-colors">
+        <div className="w-36 truncate whitespace-nowrap">{t('accounts.email')}</div>
+        <div className="w-16 text-center truncate whitespace-nowrap">{t('accounts.provider')}</div>
+        <div className="w-16 text-center truncate whitespace-nowrap" title={t('accounts.subscription')}>{t('accounts.plan')}</div>
+        <button type="button" onClick={() => handleSort('usage')} className="w-24 text-left hover:text-primary transition-colors truncate whitespace-nowrap">
           {t('accounts.quota')}<SortIcon field="usage" />
         </button>
-        <div className="w-12 text-center">{t('accounts.status')}</div>
-        <button type="button" onClick={() => handleSort('trial')} className="w-28 text-left hover:text-primary transition-colors">
+        <div className="w-12 text-center truncate whitespace-nowrap">{t('accounts.status')}</div>
+        <button type="button" onClick={() => handleSort('trial')} className="w-28 text-left hover:text-primary transition-colors truncate whitespace-nowrap">
           {t('accounts.expiryTrial', { defaultValue: 'Expiry / Trial' })}<SortIcon field="trial" />
         </button>
-        <div className="w-16">{t('groups.title')}</div>
-        <div className="flex-[1.5] min-w-[80px]">{t('tags.title')}</div>
+        <div className="w-16 truncate whitespace-nowrap">{t('groups.title')}</div>
+        <div className="flex-[1.5] min-w-[80px] truncate whitespace-nowrap">{t('tags.title')}</div>
       </div>
 
       {/* List */}
