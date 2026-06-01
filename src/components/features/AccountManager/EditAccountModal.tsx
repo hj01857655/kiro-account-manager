@@ -128,6 +128,42 @@ interface AccountProxyTestResult {
   response: string;
 }
 
+function decodeUrlPart(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function parseProxyQuickInput(value: string, currentProtocol: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const hasProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+  const url = new URL(hasProtocol ? trimmed : `http://${trimmed}`)
+  const protocol = url.protocol.replace(':', '').toLowerCase()
+  if (hasProtocol && protocol !== 'http' && protocol !== 'socks5') {
+    throw new Error('Unsupported proxy protocol')
+  }
+  if (!url.hostname || !url.port) {
+    throw new Error('Proxy host and port are required')
+  }
+
+  const port = Number(url.port)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('Proxy port must be between 1 and 65535')
+  }
+
+  return {
+    protocol: hasProtocol ? protocol : currentProtocol,
+    host: url.hostname,
+    port: url.port,
+    username: decodeUrlPart(url.username),
+    password: decodeUrlPart(url.password)
+  }
+}
+
 function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps) {
   const { t, theme } = useApp()
   const { showError } = useDialog()
@@ -160,6 +196,8 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
   const [verifying, setVerifying] = useState(false)
   const [testingProxy, setTestingProxy] = useState(false)
   const [proxyTestStatus, setProxyTestStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [proxyQuickInput, setProxyQuickInput] = useState('')
+  const [proxyQuickInputError, setProxyQuickInputError] = useState('')
   const [copiedField, setCopiedField] = useState<string | null>(null)
   
   // 账号信息状态（验证后更新）
@@ -279,6 +317,31 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
       port: Number(proxyForm.port) || 0,
       ...(username ? { username } : {}),
       ...(password ? { password } : {})
+    }
+  }
+
+  const handleProxyQuickInputChange = (value: string) => {
+    setProxyQuickInput(value)
+    setProxyTestStatus(null)
+    if (!value.trim()) {
+      setProxyQuickInputError('')
+      return
+    }
+
+    try {
+      const parsed = parseProxyQuickInput(value, proxyForm.protocol)
+      if (!parsed) return
+      setProxyForm({
+        enabled: true,
+        protocol: parsed.protocol,
+        host: parsed.host,
+        port: parsed.port,
+        username: parsed.username,
+        password: parsed.password
+      })
+      setProxyQuickInputError('')
+    } catch {
+      setProxyQuickInputError(t('editAccount.proxyQuickInputInvalid'))
     }
   }
 
@@ -493,6 +556,22 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
             </div>
 
             <div className={proxyForm.enabled ? 'space-y-4' : 'space-y-4 opacity-60'}>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  {t('editAccount.proxyQuickInput')}
+                </label>
+                <input
+                  type="text"
+                  placeholder={t('editAccount.proxyQuickInputPlaceholder')}
+                  value={proxyQuickInput}
+                  onChange={(e) => handleProxyQuickInputChange(e.target.value)}
+                  className={`w-full px-4 py-2.5 border rounded-xl text-sm text-foreground bg-background border-input ${colors.inputFocus} focus:ring-2 outline-none`}
+                />
+                <div className={`mt-1 text-[11px] ${proxyQuickInputError ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  {proxyQuickInputError || t('editAccount.proxyQuickInputHint')}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 {(['http', 'socks5'] as const).map(protocol => (
                   <button

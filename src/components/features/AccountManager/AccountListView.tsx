@@ -302,6 +302,13 @@ const ListRow = memo(function ListRow({
           <Eye size={13} />
         </button>
         <button
+          onClick={(e) => { e.stopPropagation(); onEditLabel(account) }}
+          className="h-7 w-7 rounded-md inline-flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          title={t('accountCard.editRemark')}
+        >
+          <Edit2 size={13} />
+        </button>
+        <button
           onClick={(e) => { e.stopPropagation(); onRefresh(account.id) }}
           disabled={isRefreshing}
           className="h-7 w-7 rounded-md inline-flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
