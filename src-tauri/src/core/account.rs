@@ -426,6 +426,36 @@ fn normalize_accounts(accounts: Vec<Account>) -> (Vec<Account>, bool) {
         }
     }
 
+    let mut machine_id_counts = std::collections::HashMap::<String, usize>::new();
+    for account in &normalized {
+        if let Some(machine_id) = account.machine_id.as_deref() {
+            let normalized_id = machine_id.trim().to_lowercase();
+            if !normalized_id.is_empty() {
+                *machine_id_counts.entry(normalized_id).or_default() += 1;
+            }
+        }
+    }
+
+    for account in &mut normalized {
+        let is_duplicate = account
+            .machine_id
+            .as_deref()
+            .map(|machine_id| {
+                let normalized_id = machine_id.trim().to_lowercase();
+                machine_id_counts
+                    .get(&normalized_id)
+                    .copied()
+                    .unwrap_or_default()
+                    > 1
+            })
+            .unwrap_or(false);
+
+        if is_duplicate {
+            account.machine_id = Some(Uuid::new_v4().to_string().to_lowercase());
+            changed = true;
+        }
+    }
+
     (normalized, changed)
 }
 
@@ -891,5 +921,24 @@ mod tests {
         assert!(normalized
             .iter()
             .all(|account| account.machine_id.as_ref().is_some_and(|id| !id.trim().is_empty())));
+    }
+
+    #[test]
+    fn normalize_accounts_rotates_duplicate_machine_ids() {
+        let mut first = Account::new("first@example.com".to_string(), "first".to_string());
+        first.user_id = Some("user-1".to_string());
+        first.machine_id = Some("duplicate-machine".to_string());
+
+        let mut second = Account::new("second@example.com".to_string(), "second".to_string());
+        second.user_id = Some("user-2".to_string());
+        second.machine_id = Some("duplicate-machine".to_string());
+
+        let (normalized, changed) = normalize_accounts(vec![first, second]);
+
+        assert!(changed);
+        assert_eq!(normalized.len(), 2);
+        assert_ne!(normalized[0].machine_id, normalized[1].machine_id);
+        assert_ne!(normalized[0].machine_id.as_deref(), Some("duplicate-machine"));
+        assert_ne!(normalized[1].machine_id.as_deref(), Some("duplicate-machine"));
     }
 }
