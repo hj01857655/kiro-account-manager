@@ -3,7 +3,7 @@
 
 use super::{AuthProvider, AuthResult, RefreshMetadata};
 use crate::auth::auth_social;
-use crate::commands::machine_guid::get_machine_id;
+use crate::commands::machine_guid::generate_random_machine_id;
 use crate::core::deep_link_handler::{register_waiter, DeepLinkCallbackWaiter};
 use crate::clients::kiro_auth_client::KiroAuthServiceClient;
 use async_trait::async_trait;
@@ -68,7 +68,7 @@ impl AuthProvider for SocialProvider {
         let waiter = register_waiter(&state);
 
         // Step 4: 打开浏览器登录
-        let machine_id = get_machine_id();
+        let machine_id = generate_random_machine_id();
         let client = KiroAuthServiceClient::new(&machine_id)?;
         client
             .login(provider, &redirect_uri, &code_challenge, &state)
@@ -113,8 +113,8 @@ impl AuthProvider for SocialProvider {
         refresh_token: &str,
         metadata: RefreshMetadata,
     ) -> Result<AuthResult, String> {
-        // 优先使用账号的 machineId，没有则用系统机器码
-        let machine_id = metadata.machine_id.unwrap_or_else(get_machine_id);
+        // 优先使用账号的 machineId，没有则生成账号独立 ID
+        let machine_id = metadata.machine_id.unwrap_or_else(generate_random_machine_id);
         let client = KiroAuthServiceClient::new(&machine_id)?;
         let token_response: SocialRefreshResponse = client.refresh_token(refresh_token).await?;
 

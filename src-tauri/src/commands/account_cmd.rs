@@ -10,10 +10,12 @@ use crate::commands::account_models::{
     write_available_models_cache, ListAvailableModelsResponse,
 };
 use crate::commands::common::{
-    calc_expires_at, extract_user_info, find_account_by_id,
-    find_existing_account_idx, get_enterprise_usage_with_region_probe, get_usage_by_account,
-    get_usage_by_provider, is_auth_error_message, is_token_expired, is_token_expiring_soon,
-    lock_store, refresh_token_by_provider, save_store, token_needs_refresh, update_account_status, RefreshResult,
+    calc_expires_at, ensure_account_machine_id, extract_user_info, find_account_by_id,
+    find_existing_account_idx, generate_account_machine_id, get_enterprise_usage_with_region_probe,
+    account_machine_id_or_new, get_usage_by_account, get_usage_by_provider,
+    get_usage_by_provider_with_machine_id, is_auth_error_message, is_token_expired,
+    is_token_expiring_soon, lock_store, refresh_token_by_provider, save_store,
+    token_needs_refresh, update_account_status, RefreshResult,
 };
 use crate::auth::providers::{AuthProvider, IdcProvider, RefreshMetadata};
 use crate::state::AppState;
@@ -137,10 +139,8 @@ pub async fn sync_account(
 
     // 如果账号缺少 machine_id，自动生成一个（所有账号都需要）
     let mut account = account.clone();
-    if account.machine_id.is_none() {
-        use crate::commands::machine_guid::get_machine_id;
-        let machine_id = get_machine_id();
-        account.machine_id = Some(machine_id);
+    if account.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
+        ensure_account_machine_id(&mut account);
         log::info!("Generated machine_id for account: {}", account.id);
     }
 
@@ -154,7 +154,7 @@ pub async fn sync_account(
             .await
             .map(|(result, _region)| result)
     } else {
-        get_usage_by_provider(provider_str, access_token).await
+        get_usage_by_account(&account, access_token).await
     };
 
     let mut refresh_result: Option<RefreshResult> = None;
@@ -182,7 +182,7 @@ pub async fn sync_account(
                         Err(e) => Err(e),
                     }
                 } else {
-                    get_usage_by_provider(provider_str, &refreshed.access_token).await
+                    get_usage_by_account(&account, &refreshed.access_token).await
                 };
                 refresh_result = Some(refreshed);
             }
@@ -216,8 +216,9 @@ pub async fn sync_account(
     let mut store = lock_store(&state.store, "store")?;
     let result = if let Some(a) = store.accounts.iter_mut().find(|a| a.id == id) {
         // 如果生成了新的 machine_id，保存它（所有账号都需要）
-        // 如果生成了新的 machine_id，保存它（所有账号都需要）
-        if account.machine_id.is_some() && a.machine_id.is_none() {
+        if account.machine_id.is_some()
+            && a.machine_id.as_ref().is_none_or(|id| id.trim().is_empty())
+        {
             a.machine_id = account.machine_id.clone();
             log::info!("Saved machine_id for account: {}", a.id);
         }
@@ -296,7 +297,25 @@ pub async fn refresh_account_token(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<Account, String> {
-    let account = find_account_by_id(&state, &id)?;
+    let mut account = find_account_by_id(&state, &id)?;
+    let account_machine_id = if account
+        .machine_id
+        .as_ref()
+        .is_none_or(|id| id.trim().is_empty())
+    {
+        Some(ensure_account_machine_id(&mut account))
+    } else {
+        None
+    };
+    if let Some(ref machine_id) = account_machine_id {
+        let mut store = lock_store(&state.store, "store")?;
+        if let Some(a) = store.accounts.iter_mut().find(|a| a.id == id) {
+            if a.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
+                a.machine_id = Some(machine_id.clone());
+                save_store(&store)?;
+            }
+        }
+    }
 
     // 检查 token 是否还有 5 分钟以上有效期
     if let Some(expires_at) = &account.expires_at {
@@ -331,6 +350,9 @@ pub async fn refresh_account_token(
     let mut store = lock_store(&state.store, "store")?;
     if let Some(a) = store.accounts.iter_mut().find(|a| a.id == id) {
         clear_available_models_cache(a);
+        if a.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
+            a.machine_id = account_machine_id;
+        }
         // 直接移动所有权，避免 clone
         a.access_token = Some(refresh_result.access_token);
         a.refresh_token = refresh_result.refresh_token;
@@ -411,6 +433,7 @@ pub async fn verify_account(
 
         let mut temp_account = account.clone();
         temp_account.access_token = Some(new_access_token.clone());
+        ensure_account_machine_id(&mut temp_account);
         temp_account
     }; // MutexGuard 在这里被释放
 
@@ -428,6 +451,9 @@ pub async fn verify_account(
             // 更新 token
             account.access_token = Some(new_access_token.clone()); // ✅ 这里必须 clone，因为后面还要用
             account.refresh_token = Some(new_refresh_token.clone()); // ✅ 这里必须 clone，因为后面还要用
+            if account.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
+                account.machine_id = temp_account.machine_id.clone();
+            }
             // 更新 usage_data 和状态（检测封禁）
             account.usage_data = Some(usage_result.usage_data);
             update_account_status(account, usage_result.is_banned, usage_result.is_auth_error);
@@ -451,16 +477,24 @@ pub async fn add_account_by_social(
     access_token: Option<String>,
 ) -> Result<AddAccountResult, String> {
     let idp = provider.as_deref().unwrap_or("Google").to_string(); // ✅ 避免不必要的 clone
+    let account_machine_id = machine_id
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(generate_account_machine_id);
 
     // 先尝试用传入的 access_token 获取配额
     let (final_access_token, final_refresh_token, final_profile_arn, usage_result) =
         if let Some(at) = access_token {
-            match get_usage_by_provider(&idp, &at).await {
+            match get_usage_by_provider_with_machine_id(&idp, &at, &account_machine_id).await {
                 Ok(result) if result.is_auth_error => {
                     // 401 了，刷新 token
                     let refresh_result = refresh_token_desktop(&refresh_token).await?;
                     let new_usage =
-                        get_usage_by_provider(&idp, &refresh_result.access_token).await?;
+                        get_usage_by_provider_with_machine_id(
+                            &idp,
+                            &refresh_result.access_token,
+                            &account_machine_id,
+                        )
+                        .await?;
                     (
                         refresh_result.access_token,
                         refresh_result.refresh_token,
@@ -483,7 +517,12 @@ pub async fn add_account_by_social(
         } else {
             // 没有 access_token，直接刷新
             let refresh_result = refresh_token_desktop(&refresh_token).await?;
-            let usage_result = get_usage_by_provider(&idp, &refresh_result.access_token).await?;
+            let usage_result = get_usage_by_provider_with_machine_id(
+                &idp,
+                &refresh_result.access_token,
+                &account_machine_id,
+            )
+            .await?;
             (
                 refresh_result.access_token,
                 refresh_result.refresh_token,
@@ -534,6 +573,9 @@ pub async fn add_account_by_social(
         existing.profile_arn = Some(final_profile_arn.clone()); // ✅ 保存 profile_arn
         existing.user_id = user_id;
         existing.usage_data = Some(usage_result.usage_data);
+        if existing.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
+            existing.machine_id = Some(account_machine_id.clone());
+        }
         update_account_status(existing, usage_result.is_banned, usage_result.is_auth_error);
         existing.clone() // ✅ 必须 clone，因为要返回给前端
     } else {
@@ -547,8 +589,7 @@ pub async fn add_account_by_social(
         account.usage_data = Some(usage_result.usage_data);
         update_account_status(&mut account, usage_result.is_banned, usage_result.is_auth_error);
         // 使用传入的 machine_id，没有则自动生成
-        account.machine_id =
-            machine_id.or_else(|| Some(uuid::Uuid::new_v4().to_string().to_lowercase())); // ✅ 避免 clone
+        account.machine_id = Some(account_machine_id);
         store.accounts.insert(0, account.clone());
         account
     };
@@ -801,7 +842,8 @@ async fn add_account_by_idc_internal(
     let machine_id = params
         .machine_id
         .clone()
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string().to_lowercase());
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(generate_account_machine_id);
 
     // 企业账号导入时强制刷新 token（导入时的 access_token 很可能已过期）
     let (
@@ -830,7 +872,12 @@ async fn add_account_by_idc_internal(
             region = detected_region;
             result
         } else {
-            get_usage_by_provider(&params.provider_id, &auth_result.access_token).await?
+            get_usage_by_provider_with_machine_id(
+                &params.provider_id,
+                &auth_result.access_token,
+                &machine_id,
+            )
+            .await?
         };
 
         let expires_at = calc_expires_at(auth_result.expires_in);
@@ -844,46 +891,50 @@ async fn add_account_by_idc_internal(
         )
     } else if let Some(at) = params.access_token {
         // BuilderId 且有 access_token 时，先尝试使用
-            // BuilderId 使用原有逻辑
-            match get_usage_by_provider(&params.provider_id, &at).await {
-                Ok(result) if result.is_auth_error => {
-                    // 401 了，刷新 token
-                    let metadata = RefreshMetadata {
-                        client_id: Some(params.client_id.clone()),
-                        client_secret: Some(params.client_secret.clone()),
-                        region: Some(region.clone()),
-                        ..Default::default()
-                    };
-                    let idc_provider =
-                        IdcProvider::new(&params.provider_id, &region, start_url.clone());
-                    let auth_result = idc_provider
-                        .refresh_token(&params.refresh_token, metadata)
-                        .await?;
-                    let new_usage =
-                        get_usage_by_provider(&params.provider_id, &auth_result.access_token).await?;
-                    let expires_at = calc_expires_at(auth_result.expires_in);
-                    (
-                        auth_result.access_token,
-                        auth_result.refresh_token,
-                        new_usage,
-                        expires_at,
-                        auth_result.id_token,
-                        auth_result.sso_session_id,
-                    )
-                }
-                Ok(result) => {
-                    // access_token 有效，不需要刷新
-                    (
-                        at,
-                        params.refresh_token.clone(),
-                        result,
-                        String::new(),
-                        None,
-                        None,
-                    )
-                }
-                Err(e) => return Err(e),
+        // BuilderId 使用原有逻辑
+        match get_usage_by_provider_with_machine_id(&params.provider_id, &at, &machine_id).await {
+            Ok(result) if result.is_auth_error => {
+                // 401 了，刷新 token
+                let metadata = RefreshMetadata {
+                    client_id: Some(params.client_id.clone()),
+                    client_secret: Some(params.client_secret.clone()),
+                    region: Some(region.clone()),
+                    ..Default::default()
+                };
+                let idc_provider =
+                    IdcProvider::new(&params.provider_id, &region, start_url.clone());
+                let auth_result = idc_provider
+                    .refresh_token(&params.refresh_token, metadata)
+                    .await?;
+                let new_usage = get_usage_by_provider_with_machine_id(
+                    &params.provider_id,
+                    &auth_result.access_token,
+                    &machine_id,
+                )
+                .await?;
+                let expires_at = calc_expires_at(auth_result.expires_in);
+                (
+                    auth_result.access_token,
+                    auth_result.refresh_token,
+                    new_usage,
+                    expires_at,
+                    auth_result.id_token,
+                    auth_result.sso_session_id,
+                )
             }
+            Ok(result) => {
+                // access_token 有效，不需要刷新
+                (
+                    at,
+                    params.refresh_token.clone(),
+                    result,
+                    String::new(),
+                    None,
+                    None,
+                )
+            }
+            Err(e) => return Err(e),
+        }
     } else {
         // 没有 access_token，直接刷新
         let metadata = RefreshMetadata {
@@ -903,7 +954,12 @@ async fn add_account_by_idc_internal(
             region = detected_region;
             result
         } else {
-            get_usage_by_provider(&params.provider_id, &auth_result.access_token).await?
+            get_usage_by_provider_with_machine_id(
+                &params.provider_id,
+                &auth_result.access_token,
+                &machine_id,
+            )
+            .await?
         };
 
         let expires_at = calc_expires_at(auth_result.expires_in);
@@ -970,6 +1026,9 @@ async fn add_account_by_idc_internal(
             existing.region = Some(region.clone());
             existing.client_id_hash = client_id_hash.clone(); // 可能是 None
             existing.start_url = start_url.clone();
+            if existing.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
+                existing.machine_id = Some(machine_id.clone());
+            }
             if id_token.is_some() {
                 existing.id_token = id_token;
             }
@@ -998,12 +1057,7 @@ async fn add_account_by_idc_internal(
             account.sso_session_id = sso_session_id;
             account.usage_data = Some(usage_result.usage_data);
             update_account_status(&mut account, usage_result.is_banned, usage_result.is_auth_error);
-            account.machine_id = Some(
-                params
-                    .machine_id
-                    .clone()
-                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string().to_lowercase()),
-            );
+            account.machine_id = Some(machine_id.clone());
             account.password.clone_from(&params.password);
             store.accounts.insert(0, account.clone());
             account
@@ -1047,6 +1101,9 @@ async fn add_account_by_idc_internal(
             existing.client_secret = Some(params.client_secret.clone());
             existing.region = Some(region.clone());
             existing.client_id_hash = client_id_hash.clone(); // 可能是 None
+            if existing.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
+                existing.machine_id = Some(machine_id.clone());
+            }
             if id_token.is_some() {
                 existing.id_token = id_token;
             }
@@ -1082,11 +1139,7 @@ async fn add_account_by_idc_internal(
             account.sso_session_id = sso_session_id;
             account.usage_data = Some(usage_result.usage_data);
             update_account_status(&mut account, usage_result.is_banned, usage_result.is_auth_error);
-            account.machine_id = Some(
-                params
-                    .machine_id
-                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string().to_lowercase()),
-            );
+            account.machine_id = Some(machine_id);
             account.password = params.password;
             store.accounts.insert(0, account.clone());
             account
@@ -1153,7 +1206,6 @@ pub async fn delete_account_remote(
     delete_local: bool,
 ) -> Result<String, String> {
     use crate::auth::delete_account_desktop;
-    use crate::commands::machine_guid::get_machine_id;
 
     // 获取账号信息
     let account = find_account_by_id(&state, &id)?;
@@ -1173,7 +1225,7 @@ pub async fn delete_account_remote(
         .ok_or("账号缺少 access_token，请先刷新")?;
 
     // Google/Github 账号使用 Desktop API
-    let machine_id = get_machine_id();
+    let machine_id = account_machine_id_or_new(&account.machine_id);
     delete_account_desktop(access_token, &machine_id).await?;
 
     // 如果需要同时删除本地记录

@@ -13,7 +13,7 @@ mod macos;
 mod windows;
 
 pub use types::SystemMachineInfo;
-pub use utils::{generate_random_machine_id, get_machine_id};
+pub use utils::generate_random_machine_id;
 
 #[cfg(target_os = "linux")]
 use linux as platform;

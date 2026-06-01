@@ -1,5 +1,5 @@
 use crate::core::account::{Account, AvailableModelsCacheEntry};
-use crate::commands::machine_guid::get_machine_id;
+use crate::commands::common::account_machine_id_or_new;
 use crate::clients::http_client::{
     build_http_client_with_user_agent, build_kiro_custom_user_agent,
     build_q_service_url, resolve_kiro_upstream_region,
@@ -165,11 +165,7 @@ async fn fetch_available_models_page(
     model_provider: Option<&str>,
     next_token: Option<&str>,
 ) -> Result<ListAvailableModelsResponse, String> {
-    let machine_id = account
-        .machine_id
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(get_machine_id);
+    let machine_id = account_machine_id_or_new(&account.machine_id);
     let user_agent = build_kiro_models_user_agent(&machine_id);
     let region = resolve_kiro_upstream_region(
         account.profile_arn.as_deref(),
@@ -824,4 +820,3 @@ mod tests {
         );
     }
 }
-

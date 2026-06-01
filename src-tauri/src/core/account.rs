@@ -419,6 +419,13 @@ fn normalize_accounts(accounts: Vec<Account>) -> (Vec<Account>, bool) {
         normalized.push(account);
     }
 
+    for account in &mut normalized {
+        if !has_value(account.machine_id.as_ref()) {
+            account.machine_id = Some(Uuid::new_v4().to_string().to_lowercase());
+            changed = true;
+        }
+    }
+
     (normalized, changed)
 }
 
@@ -879,7 +886,10 @@ mod tests {
 
         let (normalized, changed) = normalize_accounts(vec![social, idc]);
 
-        assert!(!changed);
+        assert!(changed);
         assert_eq!(normalized.len(), 2);
+        assert!(normalized
+            .iter()
+            .all(|account| account.machine_id.as_ref().is_some_and(|id| !id.trim().is_empty())));
     }
 }

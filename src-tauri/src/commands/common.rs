@@ -4,6 +4,7 @@ use crate::core::account::Account;
 use crate::auth::providers::{
     AuthProvider, IdcProvider, RefreshMetadata, SocialProvider,
 };
+use crate::commands::machine_guid::generate_random_machine_id;
 use crate::utils::client_id_hash::calculate_client_id_hash;
 use std::sync::{Mutex, MutexGuard};
 
@@ -128,6 +129,27 @@ pub fn resolve_default_profile_arn(provider: Option<&str>) -> &'static str {
     }
 }
 
+/// Generate an account-scoped machine ID.
+///
+/// This deliberately does not read the system machine GUID: stored accounts must
+/// have stable IDs without linking multiple accounts on the same host.
+pub fn generate_account_machine_id() -> String {
+    generate_random_machine_id()
+}
+
+pub fn account_machine_id_or_new(machine_id: &Option<String>) -> String {
+    machine_id
+        .clone()
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(generate_account_machine_id)
+}
+
+pub fn ensure_account_machine_id(account: &mut Account) -> String {
+    let machine_id = account_machine_id_or_new(&account.machine_id);
+    account.machine_id = Some(machine_id.clone());
+    machine_id
+}
+
 // ===== Mutex 锁辅助 =====
 
 /// 锁定 AppState 中任意 `Mutex<T>`，统一错误信息
@@ -159,7 +181,7 @@ pub fn find_account_by_id(
 /// 调用 Kiro Q API 需要的三件套：machine_id / region / profile_arn
 ///
 /// 解析规则：
-/// - machine_id：账号自带（非空）→ 否则系统 machine_guid
+/// - machine_id：账号自带（非空）→ 否则生成账号独立 ID
 /// - profile_arn：Enterprise → None；其他账号自带 → 否则 provider 默认 ARN
 /// - region：profile_arn 解析出来的 region 优先 → 账号 region → fallback
 pub struct KiroCallContext {
@@ -170,13 +192,8 @@ pub struct KiroCallContext {
 
 pub fn resolve_kiro_call_context(account: &Account, fallback_region: &str) -> KiroCallContext {
     use crate::clients::http_client::resolve_kiro_upstream_region;
-    use crate::commands::machine_guid::get_machine_id;
 
-    let machine_id = account
-        .machine_id
-        .clone()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(get_machine_id);
+    let machine_id = account_machine_id_or_new(&account.machine_id);
 
     let profile_arn = match account.provider.as_deref() {
         Some("Enterprise") => None,
@@ -358,7 +375,7 @@ pub async fn refresh_token_by_provider(account: &Account) -> Result<RefreshResul
     } else {
         let metadata = RefreshMetadata {
             profile_arn: account.profile_arn.clone(),
-            machine_id: account.machine_id.clone(),
+            machine_id: Some(account_machine_id_or_new(&account.machine_id)),
             ..Default::default()
         };
         let social_provider = SocialProvider::new(provider);
@@ -383,13 +400,8 @@ pub async fn get_usage_by_account(
 ) -> Result<UsageResult, String> {
     use crate::clients::http_client::resolve_kiro_upstream_region;
     use crate::clients::kiro_q_client::KiroQClient;
-    use crate::commands::machine_guid::get_machine_id;
 
-    let machine_id = account
-        .machine_id
-        .clone()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(get_machine_id);
+    let machine_id = account_machine_id_or_new(&account.machine_id);
 
     let region = resolve_kiro_upstream_region(
         account.profile_arn.as_deref(),
@@ -467,15 +479,22 @@ pub async fn get_usage_by_provider(
     provider: &str,
     access_token: &str,
 ) -> Result<UsageResult, String> {
-    use crate::commands::machine_guid::get_machine_id;
+    let machine_id = generate_account_machine_id();
+    get_usage_by_provider_with_machine_id(provider, access_token, &machine_id).await
+}
 
+pub async fn get_usage_by_provider_with_machine_id(
+    provider: &str,
+    access_token: &str,
+    machine_id: &str,
+) -> Result<UsageResult, String> {
     // 为了兼容旧调用，创建一个临时账号对象
     let mut temp_account = crate::core::account::Account::new(
         String::new(),
         String::new(),
     );
     temp_account.provider = Some(provider.to_string());
-    temp_account.machine_id = Some(get_machine_id());
+    temp_account.machine_id = Some(machine_id.to_string());
 
     // 根据 provider 设置 auth_method（profile_arn 由 get_usage_by_account 统一处理）
     if provider == "BuilderId" || provider == "Enterprise" {

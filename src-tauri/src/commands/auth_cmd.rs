@@ -7,10 +7,9 @@ use crate::core::protocol_registry;
 use crate::auth::User;
 use crate::auth::auth_social;
 use crate::commands::common::{
-    extract_user_info, find_existing_account_idx, get_usage_by_provider, lock_store,
-    save_store, update_account_status,
+    extract_user_info, find_existing_account_idx, generate_account_machine_id,
+    get_usage_by_provider_with_machine_id, lock_store, save_store, update_account_status,
 };
-use crate::commands::machine_guid::get_machine_id;
 use crate::clients::kiro_auth_client::KiroAuthServiceClient;
 use crate::auth::providers::{
     cancel_pending_idc_login, create_idc_provider, get_provider_config, AuthMethod, AuthProvider,
@@ -131,7 +130,7 @@ async fn login_social(
     protocol_registry::ensure_protocol_registration()?;
 
     let provider_id = config.provider_id.clone();
-    let pending = prepare_pending_social_login(&provider_id, get_machine_id());
+    let pending = prepare_pending_social_login(&provider_id, generate_account_machine_id());
     let redirect_uri = social_callback_redirect_uri();
     let code_challenge = auth_social::generate_code_challenge_social(&pending.code_verifier);
     let client = KiroAuthServiceClient::new(&pending.machineid)?;
@@ -166,7 +165,12 @@ async fn login_social(
         .await?;
 
     // 5. 获取配额信息
-    let usage_result = get_usage_by_provider(&provider_id, &token_result.access_token).await?;
+    let usage_result = get_usage_by_provider_with_machine_id(
+        &provider_id,
+        &token_result.access_token,
+        &pending.machineid,
+    )
+    .await?;
 
     // 封禁账号直接报错
     if usage_result.is_banned {
@@ -196,6 +200,7 @@ async fn login_social(
         existing.profile_arn = token_result.profile_arn.clone();
         existing.user_id = user_id;
         existing.usage_data = Some(usage_result.usage_data);
+        existing.machine_id = Some(pending.machineid.clone());
         update_account_status(existing, usage_result.is_banned, usage_result.is_auth_error);
         existing.clone()
     } else {
@@ -208,7 +213,7 @@ async fn login_social(
         account.user_id = user_id;
         account.usage_data = Some(usage_result.usage_data);
         update_account_status(&mut account, usage_result.is_banned, usage_result.is_auth_error);
-        account.machine_id = Some(uuid::Uuid::new_v4().to_string().to_lowercase());
+        account.machine_id = Some(pending.machineid.clone());
         store.accounts.insert(0, account.clone());
         account
     };
@@ -251,7 +256,13 @@ async fn login_idc(
 
     let auth_result = idc_provider.login().await?;
 
-    let usage_result = get_usage_by_provider(&provider_id, &auth_result.access_token).await?;
+    let account_machine_id = generate_account_machine_id();
+    let usage_result = get_usage_by_provider_with_machine_id(
+        &provider_id,
+        &auth_result.access_token,
+        &account_machine_id,
+    )
+    .await?;
 
     // 封禁账号直接报错
     if usage_result.is_banned {
@@ -289,6 +300,9 @@ async fn login_idc(
         existing.id_token = auth_result.id_token;
         existing.profile_arn = auth_result.profile_arn;
         existing.usage_data = Some(usage_result.usage_data);
+        if existing.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
+            existing.machine_id = Some(account_machine_id.clone());
+        }
         update_account_status(existing, usage_result.is_banned, usage_result.is_auth_error);
         existing.clone()
     } else {
@@ -310,10 +324,9 @@ async fn login_idc(
         account.usage_data = Some(usage_result.usage_data);
         update_account_status(&mut account, usage_result.is_banned, usage_result.is_auth_error);
 
-        // 为所有新账号生成 machine_id
-        use crate::commands::machine_guid::get_machine_id;
-        account.machine_id = Some(get_machine_id());
-        log::info!("Generated machine_id for new {} account", provider_id);
+        // 为所有新账号生成唯一的 machine_id（每个账号独立 UUID，避免隐私泄露）
+        account.machine_id = Some(account_machine_id);
+        log::info!("Generated unique machine_id for new {} account", provider_id);
         
         store.accounts.insert(0, account.clone());
         account
@@ -385,8 +398,12 @@ pub async fn handle_kiro_social_callback(
     )
     .await?;
 
-    let usage_result =
-        get_usage_by_provider(&pending.provider, &token_response.access_token).await?;
+    let usage_result = get_usage_by_provider_with_machine_id(
+        &pending.provider,
+        &token_response.access_token,
+        &pending.machineid,
+    )
+    .await?;
 
     if usage_result.is_banned {
         return Err("BANNED: 账号已被封禁".to_string());
@@ -411,6 +428,7 @@ pub async fn handle_kiro_social_callback(
         existing.email.clone_from(&new_email);
         existing.user_id.clone_from(&user_id);
         existing.usage_data = Some(usage_result.usage_data);
+        existing.machine_id = Some(pending.machineid.clone());
         update_account_status(existing, usage_result.is_banned, usage_result.is_auth_error);
         existing.clone()
     } else {
@@ -426,10 +444,9 @@ pub async fn handle_kiro_social_callback(
         account.usage_data = Some(usage_result.usage_data);
         update_account_status(&mut account, usage_result.is_banned, usage_result.is_auth_error);
 
-        // 为所有新账号生成 machine_id
-        use crate::commands::machine_guid::get_machine_id;
-        account.machine_id = Some(get_machine_id());
-        log::info!("Generated machine_id for new {} account", pending.provider);
+        // 为所有新账号生成唯一的 machine_id（每个账号独立 UUID，避免隐私泄露）
+        account.machine_id = Some(pending.machineid.clone());
+        log::info!("Generated unique machine_id for new {} account", pending.provider);
         
         store.accounts.insert(0, account.clone());
         account

@@ -22,10 +22,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::{
     core::account::{Account, AccountStore},
     commands::common::{
-        get_usage_by_provider, is_token_expiring_soon,
+        account_machine_id_or_new, get_usage_by_account, is_token_expiring_soon,
         refresh_token_by_provider, resolve_default_profile_arn, update_account_status, RefreshResult,
     },
-    commands::machine_guid::get_machine_id,
     clients::{
         http_client::{
             build_kiro_custom_user_agent, build_q_service_url,
@@ -70,6 +69,7 @@ struct UpstreamCredentials {
     provider: Option<String>,
     region: String,
     source_label: String,
+    machine_id: String,
     user_agent: String,
     #[allow(dead_code)]
     auth_method: Option<String>,
@@ -294,7 +294,7 @@ async fn get_available_models_for_upstream(
     let response = client
         .list_available_models(
             &upstream.access_token,
-            &get_machine_id(),
+            &upstream.machine_id,
             &upstream.region,
             upstream.profile_arn.as_deref(),
             None, // model_provider
@@ -2236,6 +2236,7 @@ async fn resolve_managed_account_credentials(
                     provider: account.provider.clone(),
                     region: ctx.region,
                     source_label: format_managed_upstream_source(&state.config, &account),
+                    machine_id: ctx.machine_id.clone(),
                     user_agent: build_kiro_custom_user_agent(&ctx.machine_id),
                     auth_method: account.auth_method.clone(),
                     send_opt_out: should_send_codewhisperer_optout(),
@@ -2246,8 +2247,7 @@ async fn resolve_managed_account_credentials(
 
     match refresh_token_by_provider(&account).await {
         Ok(refresh) => {
-            let provider = account.provider.as_deref().unwrap_or("Google").to_string();
-            let usage_result = get_usage_by_provider(&provider, &refresh.access_token).await;
+            let usage_result = get_usage_by_account(&account, &refresh.access_token).await;
             let mut usage_data = None;
             let mut is_banned = false;
             let mut is_auth_error = false;
@@ -2295,11 +2295,7 @@ async fn resolve_managed_account_credentials(
             let response_time_ms = request_start.elapsed().as_millis() as u64;
             state.load_balancer.record_success(&account.id, response_time_ms).await;
 
-            let machine_id = account
-                .machine_id
-                .clone()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(get_machine_id);
+            let machine_id = account_machine_id_or_new(&account.machine_id);
             let profile_arn = match account.provider.as_deref() {
                 Some("Enterprise") => None,
                 provider => refresh.profile_arn.or_else(|| account.profile_arn.clone())
@@ -2317,6 +2313,7 @@ async fn resolve_managed_account_credentials(
                 provider: account.provider.clone(),
                 region,
                 source_label: format_managed_upstream_source(config, &account),
+                machine_id: machine_id.clone(),
                 user_agent: build_kiro_custom_user_agent(&machine_id),
                 auth_method: account.auth_method.clone(),
                 send_opt_out: should_send_codewhisperer_optout(),
@@ -5099,6 +5096,7 @@ mod tests {
             provider: None,
             region: "us-east-1".to_string(),
             source_label: "single:test".to_string(),
+            machine_id: "machine-123".to_string(),
             user_agent: "KiroIDE 0.11.34 machine-123".to_string(),
             auth_method: Some("external_idp".to_string()),
             send_opt_out: true,
@@ -5165,6 +5163,7 @@ mod tests {
             provider: None,
             region: "us-east-1".to_string(),
             source_label: "single:test".to_string(),
+            machine_id: "machine-456".to_string(),
             user_agent: "KiroIDE 0.11.34 machine-456".to_string(),
             auth_method: Some("social".to_string()),
             send_opt_out: true,
@@ -5209,6 +5208,7 @@ mod tests {
             provider: None,
             region: "us-east-1".to_string(),
             source_label: "single:test".to_string(),
+            machine_id: "machine-789".to_string(),
             user_agent: "KiroIDE 0.11.34 machine-789".to_string(),
             auth_method: Some("social".to_string()),
             send_opt_out: true,
@@ -5243,6 +5243,7 @@ mod tests {
             provider: Some("Internal".to_string()),
             region: "us-east-1".to_string(),
             source_label: "single:test".to_string(),
+            machine_id: "machine-999".to_string(),
             user_agent: "KiroIDE 0.11.34 machine-999".to_string(),
             auth_method: Some("IdC".to_string()),
             send_opt_out: true,
@@ -5278,6 +5279,7 @@ mod tests {
                 provider: Some(provider.to_string()),
                 region: "us-east-1".to_string(),
                 source_label: "single:test".to_string(),
+                machine_id: "machine-1000".to_string(),
                 user_agent: "KiroIDE 0.11.34 machine-1000".to_string(),
                 auth_method: Some("IdC".to_string()),
                 send_opt_out: true,
