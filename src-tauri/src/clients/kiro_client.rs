@@ -4,6 +4,7 @@
 use crate::clients::http_client::{
     build_http_client, build_kiro_control_plane_user_agent,
     build_kiro_management_user_agent, build_kiro_management_x_amz_user_agent,
+    parse_region_from_profile_arn,
 };
 use crate::commands::common::resolve_default_profile_arn;
 use reqwest::{Client, RequestBuilder};
@@ -198,17 +199,20 @@ impl KiroClient {
             .map_err(|e| format!("Failed to parse JSON: {e}"))
     }
 
-    /// 获取企业账号的 usage 数据（简化版，直接使用 us-east-1）
     /// 获取 Enterprise 账号的 usage limits（自动获取 profileArn）
     pub async fn get_enterprise_usage_limits(
         &self,
         access_token: &str,
         machine_id: &str,
     ) -> Result<serde_json::Value, String> {
-        let region = "us-east-1";
+        // ListAvailableProfiles 用 us-east-1 做发现入口（这一步只为拿到 profileArn）
+        let bootstrap_region = "us-east-1";
 
         // Enterprise 账号需要先调用 ListAvailableProfiles 获取动态 profileArn
-        let profile_arn = match self.list_available_profiles(access_token, region).await {
+        let profile_arn = match self
+            .list_available_profiles(access_token, bootstrap_region)
+            .await
+        {
             Ok(response) => {
                 // 从响应中提取 profiles[0].arn
                 response
@@ -225,10 +229,16 @@ impl KiroClient {
             }
         };
 
+        // 从拿到的 profileArn 第 4 段解析真实 region，用它调 getUsageLimits——
+        // 企业账号可能不在 us-east-1（如 eu-central-1），继续固定 us-east-1 会打到
+        // 错误的 management host 导致失败。解析不出时回退 us-east-1。
+        let region = parse_region_from_profile_arn(profile_arn.as_deref())
+            .unwrap_or_else(|| bootstrap_region.to_string());
+
         self.get_usage_limits(
             access_token,
             machine_id,
-            region,
+            &region,
             profile_arn.as_deref(),
             None,
             Some("Enterprise"),

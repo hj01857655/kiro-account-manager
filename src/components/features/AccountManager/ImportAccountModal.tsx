@@ -7,7 +7,7 @@ import { Alert } from '@/components/ui/alert'
 import { Upload, FileJson, AlertCircle, CheckCircle, Loader2, Database, RefreshCw } from 'lucide-react'
 import { getSystemMachineGuid } from '../../../api/kiroApi'
 import { getKiroCliDefaultPath } from '../../../api/systemApi'
-import { readKiroAccounts, addAccountBySocial, addAccountByIdc, importFromKiroCli } from '../../../api/importApi'
+import { readKiroAccounts, addAccountBySocial, addAccountByIdc, addAccountByExternalIdp, importFromKiroCli } from '../../../api/importApi'
 import { useApp } from '../../../hooks/useApp'
 
 import { getConcurrency } from '../../../utils/concurrency'
@@ -65,22 +65,62 @@ function FileButton({ onChange, accept, children }: any) {
   )
 }
 
+// 字段驼峰 / 下划线两吃
+function pick(item: any, camel: string, snake: string) {
+  return item[camel] ?? item[snake]
+}
+
+// authMethod 归一化，与后端 external_idp 口径一致
+function canonicalizeAuthMethod(v?: string | null): string | null {
+  if (!v) return null
+  const lv = String(v).trim().toLowerCase()
+  if (['external-idp', 'externalidp', 'external_idp', 'azure', 'azuread', 'azure_ad'].includes(lv)) return 'external_idp'
+  return lv
+}
+
+// external_idp（微软 / Azure AD）判定：authMethod 归一化命中，或带微软 tokenEndpoint/issuerUrl
+function isExternalIdpItem(item: any): boolean {
+  if (canonicalizeAuthMethod(pick(item, 'authMethod', 'auth_method')) === 'external_idp') return true
+  const tokenEndpoint = pick(item, 'tokenEndpoint', 'token_endpoint')
+  const issuerUrl = pick(item, 'issuerUrl', 'issuer_url')
+  const host = String(tokenEndpoint || issuerUrl || '').toLowerCase()
+  if (host.includes('login.microsoftonline.')) return true
+  if (tokenEndpoint || issuerUrl) return true
+  return false
+}
+
 function validateAccount(item: any, index: number) {
   const errors = []
-  const refreshToken = item.refreshToken
+  const refreshToken = pick(item, 'refreshToken', 'refresh_token')
   if (!refreshToken) {
     errors.push(`第 ${index + 1} 条: 缺少 refreshToken`)
     return { valid: false, errors, type: null }
   }
 
-  if (!refreshToken.startsWith('aor')) {
-    errors.push(`第 ${index + 1} 条: refreshToken 格式无效（应以 aor 开头）`)
-    return { valid: false, errors, type: null }
+  // external_idp 优先判定（在 aor 前缀校验和 social/idc 二分类之前）
+  // 微软 refresh token 形如 1.AXoA...，不以 aor 开头，不做长度/字符集限制
+  if (isExternalIdpItem(item)) {
+    if (!pick(item, 'profileArn', 'profile_arn')) {
+      errors.push(`第 ${index + 1} 条: external_idp 账号必须提供 profileArn`)
+      return { valid: false, errors, type: null }
+    }
+    if (!pick(item, 'clientId', 'client_id')) {
+      errors.push(`第 ${index + 1} 条: external_idp 账号必须提供 clientId`)
+      return { valid: false, errors, type: null }
+    }
+    // 不校验 aor 前缀 / 不要求 provider / clientSecret；profileArn 原样透传
+    return { valid: true, errors: [] as string[], type: 'external_idp', inferredProvider: undefined }
   }
 
   const hasClientCredentials = item.clientId && item.clientSecret
   const isIdC = hasClientCredentials
   const isSocial = !hasClientCredentials
+
+  // aor 前缀校验仅对 social（external_idp/idc 跳过）
+  if (isSocial && !refreshToken.startsWith('aor')) {
+    errors.push(`第 ${index + 1} 条: refreshToken 格式无效（应以 aor 开头）`)
+    return { valid: false, errors, type: null }
+  }
 
   let provider = item.provider
   if (!provider) {
@@ -317,7 +357,22 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
       try {
         let result: any
         const provider = item._inferredProvider || item.provider
-        if (item._type === 'social') {
+        if (item._type === 'external_idp') {
+          result = await addAccountByExternalIdp({
+            refreshToken: pick(item, 'refreshToken', 'refresh_token'),
+            clientId: pick(item, 'clientId', 'client_id'),
+            profileArn: pick(item, 'profileArn', 'profile_arn'),
+            clientSecret: pick(item, 'clientSecret', 'client_secret') || null,
+            accessToken: pick(item, 'accessToken', 'access_token') || null,
+            tokenEndpoint: pick(item, 'tokenEndpoint', 'token_endpoint') || null,
+            issuerUrl: pick(item, 'issuerUrl', 'issuer_url') || null,
+            scopes: item.scopes || null,
+            region: (pick(item, 'authRegion', 'auth_region') ?? item.region) || null,
+            machineId: pick(item, 'machineId', 'machine_id') || null,
+            email: item.email || null,
+            expiresAt: pick(item, 'expiresAt', 'expires_at') || null
+          })
+        } else if (item._type === 'social') {
           result = await addAccountBySocial({
             refreshToken: item.refreshToken,
             provider: provider,

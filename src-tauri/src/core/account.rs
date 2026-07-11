@@ -202,6 +202,14 @@ pub struct Account {
     // Social 专用
     #[serde(default)]
     pub profile_arn: Option<String>,
+    // external_idp（微软 / Azure AD）专用：供将来独立刷新链路使用
+    #[serde(default, alias = "token_endpoint")]
+    pub token_endpoint: Option<String>,
+    #[serde(default, alias = "issuer_url")]
+    pub issuer_url: Option<String>,
+    // scopes 为单词，camelCase == snake_case，天然两吃，无需 alias
+    #[serde(default)]
+    pub scopes: Option<String>,
     // 原始 usage API 响应
     pub usage_data: Option<serde_json::Value>,
     // 分组
@@ -260,6 +268,9 @@ impl Account {
             id_token: None,
             start_url: None,
             profile_arn: None,
+            token_endpoint: None,
+            issuer_url: None,
+            scopes: None,
             usage_data: None,
             group_id: None,
             tag_links: Vec::new(),
@@ -298,6 +309,9 @@ impl Account {
             id_token: None,
             start_url: None,
             profile_arn: None,
+            token_endpoint: None,
+            issuer_url: None,
+            scopes: None,
             usage_data: None,
             group_id: None,
             tag_links: Vec::new(),
@@ -442,6 +456,9 @@ fn merge_accounts(preferred: &mut Account, candidate: Account) -> bool {
     fill_option!(id_token);
     fill_option!(start_url);
     fill_option!(profile_arn);
+    fill_option!(token_endpoint);
+    fill_option!(issuer_url);
+    fill_option!(scopes);
     fill_option!(usage_data);
     fill_option!(group_id);
     fill_option!(machine_id);

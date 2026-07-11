@@ -302,6 +302,32 @@ pub fn token_needs_refresh(expires_at: &str) -> bool {
     is_token_expiring_soon(expires_at)
 }
 
+/// 归一化外部传入的 `expires_at` 到内部格式（`%Y/%m/%d %H:%M:%S`，本地时区）。
+///
+/// 内部所有过期判断（`is_token_expired_within_seconds`）只认这个格式，解析失败一律
+/// 当作“已过期”。但外部来源（如 IDE / kiro-cli 数据库）的 `expires_at` 常见为 RFC3339
+/// （带 'Z'，UTC），直接原样写进 `account.expires_at` 会让导入账号永远被判为已过期。
+///
+/// - 先按内部格式解析（已规范化的值原样返回，保证幂等）；
+/// - 再按 RFC3339 解析，转成本地时区后重新格式化；
+/// - 两者都失败返回 None（交由调用方决定回退策略，不把脏格式写进 store）。
+pub fn normalize_expires_at(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    // 已经是内部格式：原样返回，保证幂等
+    if chrono::NaiveDateTime::parse_from_str(trimmed, "%Y/%m/%d %H:%M:%S").is_ok() {
+        return Some(trimmed.to_string());
+    }
+    // RFC3339（IDE / kiro-cli token 的真实格式，带时区）→ 转本地时区后重新格式化
+    chrono::DateTime::parse_from_rfc3339(trimmed).ok().map(|dt| {
+        dt.with_timezone(&chrono::Local)
+            .format("%Y/%m/%d %H:%M:%S")
+            .to_string()
+    })
+}
+
 /// 检查 token 是否在指定秒数内过期
 fn is_token_expired_within_seconds(expires_at: &str, seconds: i64) -> bool {
     match chrono::NaiveDateTime::parse_from_str(expires_at, "%Y/%m/%d %H:%M:%S") {
