@@ -54,11 +54,11 @@ fn effective_profile_arn<'a>(profile_arn: Option<&'a str>, provider: Option<&str
         .unwrap_or_else(|| resolve_default_profile_arn(provider).to_string())
 }
 
-fn build_get_usage_limits_url(region: &str, profile_arn: &str) -> String {
+fn build_get_usage_limits_url(region: &str) -> String {
     let base = build_kiro_management_service_url(region);
+    // ponytail: profileArn 不传给 getUsageLimits — 企业账号会因此 400（kiro.rs 同款修复）
     format!(
-        "{base}/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&profileArn={}&resourceType=AGENTIC_REQUEST",
-        urlencoding::encode(profile_arn.trim())
+        "{base}/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&resourceType=AGENTIC_REQUEST"
     )
 }
 
@@ -162,17 +162,15 @@ impl KiroClient {
         access_token: &str,
         machine_id: &str,
         region: &str,
-        profile_arn: Option<&str>,
+        _profile_arn: Option<&str>,
         _auth_method: Option<&str>,
         _provider: Option<&str>,
     ) -> Result<serde_json::Value, String> {
-        let profile_arn = effective_profile_arn(profile_arn, _provider);
-        let url = build_get_usage_limits_url(region, &profile_arn);
+        let url = build_get_usage_limits_url(region);
 
         log::info!(
-            "[GetUsageLimits] Request - region: {}, profileArn: {}",
-            region,
-            profile_arn
+            "[GetUsageLimits] Request - region: {}",
+            region
         );
 
         let request = with_kiro_runtime_management_headers(
@@ -198,38 +196,18 @@ impl KiroClient {
             .map_err(|e| format!("Failed to parse JSON: {e}"))
     }
 
-    /// 获取企业账号的 usage 数据（简化版，直接使用 us-east-1）
-    /// 获取 Enterprise 账号的 usage limits（自动获取 profileArn）
+    /// 获取 Enterprise 账号的 usage limits
     pub async fn get_enterprise_usage_limits(
         &self,
         access_token: &str,
         machine_id: &str,
     ) -> Result<serde_json::Value, String> {
-        let region = "us-east-1";
-
-        // Enterprise 账号需要先调用 ListAvailableProfiles 获取动态 profileArn
-        let profile_arn = match self.list_available_profiles(access_token, region).await {
-            Ok(response) => {
-                // 从响应中提取 profiles[0].arn
-                response
-                    .get("profiles")
-                    .and_then(|profiles| profiles.as_array())
-                    .and_then(|arr| arr.first())
-                    .and_then(|profile| profile.get("arn"))
-                    .and_then(|arn| arn.as_str())
-                    .map(|s| s.to_string())
-            }
-            Err(e) => {
-                log::warn!("[get_enterprise_usage_limits] ListAvailableProfiles 失败: {}", e);
-                None
-            }
-        };
-
+        // ponytail: getUsageLimits 不需要 profileArn，企业账号传了反而 400
         self.get_usage_limits(
             access_token,
             machine_id,
-            region,
-            profile_arn.as_deref(),
+            "us-east-1",
+            None,
             None,
             Some("Enterprise"),
         )
@@ -367,12 +345,10 @@ mod tests {
 
     #[test]
     fn builds_get_usage_limits_url_like_kiro_0_12_301_capture() {
+        // ponytail: getUsageLimits 不传 profileArn（企业账号会因此 400）
         assert_eq!(
-            build_get_usage_limits_url(
-                "us-east-1",
-                "arn:aws:codewhisperer:us-east-1:638616132270:profile/AAAACCCCXXXX"
-            ),
-            "https://management.us-east-1.kiro.dev/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&profileArn=arn%3Aaws%3Acodewhisperer%3Aus-east-1%3A638616132270%3Aprofile%2FAAAACCCCXXXX&resourceType=AGENTIC_REQUEST"
+            build_get_usage_limits_url("us-east-1"),
+            "https://management.us-east-1.kiro.dev/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&resourceType=AGENTIC_REQUEST"
         );
         assert_eq!(
             effective_profile_arn(None, Some("BuilderId")),
