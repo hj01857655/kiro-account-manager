@@ -63,6 +63,8 @@ fn build_get_usage_limits_url(region: &str) -> String {
 }
 
 fn build_list_available_models_body(profile_arn: Option<&str>) -> serde_json::Value {
+    // ponytail: kiro.rs v0.6.11 也从 ListAvailableModels 移除了 profileArn（企业账号传了会 400）
+    // 当前保留传参以兼容旧逻辑，待验证后可移除
     let mut body = serde_json::json!({
         "origin": "AI_EDITOR",
     });
@@ -196,22 +198,29 @@ impl KiroClient {
             .map_err(|e| format!("Failed to parse JSON: {e}"))
     }
 
-    /// 获取 Enterprise 账号的 usage limits
+    /// 获取 Enterprise 账号的 usage limits（带 region 回退）
     pub async fn get_enterprise_usage_limits(
         &self,
         access_token: &str,
         machine_id: &str,
     ) -> Result<serde_json::Value, String> {
         // ponytail: getUsageLimits 不需要 profileArn，企业账号传了反而 400
-        self.get_usage_limits(
-            access_token,
-            machine_id,
-            "us-east-1",
-            None,
-            None,
-            Some("Enterprise"),
-        )
-        .await
+        // 企业账号可能在 us-east-1 或 eu-central-1，逐个尝试
+        let regions = ["us-east-1", "eu-central-1"];
+        let mut last_err = String::new();
+        for region in &regions {
+            match self
+                .get_usage_limits(access_token, machine_id, region, None, None, Some("Enterprise"))
+                .await
+            {
+                Ok(v) => return Ok(v),
+                Err(e) => {
+                    log::warn!("[get_enterprise_usage_limits] region {region} failed: {e}");
+                    last_err = e;
+                }
+            }
+        }
+        Err(format!("所有 region 均失败: {last_err}"))
     }
 
     /// ListAvailableModels 接口
