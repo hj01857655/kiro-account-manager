@@ -50,6 +50,9 @@ src-tauri/clippy_warnings.txt
 .breezell/
 
 vite.config.js.timestamp-*
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
 src-tauri/debug_responses/
 
 # Local agent knowledge mirror (do not push)
