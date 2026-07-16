@@ -5,24 +5,28 @@ export interface ApiEnvelope<T> {
 }
 
 let csrfToken = "";
+type ApiOptions = RequestInit & { suppressUnauthorizedEvent?: boolean };
 
 export function setCsrfToken(value?: string) {
   csrfToken = value ?? "";
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const method = (options.method ?? "GET").toUpperCase();
-  const headers = new Headers(options.headers);
-  if (options.body && !(options.body instanceof FormData) && !headers.has("content-type")) {
+export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const { suppressUnauthorizedEvent = false, ...requestOptions } = options;
+  const method = (requestOptions.method ?? "GET").toUpperCase();
+  const headers = new Headers(requestOptions.headers);
+  if (requestOptions.body && !(requestOptions.body instanceof FormData) && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && csrfToken) {
     headers.set("x-csrf-token", csrfToken);
   }
-  const response = await fetch(path, { ...options, headers, credentials: "include" });
+  const response = await fetch(path, { ...requestOptions, headers, credentials: "include" });
   const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (!response.ok || !payload?.success) {
-    if (response.status === 401) window.dispatchEvent(new Event("kiro:unauthorized"));
+    if (response.status === 401 && !suppressUnauthorizedEvent) {
+      window.dispatchEvent(new Event("kiro:unauthorized"));
+    }
     throw new Error(payload?.error?.message ?? `请求失败（HTTP ${response.status}）`);
   }
   return payload.data as T;
@@ -38,7 +42,9 @@ export async function login(username: string, password: string) {
 }
 
 export async function session() {
-  const data = await api<{ username: string; csrfToken: string }>("/api/auth/me");
+  const data = await api<{ username: string; csrfToken: string }>("/api/auth/me", {
+    suppressUnauthorizedEvent: true
+  });
   setCsrfToken(data.csrfToken);
   return data;
 }

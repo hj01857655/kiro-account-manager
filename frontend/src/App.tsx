@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, ArrowLeft, Boxes, CheckCircle2, ChevronRight, CircleGauge, CloudCog,
   Download, FileClock, Network, Import, LayoutDashboard, LoaderCircle, LogOut,
@@ -12,7 +12,8 @@ type Page = "dashboard" | "accounts" | "detail" | "import" | "groups" | "gateway
 type User = { username: string };
 
 export default function App() {
-  const [user, setUser] = useState<User | null | undefined>();
+  const [user, setUser] = useState<User | null>(null);
+  const sessionRevision = useRef(0);
   const [page, setPage] = useState<Page>("dashboard");
   const [detailId, setDetailId] = useState<string>();
   const [toast, setToast] = useState<string>();
@@ -22,18 +23,34 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    session().then(data => setUser({ username: data.username })).catch(() => setUser(null));
-    const unauthorized = () => setUser(null);
+    const revision = sessionRevision.current;
+    session()
+      .then(data => {
+        if (sessionRevision.current === revision) setUser({ username: data.username });
+      })
+      .catch(() => undefined);
+    const unauthorized = () => {
+      sessionRevision.current += 1;
+      setUser(null);
+    };
     window.addEventListener("kiro:unauthorized", unauthorized);
     return () => window.removeEventListener("kiro:unauthorized", unauthorized);
   }, []);
 
-  if (user === undefined) return <Splash />;
-  if (!user) return <Login onSuccess={name => setUser({ username: name })} />;
+  if (!user) {
+    return <Login onSuccess={name => {
+      sessionRevision.current += 1;
+      setUser({ username: name });
+    }} />;
+  }
 
   const openDetail = (id: string) => { setDetailId(id); setPage("detail"); };
   return (
-    <Shell user={user} page={page} navigate={setPage} onLogout={async () => { await logout(); setUser(null); }}>
+    <Shell user={user} page={page} navigate={setPage} onLogout={async () => {
+      sessionRevision.current += 1;
+      await logout();
+      setUser(null);
+    }}>
       {page === "dashboard" && <Dashboard navigate={setPage} />}
       {page === "accounts" && <Accounts onDetail={openDetail} notify={notify} />}
       {page === "detail" && detailId && <AccountDetail id={detailId} back={() => setPage("accounts")} notify={notify} />}
@@ -45,10 +62,6 @@ export default function App() {
       {toast && <div className="toast"><CheckCircle2 size={17} />{toast}</div>}
     </Shell>
   );
-}
-
-function Splash() {
-  return <div className="splash"><div className="brand-mark"><Sparkles /></div><LoaderCircle className="spin" /></div>;
 }
 
 function Login({ onSuccess }: { onSuccess: (username: string) => void }) {
