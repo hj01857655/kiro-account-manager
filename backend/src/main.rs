@@ -8,6 +8,8 @@ mod handlers;
 mod kiro;
 mod models;
 mod state;
+mod user;
+mod user_auth;
 
 use axum::{
     extract::DefaultBodyLimit,
@@ -129,6 +131,16 @@ fn router(state: AppState, allowed_origin: Option<String>) -> Router {
         .route("/v1/chat/completions", post(gateway::chat_completions))
         .route("/v1/responses", post(gateway::responses));
 
+    let user_protected = Router::new()
+        .route("/api/user/auth/me", get(user_auth::me))
+        .route("/api/user/auth/logout", post(user_auth::logout))
+        .route("/api/user/models", get(user::models))
+        .route("/api/user/chat", post(user::chat))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            user_auth::require_user,
+        ));
+
     let request_id = HeaderName::from_static("x-request-id");
     let common_layers = ServiceBuilder::new()
         .layer(SetSensitiveRequestHeadersLayer::new([
@@ -164,7 +176,10 @@ fn router(state: AppState, allowed_origin: Option<String>) -> Router {
     let mut app = Router::new()
         .route("/api/health", get(handlers::health))
         .route("/api/auth/login", post(auth::login))
+        .route("/api/user/auth/register", post(user_auth::register))
+        .route("/api/user/auth/login", post(user_auth::login))
         .merge(protected)
+        .merge(user_protected)
         .merge(gateway)
         .with_state(state)
         .layer(common_layers);

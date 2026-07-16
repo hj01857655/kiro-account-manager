@@ -21,6 +21,7 @@ pub struct Config {
     pub gateway_api_key: Option<String>,
     pub gateway_default_account: Option<String>,
     pub gateway_auto_switch: bool,
+    pub user_registration_enabled: bool,
 }
 
 impl Config {
@@ -82,6 +83,7 @@ impl Config {
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
             gateway_auto_switch: parse_bool("GATEWAY_AUTO_SWITCH", true)?,
+            user_registration_enabled: parse_bool("USER_REGISTRATION_ENABLED", true)?,
         })
     }
 }

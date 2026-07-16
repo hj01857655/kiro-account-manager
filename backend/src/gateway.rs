@@ -36,7 +36,16 @@ pub async fn list_models(
     headers: HeaderMap,
 ) -> AppResult<Json<Value>> {
     authorize(&state, &headers)?;
-    let (record, secrets) = select_account(&state, preferred_account(&headers), None).await?;
+    Ok(Json(model_list(&state, preferred_account(&headers)).await?))
+}
+
+pub async fn available_models(state: &AppState) -> AppResult<Value> {
+    ensure_enabled(state)?;
+    model_list(state, None).await
+}
+
+async fn model_list(state: &AppState, preferred: Option<String>) -> AppResult<Value> {
+    let (record, secrets) = select_account(state, preferred, None).await?;
     let upstream = kiro::request_models(&record, &secrets)
         .await
         .map_err(gateway_error)?;
@@ -47,10 +56,10 @@ pub async fn list_models(
     if ids.is_empty() {
         ids.extend(["auto", "claude-sonnet-4.5", "claude-sonnet-4.5-thinking"].map(str::to_string));
     }
-    Ok(Json(json!({
+    Ok(json!({
         "object": "list",
         "data": ids.into_iter().map(|id| json!({ "id": id, "object": "model", "created": 0, "owned_by": "kiro" })).collect::<Vec<_>>()
-    })))
+    }))
 }
 
 pub async fn messages(
@@ -58,6 +67,7 @@ pub async fn messages(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> AppResult<Response> {
+    authorize(&state, &headers)?;
     proxy(state, headers, body, Protocol::Anthropic, "/v1/messages").await
 }
 
@@ -66,6 +76,7 @@ pub async fn chat_completions(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> AppResult<Response> {
+    authorize(&state, &headers)?;
     proxy(
         state,
         headers,
@@ -81,7 +92,20 @@ pub async fn responses(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> AppResult<Response> {
+    authorize(&state, &headers)?;
     proxy(state, headers, body, Protocol::Responses, "/v1/responses").await
+}
+
+pub async fn user_chat(state: AppState, body: Value) -> AppResult<Response> {
+    ensure_enabled(&state)?;
+    proxy(
+        state,
+        HeaderMap::new(),
+        body,
+        Protocol::OpenAi,
+        "/api/user/chat",
+    )
+    .await
 }
 
 async fn proxy(
@@ -91,7 +115,6 @@ async fn proxy(
     protocol: Protocol,
     endpoint: &'static str,
 ) -> AppResult<Response> {
-    authorize(&state, &headers)?;
     let started = Instant::now();
     let model = request
         .get("model")
@@ -364,13 +387,7 @@ async fn select_account(
 }
 
 fn authorize(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
-    if !state.config.gateway_enabled {
-        return Err(AppError::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "gateway_disabled",
-            "gateway is disabled",
-        ));
-    }
+    ensure_enabled(state)?;
     let expected = state
         .config
         .gateway_api_key
@@ -392,6 +409,18 @@ fn authorize(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
         ));
     }
     Ok(())
+}
+
+fn ensure_enabled(state: &AppState) -> AppResult<()> {
+    if state.config.gateway_enabled {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "gateway_disabled",
+            "gateway is disabled",
+        ))
+    }
 }
 
 fn preferred_account(headers: &HeaderMap) -> Option<String> {

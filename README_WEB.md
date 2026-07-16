@@ -49,6 +49,7 @@ Routes:
 - `GET|PUT /api/settings`, `GET /api/logs`, `GET /api/dashboard`
 - public health check: `GET /api/health`
 - Gateway: `POST /v1/messages`, `POST /v1/chat/completions`, `POST /v1/responses`, `GET /v1/models`
+- User panel: `POST /api/user/auth/register`, `POST /api/user/auth/login`, `GET /api/user/auth/me`, `POST /api/user/auth/logout`, `GET /api/user/models`, `POST /api/user/chat`
 
 All management routes except login and health require the administrator cookie. All unsafe management requests also require the session CSRF header. Gateway routes accept only `Authorization: Bearer <GATEWAY_API_KEY>` and do not accept the administrator session.
 
@@ -71,6 +72,7 @@ All management routes except login and health require the administrator cookie. 
 | `GATEWAY_API_KEY` | when enabled | — | Independent Gateway bearer secret, minimum 32 characters. |
 | `GATEWAY_DEFAULT_ACCOUNT` | no | empty | Exact account UUID. Empty selects the best active account. |
 | `GATEWAY_AUTO_SWITCH` | no | `true` | Retries with another active account after authentication, balance, rate-limit, suspension, or upstream-server errors. |
+| `USER_REGISTRATION_ENABLED` | no | `true` | Allows new email/password registrations for the public user panel. |
 | `RUST_LOG` | no | application info | Rust `tracing` filter. Logs are structured JSON and exclude request credentials/bodies. |
 
 Generate secure values once:
