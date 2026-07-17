@@ -1,0 +1,59 @@
+services:
+  kiro-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: kiro-web-backend:local
+    container_name: kiro-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BIND_ADDR: 0.0.0.0:3001
+      DATABASE_PATH: /data/kiro.db
+      TRUSTED_PROXY_IPS: ${KIRO_DOCKER_GATEWAY:-172.29.0.1}
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks:
+      - kiro-internal
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+
+  kiro-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: kiro-web-frontend:local
+    container_name: kiro-frontend
+    restart: unless-stopped
+    depends_on:
+      kiro-backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - kiro-internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  kiro-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${KIRO_DOCKER_SUBNET:-172.29.0.0/24}
+          gateway: ${KIRO_DOCKER_GATEWAY:-172.29.0.1}

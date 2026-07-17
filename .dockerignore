@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+frontend/node_modules
+frontend/dist
+src-tauri/target
+backend/target
+data
+.env
+*.log

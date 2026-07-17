@@ -1,0 +1,18 @@
+FROM rust:1.97-bookworm AS builder
+WORKDIR /app
+COPY backend/Cargo.toml backend/Cargo.lock* ./
+COPY backend/migrations ./migrations
+COPY backend/src ./src
+RUN cargo build --release --locked
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 kiro \
+    && useradd --uid 10001 --gid kiro --no-create-home --shell /usr/sbin/nologin kiro \
+    && install -d -o kiro -g kiro -m 0750 /data
+COPY --from=builder /app/target/release/kiro-web-backend /usr/local/bin/kiro-web-backend
+USER kiro
+EXPOSE 3001
+ENTRYPOINT ["/usr/local/bin/kiro-web-backend"]
