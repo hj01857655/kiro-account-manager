@@ -45,12 +45,38 @@ fn build_kiro_management_service_url(region: &str) -> String {
     format!("https://{}", build_kiro_management_host(region))
 }
 
-fn build_get_usage_limits_url(region: &str) -> String {
+fn build_get_usage_limits_url(region: &str, profile_arn: Option<&str>) -> String {
     let base = build_kiro_management_service_url(region);
-    // getUsageLimits 不携带 profileArn：企业账号带了会 400（对齐 kiro.rs v0.6.11）
-    format!(
-        "{base}/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&resourceType=AGENTIC_REQUEST"
-    )
+    // 对齐真实 Kiro IDE：GetUsageLimits 带 profileArn。
+    // 企业号必须带 ListAvailableProfiles 返回的真实 ARN；带错（如 BuilderId 默认）会 400/403。
+    match profile_arn
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(profile_arn) => format!(
+            "{base}/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&profileArn={}&resourceType=AGENTIC_REQUEST",
+            urlencoding::encode(profile_arn)
+        ),
+        None => format!(
+            "{base}/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&resourceType=AGENTIC_REQUEST"
+        ),
+    }
+}
+
+/// 从 ListAvailableProfiles 响应中取第一个非空 profile ARN。
+pub fn first_profile_arn_from_list_response(value: &serde_json::Value) -> Option<String> {
+    value
+        .get("profiles")?
+        .as_array()?
+        .iter()
+        .find_map(|profile| {
+            profile
+                .get("arn")
+                .and_then(|arn| arn.as_str())
+                .map(str::trim)
+                .filter(|arn| !arn.is_empty())
+                .map(str::to_string)
+        })
 }
 
 /// 构造 getUsageLimits 的 region 尝试顺序：优先账号 region，企业号再回退常见 region。
@@ -168,16 +194,23 @@ impl KiroClient {
         Self { client }
     }
 
-    /// 统一的 getUsageLimits 接口（支持所有账号类型；URL 不带 profileArn）
+    /// 统一的 getUsageLimits 接口（支持所有账号类型）。
+    ///
+    /// `profile_arn`：BuilderId/Social 用解析后的 ARN；Enterprise 用账号保存值或
+    /// `ListAvailableProfiles` 发现的真实 ARN。勿对企业号套 BuilderId 默认 ARN。
     pub async fn get_usage_limits(
         &self,
         access_token: &str,
         machine_id: &str,
         region: &str,
+        profile_arn: Option<&str>,
     ) -> Result<serde_json::Value, String> {
-        let url = build_get_usage_limits_url(region);
+        let url = build_get_usage_limits_url(region, profile_arn);
 
-        log::info!("[GetUsageLimits] Request - region: {region}");
+        log::info!(
+            "[GetUsageLimits] Request - region: {region}, profileArn: {}",
+            profile_arn.unwrap_or("(none)")
+        );
 
         let request = with_kiro_runtime_management_headers(
             self.client.get(&url),
@@ -209,11 +242,12 @@ impl KiroClient {
         access_token: &str,
         machine_id: &str,
         regions: &[String],
+        profile_arn: Option<&str>,
     ) -> Result<(String, serde_json::Value), String> {
         let mut last_err = String::new();
         for region in regions {
             match self
-                .get_usage_limits(access_token, machine_id, region)
+                .get_usage_limits(access_token, machine_id, region, profile_arn)
                 .await
             {
                 Ok(v) => return Ok((region.clone(), v)),
@@ -227,6 +261,36 @@ impl KiroClient {
             }
         }
         Err(format!("所有 region 均失败: {last_err}"))
+    }
+
+    /// 按 region 候选列表解析 Enterprise 真实 profileArn（ListAvailableProfiles）。
+    ///
+    /// AUTH_ERROR / BANNED 直接返回；空 profiles 或其它错误则继续下一 region。
+    pub async fn resolve_enterprise_profile_arn(
+        &self,
+        access_token: &str,
+        regions: &[String],
+    ) -> Result<Option<String>, String> {
+        for region in regions {
+            match self.list_available_profiles(access_token, region).await {
+                Ok(value) => {
+                    if let Some(arn) = first_profile_arn_from_list_response(&value) {
+                        log::info!(
+                            "[ListAvailableProfiles] region {region} resolved profileArn: {arn}"
+                        );
+                        return Ok(Some(arn));
+                    }
+                    log::info!("[ListAvailableProfiles] region {region} returned empty profiles");
+                }
+                Err(e) if e.starts_with("AUTH_ERROR:") || e.starts_with("BANNED:") => {
+                    return Err(e);
+                }
+                Err(e) => {
+                    log::warn!("[ListAvailableProfiles] region {region} failed: {e}");
+                }
+            }
+        }
+        Ok(None)
     }
 
     /// ListAvailableModels 接口
@@ -393,10 +457,37 @@ mod tests {
     }
 
     #[test]
-    fn builds_get_usage_limits_url_without_profile_arn() {
+    fn builds_get_usage_limits_url_with_optional_profile_arn() {
         assert_eq!(
-            build_get_usage_limits_url("us-east-1"),
+            build_get_usage_limits_url("us-east-1", None),
             "https://management.us-east-1.kiro.dev/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&resourceType=AGENTIC_REQUEST"
+        );
+        assert_eq!(
+            build_get_usage_limits_url(
+                "us-east-1",
+                Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX")
+            ),
+            "https://management.us-east-1.kiro.dev/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&profileArn=arn%3Aaws%3Acodewhisperer%3Aus-east-1%3A123456789012%3Aprofile%2FAAAACCCCXXXX&resourceType=AGENTIC_REQUEST"
+        );
+    }
+
+    #[test]
+    fn first_profile_arn_from_list_response_picks_first_non_empty() {
+        use super::first_profile_arn_from_list_response;
+
+        assert_eq!(
+            first_profile_arn_from_list_response(&serde_json::json!({
+                "profiles": [
+                    { "arn": "   " },
+                    { "arn": "arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX", "profileName": "KiroProfile-us-east-1" }
+                ]
+            }))
+            .as_deref(),
+            Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX")
+        );
+        assert_eq!(
+            first_profile_arn_from_list_response(&serde_json::json!({ "profiles": [] })),
+            None
         );
     }
 

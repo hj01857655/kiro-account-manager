@@ -361,9 +361,48 @@ async fn resolve_current_account_by_usage(
             return None;
         }
     };
-    let regions = crate::clients::kiro_client::usage_limits_region_candidates(region, false);
+
+    // Enterprise IdC 本地 token 通常不带 profileArn，需 ListAvailableProfiles；
+    // Social/BuilderId 用本地或默认 ARN。
+    let mut profile_arn = local_token
+        .profile_arn
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let needs_profile_discovery =
+        local_token.auth_method.as_deref() == Some("IdC") && profile_arn.is_none();
+    let regions =
+        crate::clients::kiro_client::usage_limits_region_candidates(region, needs_profile_discovery);
+
+    if needs_profile_discovery {
+        match client
+            .resolve_enterprise_profile_arn(access_token, &regions)
+            .await
+        {
+            Ok(arn) => profile_arn = arn,
+            Err(e) => {
+                log::warn!("[AutoSwitch] ListAvailableProfiles 失败: {e}");
+            }
+        }
+    }
+    if profile_arn.is_none() {
+        profile_arn = Some(
+            match local_token.auth_method.as_deref() {
+                Some("social") => crate::commands::common::KIRO_SOCIAL_PROFILE_ARN,
+                _ => crate::commands::common::KIRO_BUILDER_ID_PROFILE_ARN,
+            }
+            .to_string(),
+        );
+    }
+
     let usage = match client
-        .get_usage_limits_with_region_fallback(access_token, &machine_id, &regions)
+        .get_usage_limits_with_region_fallback(
+            access_token,
+            &machine_id,
+            &regions,
+            profile_arn.as_deref(),
+        )
         .await
     {
         Ok((_region, data)) => data,
