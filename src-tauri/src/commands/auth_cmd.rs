@@ -354,11 +354,7 @@ async fn login_idc(
         Err(e) => {
             log::warn!("Failed to get usage for {}: {}", provider_id, e);
             // 即使 getUsageLimits 失败，也能保存账号
-            crate::commands::common::UsageResult {
-                usage_data: serde_json::json!({}),
-                is_banned: false,
-                is_auth_error: false,
-            }
+            crate::commands::common::UsageResult::empty()
         }
     };
 
