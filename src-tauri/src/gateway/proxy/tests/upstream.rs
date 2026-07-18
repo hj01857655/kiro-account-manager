@@ -103,6 +103,54 @@ fn add_kiro_upstream_headers_adds_generate_request_headers() {
 }
 
 #[test]
+fn add_kiro_upstream_headers_adds_profile_arn_for_enterprise_generate() {
+    let upstream = UpstreamCredentials {
+        account_id: "ent-account".to_string(),
+        access_token: "token-ent".to_string(),
+        machine_id: "machine-ent".to_string(),
+        profile_arn: Some(
+            "arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX".to_string(),
+        ),
+        available_models_profile_arn: Some(
+            "arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX".to_string(),
+        ),
+        provider: Some("Enterprise".to_string()),
+        region: "us-east-1".to_string(),
+        source_label: "single:ent".to_string(),
+        user_agent: "KiroIDE 0.11.34 machine-ent".to_string(),
+        auth_method: Some("IdC".to_string()),
+        send_opt_out: true,
+        http: reqwest::Client::new(),
+    };
+
+    // 与 call_generate_assistant_response 的调用点一致：有真实 ARN 才带头
+    let include_profile_arn = upstream
+        .profile_arn
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty());
+    let request = add_kiro_upstream_headers(
+        reqwest::Client::new()
+            .post("https://runtime.us-east-1.kiro.dev/generateAssistantResponse"),
+        &upstream,
+        "application/vnd.amazon.eventstream",
+        true,
+        true,
+        include_profile_arn,
+    )
+    .build()
+    .expect("request should build");
+
+    assert_eq!(
+        request
+            .headers()
+            .get("x-amzn-kiro-profile-arn")
+            .and_then(|value| value.to_str().ok()),
+        Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX")
+    );
+}
+
+#[test]
 fn add_kiro_upstream_headers_keeps_runtime_requests_minimal() {
     let upstream = UpstreamCredentials {
         account_id: "test-account".to_string(),

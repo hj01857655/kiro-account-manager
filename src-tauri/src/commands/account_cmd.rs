@@ -220,7 +220,15 @@ pub async fn sync_account(
             if let Some(ref refresh_token) = result.refresh_token {
                 a.refresh_token = Some(refresh_token.clone());
             }
-            a.profile_arn = result.profile_arn.clone();
+            // IdC/Enterprise refresh 通常不回 profileArn；勿用 None 覆盖已存真实 ARN
+            if result
+                .profile_arn
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty())
+            {
+                a.profile_arn = result.profile_arn.clone();
+            }
             a.id_token = result.id_token.clone();
             a.sso_session_id = result.sso_session_id.clone();
             a.expires_at = Some(calc_expires_at(result.expires_in));

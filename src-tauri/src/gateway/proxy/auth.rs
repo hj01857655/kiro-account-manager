@@ -229,7 +229,7 @@ pub async fn resolve_managed_account_credentials(
                         ));
                     }
                 };
-                return Ok(UpstreamCredentials {
+                let creds = UpstreamCredentials {
                     account_id: account.id.clone(),
                     access_token: access_token.clone(),
                     machine_id: ctx.machine_id.clone(),
@@ -242,7 +242,8 @@ pub async fn resolve_managed_account_credentials(
                     auth_method: account.auth_method.clone(),
                     send_opt_out: should_send_codewhisperer_optout(),
                     http,
-                });
+                };
+                return ensure_enterprise_profile_arn(&account, creds).await;
             }
         }
     }
@@ -253,11 +254,13 @@ pub async fn resolve_managed_account_credentials(
             let mut usage_data = None;
             let mut is_banned = false;
             let mut is_auth_error = false;
+            let mut resolved_profile_arn = None;
 
             if let Ok(usage) = usage_result {
                 usage_data = Some(usage.usage_data);
                 is_banned = usage.is_banned;
                 is_auth_error = usage.is_auth_error;
+                resolved_profile_arn = usage.resolved_profile_arn;
             }
 
             // 失败追踪：如果账号被封禁或认证失败，累加失败计数
@@ -271,6 +274,9 @@ pub async fn resolve_managed_account_credentials(
                 is_auth_error,
                 should_increment_failure,
             );
+            if let Some(ref arn) = resolved_profile_arn {
+                persist_account_profile_arn(&account.id, arn);
+            }
 
             // 减少连接计数
             state.load_balancer.decrement_connections(&account.id).await;
@@ -304,7 +310,12 @@ pub async fn resolve_managed_account_credentials(
                 .record_success(&account.id, response_time_ms)
                 .await;
 
-            build_upstream_credentials_from_refresh(config, &account, refresh)
+            let mut account_for_creds = account.clone();
+            if let Some(arn) = resolved_profile_arn {
+                account_for_creds.profile_arn = Some(arn);
+            }
+            let creds = build_upstream_credentials_from_refresh(config, &account_for_creds, refresh)?;
+            ensure_enterprise_profile_arn(&account_for_creds, creds).await
         }
         Err(error) => {
             // 减少连接计数
@@ -350,11 +361,13 @@ pub async fn force_refresh_upstream_credentials(
     let mut usage_data = None;
     let mut is_banned = false;
     let mut is_auth_error = false;
+    let mut resolved_profile_arn = None;
 
     if let Ok(usage) = usage_result {
         usage_data = Some(usage.usage_data);
         is_banned = usage.is_banned;
         is_auth_error = usage.is_auth_error;
+        resolved_profile_arn = usage.resolved_profile_arn;
     }
 
     persist_account_refresh(
@@ -365,6 +378,9 @@ pub async fn force_refresh_upstream_credentials(
         is_auth_error,
         is_banned || is_auth_error,
     );
+    if let Some(ref arn) = resolved_profile_arn {
+        persist_account_profile_arn(&account.id, arn);
+    }
 
     if is_banned || is_auth_error {
         state.load_balancer.record_failure(&account.id).await;
@@ -379,7 +395,12 @@ pub async fn force_refresh_upstream_credentials(
         }
     }
 
-    build_upstream_credentials_from_refresh(config, &account, refresh)
+    let mut account_for_creds = account.clone();
+    if let Some(arn) = resolved_profile_arn {
+        account_for_creds.profile_arn = Some(arn);
+    }
+    let creds = build_upstream_credentials_from_refresh(config, &account_for_creds, refresh)?;
+    ensure_enterprise_profile_arn(&account_for_creds, creds).await
 }
 
 pub fn build_upstream_credentials_from_refresh(
@@ -422,8 +443,63 @@ pub fn build_upstream_credentials_from_refresh(
         http,
     })
 }
-/// 根据账号 provider 返回默认的 profileArn
-/// BuilderId 账号和 Social 账号（Github/Google）使用不同的 profileArn
+/// Enterprise 上游调用必须有真实 profileArn：账号已存优先，否则 ListAvailableProfiles 发现并落库。
+async fn ensure_enterprise_profile_arn(
+    account: &Account,
+    mut creds: UpstreamCredentials,
+) -> Result<UpstreamCredentials, String> {
+    let has_arn = creds
+        .profile_arn
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty());
+    if has_arn {
+        return Ok(creds);
+    }
+    if account.provider.as_deref() != Some("Enterprise") {
+        return Ok(creds);
+    }
+
+    use crate::clients::kiro_client::{usage_limits_region_candidates, KiroClient};
+
+    let client = KiroClient::from_client(creds.http.clone());
+    let regions = usage_limits_region_candidates(&creds.region, true);
+    let arn = client
+        .resolve_enterprise_profile_arn(&creds.access_token, &regions)
+        .await?
+        .ok_or_else(|| {
+            format!(
+                "Enterprise 账号 {} 未解析到 profileArn（ListAvailableProfiles 为空）",
+                account.label
+            )
+        })?;
+
+    persist_account_profile_arn(&account.id, &arn);
+    log::info!(
+        "[网关] Enterprise 账号 {} 解析到 profileArn: {}",
+        account.label,
+        arn
+    );
+    creds.profile_arn = Some(arn.clone());
+    creds.available_models_profile_arn = Some(arn);
+    Ok(creds)
+}
+
+fn persist_account_profile_arn(account_id: &str, profile_arn: &str) {
+    let mut store = AccountStore::new();
+    if let Some(account) = store.accounts.iter_mut().find(|a| a.id == account_id) {
+        let empty = account
+            .profile_arn
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty();
+        if empty || account.profile_arn.as_deref() != Some(profile_arn) {
+            account.profile_arn = Some(profile_arn.to_string());
+            let _ = store.save_to_file();
+        }
+    }
+}
 
 pub fn format_managed_upstream_source(config: &GatewayConfig, account: &Account) -> String {
     let account_label = account
