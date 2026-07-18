@@ -2662,13 +2662,19 @@ async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
     loop {
         attempt += 1;
 
+        // Enterprise / 有真实 ARN 时必须带头：上游 runtime（含 MCP 相关调用）会校验
+        let include_profile_arn = upstream
+            .profile_arn
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
         let upstream_resp = add_kiro_upstream_headers(
             upstream.http.post(&upstream_url),
             upstream,
             "application/vnd.amazon.eventstream",
             true,
             true,
-            false,
+            include_profile_arn,
         )
         .json(upstream_payload)
         .send()
@@ -3025,7 +3031,7 @@ async fn resolve_managed_account_credentials(
                         ));
                     }
                 };
-                return Ok(UpstreamCredentials {
+                let creds = UpstreamCredentials {
                     account_id: account.id.clone(),
                     access_token: access_token.clone(),
                     machine_id: ctx.machine_id.clone(),
@@ -3038,7 +3044,8 @@ async fn resolve_managed_account_credentials(
                     auth_method: account.auth_method.clone(),
                     send_opt_out: should_send_codewhisperer_optout(),
                     http,
-                });
+                };
+                return ensure_enterprise_profile_arn(&account, creds).await;
             }
         }
     }
@@ -3049,11 +3056,13 @@ async fn resolve_managed_account_credentials(
             let mut usage_data = None;
             let mut is_banned = false;
             let mut is_auth_error = false;
+            let mut resolved_profile_arn = None;
 
             if let Ok(usage) = usage_result {
                 usage_data = Some(usage.usage_data);
                 is_banned = usage.is_banned;
                 is_auth_error = usage.is_auth_error;
+                resolved_profile_arn = usage.resolved_profile_arn;
             }
 
             // 失败追踪：如果账号被封禁或认证失败，累加失败计数
@@ -3067,6 +3076,9 @@ async fn resolve_managed_account_credentials(
                 is_auth_error,
                 should_increment_failure,
             );
+            if let Some(ref arn) = resolved_profile_arn {
+                persist_account_profile_arn(&account.id, arn);
+            }
 
             // 减少连接计数
             state.load_balancer.decrement_connections(&account.id).await;
@@ -3100,7 +3112,12 @@ async fn resolve_managed_account_credentials(
                 .record_success(&account.id, response_time_ms)
                 .await;
 
-            build_upstream_credentials_from_refresh(config, &account, refresh)
+            let mut account_for_creds = account.clone();
+            if let Some(arn) = resolved_profile_arn {
+                account_for_creds.profile_arn = Some(arn);
+            }
+            let creds = build_upstream_credentials_from_refresh(config, &account_for_creds, refresh)?;
+            ensure_enterprise_profile_arn(&account_for_creds, creds).await
         }
         Err(error) => {
             // 减少连接计数
@@ -3146,11 +3163,13 @@ async fn force_refresh_upstream_credentials(
     let mut usage_data = None;
     let mut is_banned = false;
     let mut is_auth_error = false;
+    let mut resolved_profile_arn = None;
 
     if let Ok(usage) = usage_result {
         usage_data = Some(usage.usage_data);
         is_banned = usage.is_banned;
         is_auth_error = usage.is_auth_error;
+        resolved_profile_arn = usage.resolved_profile_arn;
     }
 
     persist_account_refresh(
@@ -3161,6 +3180,9 @@ async fn force_refresh_upstream_credentials(
         is_auth_error,
         is_banned || is_auth_error,
     );
+    if let Some(ref arn) = resolved_profile_arn {
+        persist_account_profile_arn(&account.id, arn);
+    }
 
     if is_banned || is_auth_error {
         state.load_balancer.record_failure(&account.id).await;
@@ -3175,7 +3197,12 @@ async fn force_refresh_upstream_credentials(
         }
     }
 
-    build_upstream_credentials_from_refresh(config, &account, refresh)
+    let mut account_for_creds = account.clone();
+    if let Some(arn) = resolved_profile_arn {
+        account_for_creds.profile_arn = Some(arn);
+    }
+    let creds = build_upstream_credentials_from_refresh(config, &account_for_creds, refresh)?;
+    ensure_enterprise_profile_arn(&account_for_creds, creds).await
 }
 
 fn build_upstream_credentials_from_refresh(
@@ -3218,8 +3245,64 @@ fn build_upstream_credentials_from_refresh(
         http,
     })
 }
-/// 根据账号 provider 返回默认的 profileArn
-/// BuilderId 账号和 Social 账号（Github/Google）使用不同的 profileArn
+
+/// Enterprise 上游调用必须有真实 profileArn：账号已存优先，否则 ListAvailableProfiles 发现并落库。
+async fn ensure_enterprise_profile_arn(
+    account: &Account,
+    mut creds: UpstreamCredentials,
+) -> Result<UpstreamCredentials, String> {
+    let has_arn = creds
+        .profile_arn
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty());
+    if has_arn {
+        return Ok(creds);
+    }
+    if account.provider.as_deref() != Some("Enterprise") {
+        return Ok(creds);
+    }
+
+    use crate::clients::kiro_client::{usage_limits_region_candidates, KiroClient};
+
+    let client = KiroClient::from_client(creds.http.clone());
+    let regions = usage_limits_region_candidates(&creds.region, true);
+    let arn = client
+        .resolve_enterprise_profile_arn(&creds.access_token, &regions)
+        .await?
+        .ok_or_else(|| {
+            format!(
+                "Enterprise 账号 {} 未解析到 profileArn（ListAvailableProfiles 为空）",
+                account.label
+            )
+        })?;
+
+    persist_account_profile_arn(&account.id, &arn);
+    log::info!(
+        "[网关] Enterprise 账号 {} 解析到 profileArn: {}",
+        account.label,
+        arn
+    );
+    creds.profile_arn = Some(arn.clone());
+    creds.available_models_profile_arn = Some(arn);
+    Ok(creds)
+}
+
+fn persist_account_profile_arn(account_id: &str, profile_arn: &str) {
+    let mut store = AccountStore::new();
+    if let Some(account) = store.accounts.iter_mut().find(|a| a.id == account_id) {
+        let empty = account
+            .profile_arn
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty();
+        if empty || account.profile_arn.as_deref() != Some(profile_arn) {
+            account.profile_arn = Some(profile_arn.to_string());
+            let _ = store.save_to_file();
+        }
+    }
+}
 
 fn format_managed_upstream_source(config: &GatewayConfig, account: &Account) -> String {
     let account_label = account
@@ -6306,6 +6389,53 @@ mod tests {
             Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/test")
         );
         assert!(request.headers().get("redirect-for-internal").is_none());
+    }
+
+    #[test]
+    fn add_kiro_upstream_headers_adds_profile_arn_for_enterprise_generate() {
+        let upstream = UpstreamCredentials {
+            account_id: "ent-account".to_string(),
+            access_token: "token-ent".to_string(),
+            machine_id: "machine-ent".to_string(),
+            profile_arn: Some(
+                "arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX".to_string(),
+            ),
+            available_models_profile_arn: Some(
+                "arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX".to_string(),
+            ),
+            provider: Some("Enterprise".to_string()),
+            region: "us-east-1".to_string(),
+            source_label: "single:ent".to_string(),
+            user_agent: "KiroIDE 0.11.34 machine-ent".to_string(),
+            auth_method: Some("IdC".to_string()),
+            send_opt_out: true,
+            http: reqwest::Client::new(),
+        };
+
+        let include_profile_arn = upstream
+            .profile_arn
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        let request = add_kiro_upstream_headers(
+            reqwest::Client::new()
+                .post("https://runtime.us-east-1.kiro.dev/generateAssistantResponse"),
+            &upstream,
+            "application/vnd.amazon.eventstream",
+            true,
+            true,
+            include_profile_arn,
+        )
+        .build()
+        .expect("request should build");
+
+        assert_eq!(
+            request
+                .headers()
+                .get("x-amzn-kiro-profile-arn")
+                .and_then(|value| value.to_str().ok()),
+            Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX")
+        );
     }
 
     #[test]
