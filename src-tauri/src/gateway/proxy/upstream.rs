@@ -1276,13 +1276,20 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
     loop {
         attempt += 1;
 
+        // 有真实 profileArn 就带头：上游 runtime（含 MCP 相关调用）会校验；
+        // Enterprise 的真实 ARN 由 ensure_enterprise_profile_arn 在凭证构建时保证
+        let include_profile_arn = upstream
+            .profile_arn
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
         let upstream_resp = add_kiro_upstream_headers(
             upstream.http.post(&upstream_url),
             upstream,
             "application/vnd.amazon.eventstream",
             true,
             true,
-            false,
+            include_profile_arn,
         )
         .json(upstream_payload)
         .send()
