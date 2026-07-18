@@ -354,11 +354,7 @@ async fn login_idc(
         Err(e) => {
             log::warn!("Failed to get usage for {}: {}", provider_id, e);
             // 即使 getUsageLimits 失败，也能保存账号
-            crate::commands::common::UsageResult {
-                usage_data: serde_json::json!({}),
-                is_banned: false,
-                is_auth_error: false,
-            }
+            crate::commands::common::UsageResult::empty()
         }
     };
 
@@ -423,7 +419,12 @@ async fn login_idc(
         existing.start_url.clone_from(&auth_result.start_url); // 保存 start_url
         existing.sso_session_id = auth_result.sso_session_id;
         existing.id_token = auth_result.id_token;
-        existing.profile_arn = auth_result.profile_arn;
+        // IdC 登录结果通常无 profileArn；优先落库 usage 解析到的真实 ARN
+        existing.profile_arn = usage_result
+            .resolved_profile_arn
+            .clone()
+            .or(auth_result.profile_arn)
+            .or_else(|| existing.profile_arn.clone());
         existing.usage_data = Some(usage_result.usage_data);
         // machine_id 应该已经存在且被复用了，这里仅作兜底
         if existing.machine_id.as_ref().is_none_or(|id| id.trim().is_empty()) {
@@ -453,7 +454,10 @@ async fn login_idc(
         account.start_url.clone_from(&auth_result.start_url); // 保存 start_url
         account.sso_session_id = auth_result.sso_session_id;
         account.id_token = auth_result.id_token;
-        account.profile_arn = auth_result.profile_arn;
+        account.profile_arn = usage_result
+            .resolved_profile_arn
+            .clone()
+            .or(auth_result.profile_arn);
         account.usage_data = Some(usage_result.usage_data);
         update_account_status(
             &mut account,

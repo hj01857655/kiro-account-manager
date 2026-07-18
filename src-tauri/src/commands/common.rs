@@ -148,14 +148,15 @@ pub fn ensure_account_machine_id(account: &mut Account) -> String {
     machine_id
 }
 
-/// 统一的 profileArn 解析逻辑（用于 ListAvailableModels 等 API 调用）
+/// 统一的 profileArn 解析逻辑（用于 ListAvailableModels / getUsageLimits 等 API 调用）
 ///
 /// BuilderId 账号本地常见为 `profileArn=null`，但真实 IDE 抓包会带固定
 /// BuilderId profileArn；不带时上游会返回 `Invalid profileArn`。
 /// 因此这里对空 profileArn 降级到默认值（根据 provider）。
 ///
 /// ## 降级策略
-/// - Enterprise: 保持 None（Enterprise 不需要 profileArn）
+/// - Enterprise: 只用账号已保存的 profileArn（不套 BuilderId 默认）；缺失时由调用方
+///   通过 ListAvailableProfiles 发现
 /// - 其他 provider: 账号 profileArn → 默认 profileArn（根据 provider）
 pub fn resolve_profile_arn_with_fallback(
     account_profile_arn: Option<&str>,
@@ -167,7 +168,7 @@ pub fn resolve_profile_arn_with_fallback(
         .filter(|value| !value.is_empty());
 
     match provider {
-        Some("Enterprise") => None,
+        Some("Enterprise") => account_profile_arn.map(String::from),
         provider => account_profile_arn
             .map(String::from)
             .or_else(|| Some(resolve_default_profile_arn(provider).to_string())),
@@ -177,7 +178,7 @@ pub fn resolve_profile_arn_with_fallback(
 /// 统一解析带“优先候选”的 profileArn。
 ///
 /// 用于 token refresh 之后的调用：上游刷新结果返回的 profileArn 优先，其次账号保存值，
-/// 最后按 provider 降级到默认 profileArn；Enterprise 始终返回 None。
+/// 最后按 provider 降级到默认 profileArn；Enterprise 只用候选/账号值，不套默认 ARN。
 pub fn resolve_profile_arn_from_candidates(
     preferred_profile_arn: Option<&str>,
     account_profile_arn: Option<&str>,
@@ -222,7 +223,8 @@ pub fn find_account_by_id(
 ///
 /// 解析规则：
 /// - machine_id：账号自带（非空）→ 否则生成账号独立 ID
-/// - profile_arn：Enterprise → None；其他账号自带 → 否则 provider 默认 ARN
+/// - profile_arn：Enterprise → 账号已保存值（无则 None，由调用方 ListAvailableProfiles）；
+///   其他 → 账号自带 → 否则 provider 默认 ARN
 /// - region：profile_arn 解析出来的 region 优先 → 账号 region → fallback
 pub struct KiroCallContext {
     pub machine_id: String,
@@ -390,6 +392,20 @@ pub struct UsageResult {
     pub usage_data: serde_json::Value,
     pub is_banned: bool,
     pub is_auth_error: bool,
+    /// getUsageLimits 实际使用的 profileArn（Enterprise 可能由 ListAvailableProfiles 发现）
+    pub resolved_profile_arn: Option<String>,
+}
+
+impl UsageResult {
+    /// getUsageLimits 失败时的占位结果（仍允许落库账号）
+    pub fn empty() -> Self {
+        Self {
+            usage_data: serde_json::json!({}),
+            is_banned: false,
+            is_auth_error: false,
+            resolved_profile_arn: None,
+        }
+    }
 }
 
 /// 判断账号是否为 external_idp（微软 / Azure AD）。
@@ -546,12 +562,14 @@ async fn get_usage_by_account_inner(
     access_token: &str,
     use_account_proxy: bool,
 ) -> Result<UsageResult, String> {
-    use crate::clients::http_client::build_http_client_with_timeout_for_account;
+    use crate::clients::http_client::{
+        build_http_client_with_timeout_for_account, parse_region_from_profile_arn,
+    };
     use crate::clients::kiro_client::{usage_limits_region_candidates, KiroClient};
 
     let ctx = resolve_kiro_call_context(account, "us-east-1");
     let is_enterprise = account.provider.as_deref() == Some("Enterprise");
-    let regions = usage_limits_region_candidates(&ctx.region, is_enterprise);
+    let mut regions = usage_limits_region_candidates(&ctx.region, is_enterprise);
 
     let client = if use_account_proxy {
         KiroClient::from_client(build_http_client_with_timeout_for_account(account, 30, 10)?)
@@ -559,26 +577,51 @@ async fn get_usage_by_account_inner(
         KiroClient::new()?
     };
 
-    // getUsageLimits 不带 profileArn；企业号优先账号 region，再回退常见 region
+    // Enterprise：账号无 profileArn 时先 ListAvailableProfiles 发现真实 ARN（对齐 IDE）
+    let mut profile_arn = ctx.profile_arn;
+    if is_enterprise && profile_arn.is_none() {
+        match client
+            .resolve_enterprise_profile_arn(access_token, &regions)
+            .await
+        {
+            Ok(arn) => profile_arn = arn,
+            Err(e) => return parse_usage_result(Err(e), None),
+        }
+        if profile_arn.is_none() {
+            return Err(
+                "Enterprise 账号未解析到 profileArn（ListAvailableProfiles 为空）".to_string(),
+            );
+        }
+    }
+
+    // profileArn 内嵌 region 时优先该 region（避免先打错区）
+    if let Some(arn_region) = parse_region_from_profile_arn(profile_arn.as_deref()) {
+        regions = usage_limits_region_candidates(&arn_region, is_enterprise);
+    }
+
     let (used_region, usage_data) = match client
-        .get_usage_limits_with_region_fallback(access_token, &ctx.machine_id, &regions)
+        .get_usage_limits_with_region_fallback(
+            access_token,
+            &ctx.machine_id,
+            &regions,
+            profile_arn.as_deref(),
+        )
         .await
     {
         Ok(v) => v,
-        Err(e) => return parse_usage_result(Err(e)),
+        Err(e) => return parse_usage_result(Err(e), profile_arn),
     };
 
     // 某些封禁状态下 getUsageLimits 正常返回，但 ListAvailableModels 会 403
-    // Enterprise 的 profile_arn 为 None，跳过该探测
-    let mut result = parse_usage_result(Ok(usage_data))?;
+    let mut result = parse_usage_result(Ok(usage_data), profile_arn)?;
 
-    if !result.is_banned && ctx.profile_arn.is_some() {
+    if !result.is_banned && result.resolved_profile_arn.is_some() {
         match client
             .list_available_models(
                 access_token,
                 &ctx.machine_id,
                 &used_region,
-                ctx.profile_arn.as_deref(),
+                result.resolved_profile_arn.as_deref(),
             )
             .await
         {
@@ -625,23 +668,29 @@ pub async fn get_usage_by_provider_with_machine_id(
 }
 
 /// 解析 usage 结果，提取封禁状态和认证错误
-fn parse_usage_result(result: Result<serde_json::Value, String>) -> Result<UsageResult, String> {
+fn parse_usage_result(
+    result: Result<serde_json::Value, String>,
+    resolved_profile_arn: Option<String>,
+) -> Result<UsageResult, String> {
     match result {
         Ok(usage_data) => Ok(UsageResult {
             usage_data, // 直接使用 JSON Value
             is_banned: false,
             is_auth_error: false,
+            resolved_profile_arn,
         }),
         Err(e) if e.starts_with("BANNED:") => Ok(UsageResult {
             usage_data: serde_json::Value::Null,
             is_banned: true,
             is_auth_error: false,
+            resolved_profile_arn,
         }),
         // 401 或认证相关错误（包括 403 + token invalid）
         Err(e) if is_auth_error_message(&e) => Ok(UsageResult {
             usage_data: serde_json::Value::Null,
             is_banned: false,
             is_auth_error: true,
+            resolved_profile_arn,
         }),
         // 其他错误直接抛出
         Err(e) => Err(e),
@@ -952,12 +1001,21 @@ mod tests {
     }
 
     #[test]
-    fn resolve_profile_arn_with_fallback_omits_enterprise_profile_arn() {
+    fn resolve_profile_arn_with_fallback_keeps_enterprise_account_arn_without_default() {
         assert_eq!(
             resolve_profile_arn_with_fallback(
-                Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/IGNORED"),
+                Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX"),
                 Some("Enterprise"),
-            ),
+            )
+            .as_deref(),
+            Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/AAAACCCCXXXX")
+        );
+        assert_eq!(
+            resolve_profile_arn_with_fallback(None, Some("Enterprise")),
+            None
+        );
+        assert_eq!(
+            resolve_profile_arn_with_fallback(Some("   "), Some("Enterprise")),
             None
         );
     }
@@ -989,13 +1047,18 @@ mod tests {
     }
 
     #[test]
-    fn resolve_profile_arn_from_candidates_omits_enterprise_even_with_candidates() {
+    fn resolve_profile_arn_from_candidates_keeps_enterprise_candidates_without_default() {
         assert_eq!(
             resolve_profile_arn_from_candidates(
                 Some("arn:aws:codewhisperer:us-west-2:123456789012:profile/REFRESHED"),
                 Some("arn:aws:codewhisperer:us-east-1:123456789012:profile/ACCOUNT"),
                 Some("Enterprise"),
-            ),
+            )
+            .as_deref(),
+            Some("arn:aws:codewhisperer:us-west-2:123456789012:profile/REFRESHED")
+        );
+        assert_eq!(
+            resolve_profile_arn_from_candidates(None, None, Some("Enterprise")),
             None
         );
     }
@@ -1046,12 +1109,13 @@ mod tests {
 
     #[test]
     fn parse_usage_result_maps_banned_and_auth_errors_without_failing() {
-        let banned = parse_usage_result(Err("BANNED: blocked".to_string())).unwrap();
+        let banned = parse_usage_result(Err("BANNED: blocked".to_string()), None).unwrap();
         assert!(banned.is_banned);
         assert!(!banned.is_auth_error);
         assert_eq!(banned.usage_data, serde_json::Value::Null);
 
-        let auth_error = parse_usage_result(Err("AUTH_ERROR: token expired".to_string())).unwrap();
+        let auth_error =
+            parse_usage_result(Err("AUTH_ERROR: token expired".to_string()), None).unwrap();
         assert!(!auth_error.is_banned);
         assert!(auth_error.is_auth_error);
         assert_eq!(auth_error.usage_data, serde_json::Value::Null);

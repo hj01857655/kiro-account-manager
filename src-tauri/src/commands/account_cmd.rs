@@ -151,8 +151,7 @@ pub async fn sync_account(
         );
     }
 
-    // 统一走 get_usage_by_account：getUsageLimits 不带 profileArn；
-    // Enterprise 还会按账号 region + us-east-1/eu-central-1 回退
+    // 统一走 get_usage_by_account：Enterprise 会先解析真实 profileArn 再查配额
     let mut usage_result = get_usage_by_account(&account, &access_token).await;
 
     let mut refresh_result: Option<RefreshResult> = None;
@@ -221,7 +220,15 @@ pub async fn sync_account(
             if let Some(ref refresh_token) = result.refresh_token {
                 a.refresh_token = Some(refresh_token.clone());
             }
-            a.profile_arn = result.profile_arn.clone();
+            // IdC/Enterprise refresh 通常不回 profileArn；勿用 None 覆盖已存真实 ARN
+            if result
+                .profile_arn
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty())
+            {
+                a.profile_arn = result.profile_arn.clone();
+            }
             a.id_token = result.id_token.clone();
             a.sso_session_id = result.sso_session_id.clone();
             a.expires_at = Some(calc_expires_at(result.expires_in));
@@ -234,6 +241,13 @@ pub async fn sync_account(
 
         // 只有成功获取配额时才更新 usage_data 和 status
         if let Some(usage_data) = usage {
+            // Enterprise 首次同步时落库 ListAvailableProfiles 发现的 profileArn
+            if let Some(ref arn) = usage_data.resolved_profile_arn {
+                if a.profile_arn.as_deref().map(str::trim).unwrap_or("").is_empty() {
+                    a.profile_arn = Some(arn.clone());
+                }
+            }
+
             // 直接移动所有权，避免 clone
             a.usage_data = Some(usage_data.usage_data);
             update_account_status(a, usage_data.is_banned, usage_data.is_auth_error);
@@ -330,6 +344,11 @@ pub async fn get_usage_limits(
         }
 
         // 更新 usage_data 和 status
+        if let Some(ref arn) = usage.resolved_profile_arn {
+            if a.profile_arn.as_deref().map(str::trim).unwrap_or("").is_empty() {
+                a.profile_arn = Some(arn.clone());
+            }
+        }
         a.usage_data = Some(usage.usage_data);
         update_account_status(a, usage.is_banned, usage.is_auth_error);
 
@@ -515,11 +534,7 @@ pub async fn verify_account(
         Err(e) => {
             log::warn!("Failed to get usage in verify_account: {}", e);
             // 即使 getUsageLimits 失败，也能更新账号
-            crate::commands::common::UsageResult {
-                usage_data: serde_json::json!({}),
-                is_banned: false,
-                is_auth_error: false,
-            }
+            crate::commands::common::UsageResult::empty()
         }
     };
     let usage_data = usage_result.usage_data.clone();
@@ -779,20 +794,12 @@ pub async fn add_account_by_external_idp(
                 Ok(result) => result,
                 Err(e) => {
                     log::warn!("[external_idp] 取 usage 失败: {e}");
-                    crate::commands::common::UsageResult {
-                        usage_data: serde_json::json!({}),
-                        is_banned: false,
-                        is_auth_error: false,
-                    }
+                    crate::commands::common::UsageResult::empty()
                 }
             }
         }
         // 无 access_token 不 hard-fail，账号仍落库（usage 置空）
-        _ => crate::commands::common::UsageResult {
-            usage_data: serde_json::json!({}),
-            is_banned: false,
-            is_auth_error: false,
-        },
+        _ => crate::commands::common::UsageResult::empty(),
     };
 
     // 封禁账号直接报错（与 social / idc 一致）
@@ -1187,11 +1194,7 @@ async fn add_account_by_idc_internal(
             Err(e) => {
                 log::warn!("Failed to get usage in add_account_by_idc: {}", e);
                 // 即使 getUsageLimits 失败，也能保存账号
-                crate::commands::common::UsageResult {
-                    usage_data: serde_json::json!({}),
-                    is_banned: false,
-                    is_auth_error: false,
-                }
+                crate::commands::common::UsageResult::empty()
             }
         };
 
@@ -1232,11 +1235,7 @@ async fn add_account_by_idc_internal(
                     Err(e) => {
                         log::warn!("Failed to get usage after token refresh: {}", e);
                         // 即使 getUsageLimits 失败，也能保存账号
-                        crate::commands::common::UsageResult {
-                            usage_data: serde_json::json!({}),
-                            is_banned: false,
-                            is_auth_error: false,
-                        }
+                        crate::commands::common::UsageResult::empty()
                     }
                 };
                 let expires_at = calc_expires_at(auth_result.expires_in);
@@ -1287,11 +1286,7 @@ async fn add_account_by_idc_internal(
             Err(e) => {
                 log::warn!("Failed to get usage in add_account_by_idc: {}", e);
                 // 即使 getUsageLimits 失败，也能保存账号
-                crate::commands::common::UsageResult {
-                    usage_data: serde_json::json!({}),
-                    is_banned: false,
-                    is_auth_error: false,
-                }
+                crate::commands::common::UsageResult::empty()
             }
         };
 
@@ -1366,6 +1361,9 @@ async fn add_account_by_idc_internal(
             if sso_session_id.is_some() {
                 existing.sso_session_id = sso_session_id;
             }
+            if let Some(arn) = usage_result.resolved_profile_arn.clone() {
+                existing.profile_arn = Some(arn);
+            }
             existing.usage_data = Some(usage_result.usage_data);
             update_account_status(existing, usage_result.is_banned, usage_result.is_auth_error);
             existing.clone()
@@ -1386,6 +1384,7 @@ async fn add_account_by_idc_internal(
             account.start_url = start_url.clone();
             account.id_token = id_token;
             account.sso_session_id = sso_session_id;
+            account.profile_arn = usage_result.resolved_profile_arn.clone();
             account.usage_data = Some(usage_result.usage_data);
             update_account_status(
                 &mut account,
