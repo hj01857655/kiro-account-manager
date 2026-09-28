@@ -363,16 +363,18 @@ async fn resolve_current_account_by_usage(
         }
     };
 
-    // Enterprise IdC 本地 token 通常不带 profileArn，需 ListAvailableProfiles；
-    // Social/BuilderId 用本地或默认 ARN。
+    // Enterprise IdC/external_idp 本地 token 通常不带 profileArn，需 ListAvailableProfiles；
+    // Social/BuilderId 用本地或默认 ARN。企业号发现失败时不得套默认 ARN
+    //（错误的 ARN 必 400/403），放弃本轮反查，等待下次轮询。
     let mut profile_arn = local_token
         .profile_arn
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
-    let needs_profile_discovery =
-        local_token.auth_method.as_deref() == Some("IdC") && profile_arn.is_none();
+    let auth_method = local_token.auth_method.as_deref();
+    let is_enterprise_token = matches!(auth_method, Some("IdC") | Some("external_idp"));
+    let needs_profile_discovery = is_enterprise_token && profile_arn.is_none();
     let regions =
         crate::clients::kiro_client::usage_limits_region_candidates(region, needs_profile_discovery);
 
@@ -381,15 +383,22 @@ async fn resolve_current_account_by_usage(
             .resolve_enterprise_profile_arn(access_token, &regions)
             .await
         {
-            Ok(arn) => profile_arn = arn,
+            Ok(Some(arn)) => profile_arn = Some(arn),
+            Ok(None) => {
+                log::warn!(
+                    "[AutoSwitch] ListAvailableProfiles 返回空，无法确定企业 profileArn，跳过本轮 usage 反查"
+                );
+                return None;
+            }
             Err(e) => {
-                log::warn!("[AutoSwitch] ListAvailableProfiles 失败: {e}");
+                log::warn!("[AutoSwitch] ListAvailableProfiles 失败: {e}，跳过本轮 usage 反查");
+                return None;
             }
         }
     }
     if profile_arn.is_none() {
         profile_arn = Some(
-            match local_token.auth_method.as_deref() {
+            match auth_method {
                 Some("social") => crate::commands::common::KIRO_SOCIAL_PROFILE_ARN,
                 _ => crate::commands::common::KIRO_BUILDER_ID_PROFILE_ARN,
             }
