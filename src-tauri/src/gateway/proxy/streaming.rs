@@ -2,6 +2,26 @@
 
 use super::*;
 
+
+/// stream_proxy_response 的可变翻译状态（原闭包平铺变量收拢）。
+/// 纯状态容器：转换逻辑仍按 format 分支处理，字段访问顺序与原变量一致。
+#[derive(Default)]
+struct StreamState {
+    /// 工具调用参数累积器：toolUseId -> (name, arguments-json)
+    tool_accumulators: HashMap<String, (String, String)>,
+    message_started: bool,
+    next_block_index: usize,
+    text_block_index: Option<usize>,
+    thinking_block_index: Option<usize>,
+    tool_block_indexes: HashMap<String, usize>,
+    openai_tool_call_indexes: HashMap<String, i32>,
+    openai_next_tool_index: i32,
+    saw_tool_calls: bool,
+    responses_sequence_number: usize,
+    responses_next_output_index: usize,
+    responses_tool_output_indexes: HashMap<String, usize>,
+}
+
 pub fn stream_proxy_response(
     state: RouterState,
     upstream_resp: reqwest::Response,
@@ -28,25 +48,14 @@ pub fn stream_proxy_response(
         let mut raw_buffer = Vec::new();
         let mut parser = ThinkingParser::new();
         let mut aggregated = stream::AggregatedKiroResponse::default();
-        let mut tool_accumulators: HashMap<String, (String, String)> = HashMap::new();
+        let mut st = StreamState::default();
         let mut input_tokens = 0i32;
         let mut output_tokens = 0i32;
-        let mut message_started = false;
-        let mut next_block_index = 0usize;
-        let mut text_block_index: Option<usize> = None;
-        let mut thinking_block_index: Option<usize> = None;
-        let mut tool_block_indexes: HashMap<String, usize> = HashMap::new();
-        let mut openai_tool_call_indexes: HashMap<String, i32> = HashMap::new();
-        let mut openai_next_tool_index = 0i32;
-        let mut saw_tool_calls = false;
         let anthropic_id = format!("msg_{}", short_uuid());
         let response_id = format!("resp_{}", short_uuid());
         let message_id = format!("msg_{}", short_uuid());
         let created_at = chrono::Utc::now().timestamp();
         let completion_id = format!("chatcmpl-{}", short_uuid());
-        let mut responses_sequence_number = 0usize;
-        let mut responses_next_output_index = 1usize;
-        let mut responses_tool_output_indexes: HashMap<String, usize> = HashMap::new();
 
         if matches!(format, ResponseFormat::Responses) {
             let created = json!({
@@ -244,10 +253,10 @@ function_call: None,
                                                 created_at,
                                                 &text,
                                                 true,
-                                                &mut message_started,
-                                                &mut next_block_index,
-                                                &mut text_block_index,
-                                                &mut thinking_block_index,
+                                                &mut st.message_started,
+                                                &mut st.next_block_index,
+                                                &mut st.text_block_index,
+                                                &mut st.thinking_block_index,
                                                 input_tokens,
                                                 output_tokens,
                                                 aggregated.cache_read_input_tokens,
@@ -271,10 +280,10 @@ function_call: None,
                                                     created_at,
                                                     &segment.content,
                                                     segment.segment_type == SegmentType::Thinking,
-                                                    &mut message_started,
-                                                    &mut next_block_index,
-                                                    &mut text_block_index,
-                                                    &mut thinking_block_index,
+                                                    &mut st.message_started,
+                                                    &mut st.next_block_index,
+                                                    &mut st.text_block_index,
+                                                    &mut st.thinking_block_index,
                                                     input_tokens,
                                                     output_tokens,
                                                     aggregated.cache_read_input_tokens,
@@ -284,19 +293,19 @@ function_call: None,
                                             }
                                         }
                                         KiroEvent::ToolUseStart { id, name } => {
-                                            saw_tool_calls = true;
+                                            st.saw_tool_calls = true;
                                             // 还原工具名称
                                             let original_name = restore_tool_name(&name);
                                             // 修复：用还原后的原始工具名发给客户端，否则 Claude Code 收到 sanitized 名会报 "No such tool available"
                                             let name = original_name.clone();
-                                            tool_accumulators
+                                            st.tool_accumulators
                                                 .entry(id.clone())
                                                 .or_insert((original_name.clone(), String::new()));
                                             match format {
                                                 ResponseFormat::Anthropic => {
                                                     ensure_anthropic_message_start(
                                                         &tx,
-                                                        &mut message_started,
+                                                        &mut st.message_started,
                                                         &anthropic_id,
                                                         &model,
                                                         aggregated.input_tokens,
@@ -305,16 +314,16 @@ function_call: None,
                                                         aggregated.cache_creation_input_tokens,
                                                     )
                                                     .await;
-                                                    close_content_block(&tx, &mut text_block_index)
+                                                    close_content_block(&tx, &mut st.text_block_index)
                                                         .await;
                                                     close_content_block(
                                                         &tx,
-                                                        &mut thinking_block_index,
+                                                        &mut st.thinking_block_index,
                                                     )
                                                     .await;
-                                                    let index = next_block_index;
-                                                    next_block_index += 1;
-                                                    tool_block_indexes.insert(id.clone(), index);
+                                                    let index = st.next_block_index;
+                                                    st.next_block_index += 1;
+                                                    st.tool_block_indexes.insert(id.clone(), index);
                                                     let data = json!({
                                                         "type": "content_block_start",
                                                         "index": index,
@@ -333,9 +342,9 @@ function_call: None,
                                                     .await;
                                                 }
                                                 ResponseFormat::Responses => {
-                                                    let output_index = responses_next_output_index;
-                                                    responses_next_output_index += 1;
-                                                    responses_tool_output_indexes
+                                                    let output_index = st.responses_next_output_index;
+                                                    st.responses_next_output_index += 1;
+                                                    st.responses_tool_output_indexes
                                                         .insert(id.clone(), output_index);
                                                     let data = json!({
                                                         "type": "response.output_item.added",
@@ -354,9 +363,9 @@ function_call: None,
                                                 }
                                                 ResponseFormat::OpenAI => {
                                                     // OpenAI Chat Completions: 发送工具调用开始 chunk
-                                                    let tool_index = openai_next_tool_index;
-                                                    openai_next_tool_index += 1;
-                                                    openai_tool_call_indexes
+                                                    let tool_index = st.openai_next_tool_index;
+                                                    st.openai_next_tool_index += 1;
+                                                    st.openai_tool_call_indexes
                                                         .insert(id.clone(), tool_index);
 
                                                     let chunk = stream::build_openai_chunk(
@@ -400,7 +409,7 @@ function_call: None,
                                             // 用 delta 中携带的 name 主动发起 start 事件，避免客户端卡死
                                             let mut started_from_delta = false;
                                             if let Some((existing_name, current_input)) =
-                                                tool_accumulators.get_mut(&id)
+                                                st.tool_accumulators.get_mut(&id)
                                             {
                                                 if existing_name.is_empty() {
                                                     if let Some(n) = name.as_ref() {
@@ -413,7 +422,7 @@ function_call: None,
                                                     .as_ref()
                                                     .map(|n| restore_tool_name(n))
                                                     .unwrap_or_default();
-                                                tool_accumulators.insert(
+                                                st.tool_accumulators.insert(
                                                     id.clone(),
                                                     (resolved_name, input_delta.clone()),
                                                 );
@@ -424,14 +433,14 @@ function_call: None,
                                             if started_from_delta {
                                                 if let Some(raw_name) = name.as_ref() {
                                                     let original_name = restore_tool_name(raw_name);
-                                                    saw_tool_calls = true;
+                                                    st.saw_tool_calls = true;
                                                     match format {
                                                         ResponseFormat::Anthropic => {
-                                                            if !tool_block_indexes.contains_key(&id)
+                                                            if !st.tool_block_indexes.contains_key(&id)
                                                             {
                                                                 ensure_anthropic_message_start(
                                                                     &tx,
-                                                                    &mut message_started,
+                                                                    &mut st.message_started,
                                                                     &anthropic_id,
                                                                     &model,
                                                                     aggregated.input_tokens,
@@ -442,17 +451,17 @@ function_call: None,
                                                                 .await;
                                                                 close_content_block(
                                                                     &tx,
-                                                                    &mut text_block_index,
+                                                                    &mut st.text_block_index,
                                                                 )
                                                                 .await;
                                                                 close_content_block(
                                                                     &tx,
-                                                                    &mut thinking_block_index,
+                                                                    &mut st.thinking_block_index,
                                                                 )
                                                                 .await;
-                                                                let index = next_block_index;
-                                                                next_block_index += 1;
-                                                                tool_block_indexes
+                                                                let index = st.next_block_index;
+                                                                st.next_block_index += 1;
+                                                                st.tool_block_indexes
                                                                     .insert(id.clone(), index);
                                                                 let data = json!({
                                                                     "type": "content_block_start",
@@ -473,13 +482,13 @@ function_call: None,
                                                             }
                                                         }
                                                         ResponseFormat::Responses => {
-                                                            if !responses_tool_output_indexes
+                                                            if !st.responses_tool_output_indexes
                                                                 .contains_key(&id)
                                                             {
                                                                 let output_index =
-                                                                    responses_next_output_index;
-                                                                responses_next_output_index += 1;
-                                                                responses_tool_output_indexes
+                                                                    st.responses_next_output_index;
+                                                                st.responses_next_output_index += 1;
+                                                                st.responses_tool_output_indexes
                                                                     .insert(
                                                                         id.clone(),
                                                                         output_index,
@@ -502,13 +511,13 @@ function_call: None,
                                                             }
                                                         }
                                                         ResponseFormat::OpenAI => {
-                                                            if !openai_tool_call_indexes
+                                                            if !st.openai_tool_call_indexes
                                                                 .contains_key(&id)
                                                             {
                                                                 let tool_index =
-                                                                    openai_next_tool_index;
-                                                                openai_next_tool_index += 1;
-                                                                openai_tool_call_indexes
+                                                                    st.openai_next_tool_index;
+                                                                st.openai_next_tool_index += 1;
+                                                                st.openai_tool_call_indexes
                                                                     .insert(id.clone(), tool_index);
                                                                 let chunk = stream::build_openai_chunk(
                                                                     &completion_id,
@@ -551,7 +560,7 @@ function_call: None,
                                             ResponseFormat::Anthropic => {
                                                 // 在 ToolUseStop 时，一次性发送完整的 input（参考 Kiro-Go）
                                                 if let Some((name, input)) =
-                                                    tool_accumulators.remove(&id)
+                                                    st.tool_accumulators.remove(&id)
                                                 {
                                                     aggregated.tool_calls.push((
                                                         id.clone(),
@@ -561,7 +570,7 @@ function_call: None,
 
                                                     // 发送完整的 input_json_delta
                                                     if let Some(index) =
-                                                        tool_block_indexes.get(&id).copied()
+                                                        st.tool_block_indexes.get(&id).copied()
                                                     {
                                                         if !input.is_empty() {
                                                             let data = json!({
@@ -581,7 +590,7 @@ function_call: None,
                                                         }
                                                     }
                                                 }
-                                                if let Some(index) = tool_block_indexes.remove(&id)
+                                                if let Some(index) = st.tool_block_indexes.remove(&id)
                                                 {
                                                     let data = json!({
                                                         "type": "content_block_stop",
@@ -597,7 +606,7 @@ function_call: None,
                                             }
                                             ResponseFormat::Responses => {
                                                 if let Some((name, input)) =
-                                                    tool_accumulators.remove(&id)
+                                                    st.tool_accumulators.remove(&id)
                                                 {
                                                     aggregated.tool_calls.push((
                                                         id.clone(),
@@ -611,12 +620,12 @@ function_call: None,
                                                     );
                                                     send_data(&tx, &done.to_string()).await;
                                                     let output_index =
-                                                        responses_tool_output_indexes
+                                                        st.responses_tool_output_indexes
                                                             .remove(&id)
                                                             .unwrap_or_else(|| {
                                                                 let idx =
-                                                                    responses_next_output_index;
-                                                                responses_next_output_index += 1;
+                                                                    st.responses_next_output_index;
+                                                                st.responses_next_output_index += 1;
                                                                 idx
                                                             });
                                                     let data = json!({
@@ -637,7 +646,7 @@ function_call: None,
                                             }
                                             ResponseFormat::OpenAI => {
                                                 if let Some((name, input)) =
-                                                    tool_accumulators.remove(&id)
+                                                    st.tool_accumulators.remove(&id)
                                                 {
                                                     aggregated.tool_calls.push((
                                                         id.clone(),
@@ -647,7 +656,7 @@ function_call: None,
 
                                                     // OpenAI 格式：在 ToolUseStop 时发送完整的 arguments
                                                     if let Some(&tool_index) =
-                                                        openai_tool_call_indexes.get(&id)
+                                                        st.openai_tool_call_indexes.get(&id)
                                                     {
                                                         let chunk = stream::build_openai_chunk(
                                                             &completion_id,
@@ -691,7 +700,7 @@ function_call: None,
                                                 ResponseFormat::Anthropic => {
                                                     ensure_anthropic_message_start(
                                                         &tx,
-                                                        &mut message_started,
+                                                        &mut st.message_started,
                                                         &anthropic_id,
                                                         &model,
                                                         aggregated.input_tokens,
@@ -702,13 +711,13 @@ function_call: None,
                                                     .await;
                                                     close_content_block(
                                                         &tx,
-                                                        &mut thinking_block_index,
+                                                        &mut st.thinking_block_index,
                                                     )
                                                     .await;
-                                                    if text_block_index.is_none() {
-                                                        let index = next_block_index;
-                                                        next_block_index += 1;
-                                                        text_block_index = Some(index);
+                                                    if st.text_block_index.is_none() {
+                                                        let index = st.next_block_index;
+                                                        st.next_block_index += 1;
+                                                        st.text_block_index = Some(index);
                                                         let data = json!({
                                                             "type": "content_block_start",
                                                             "index": index,
@@ -724,7 +733,7 @@ function_call: None,
                                                         )
                                                         .await;
                                                     }
-                                                    if let Some(index) = text_block_index {
+                                                    if let Some(index) = st.text_block_index {
                                                         if let Some(data) =
                                                             build_anthropic_citation_delta_event(
                                                                 index,
@@ -755,9 +764,9 @@ function_call: None,
                                                                 &message_id,
                                                                 annotation,
                                                                 aggregated.citations.len() - 1,
-                                                                responses_sequence_number,
+                                                                st.responses_sequence_number,
                                                             );
-                                                        responses_sequence_number += 1;
+                                                        st.responses_sequence_number += 1;
                                                         send_data(&tx, &data.to_string()).await;
                                                     }
                                                 }
@@ -839,10 +848,10 @@ function_call: None,
                 created_at,
                 &segment.content,
                 segment.segment_type == SegmentType::Thinking,
-                &mut message_started,
-                &mut next_block_index,
-                &mut text_block_index,
-                &mut thinking_block_index,
+                &mut st.message_started,
+                &mut st.next_block_index,
+                &mut st.text_block_index,
+                &mut st.thinking_block_index,
                 input_tokens,
                 output_tokens,
                 aggregated.cache_read_input_tokens,
@@ -852,7 +861,7 @@ function_call: None,
         }
         // 收集未关闭的工具调用（没有收到 stop 事件的），不要直接 push 到 aggregated.tool_calls
         // 因为 Anthropic 末尾分支需要区分"已正常 stop"和"未 stop"的，避免重复发送事件
-        let unstopped_tools: Vec<(String, String, String)> = tool_accumulators
+        let unstopped_tools: Vec<(String, String, String)> = st.tool_accumulators
             .drain()
             .filter(|(_, (name, input))| !name.is_empty() || !input.is_empty())
             .map(|(id, (name, input))| {
@@ -963,17 +972,17 @@ function_call: None,
 
         match format {
             ResponseFormat::Anthropic => {
-                close_content_block(&tx, &mut text_block_index).await;
-                close_content_block(&tx, &mut thinking_block_index).await;
+                close_content_block(&tx, &mut st.text_block_index).await;
+                close_content_block(&tx, &mut st.thinking_block_index).await;
 
                 // 只处理"未收到 stop 事件"的工具调用，避免重复发送已经在流中正常 stop 过的
                 for (id, name, input) in &unstopped_tools {
                     // 如果之前已经发过 content_block_start（delta 先到时），直接补 delta+stop
-                    let block_index = if let Some(idx) = tool_block_indexes.remove(id) {
+                    let block_index = if let Some(idx) = st.tool_block_indexes.remove(id) {
                         idx
                     } else {
-                        let idx = next_block_index;
-                        next_block_index += 1;
+                        let idx = st.next_block_index;
+                        st.next_block_index += 1;
                         let start = json!({
                             "type": "content_block_start",
                             "index": idx,
@@ -1003,12 +1012,12 @@ function_call: None,
                         "index": block_index
                     });
                     send_event(&tx, Some("content_block_stop"), &stop.to_string()).await;
-                    saw_tool_calls = true;
+                    st.saw_tool_calls = true;
                 }
 
-                // 兜底关闭：如果 tool_block_indexes 还有遗留（理论上 unstopped_tools 已经覆盖，
+                // 兜底关闭：如果 st.tool_block_indexes 还有遗留（理论上 unstopped_tools 已经覆盖，
                 // 但万一有 start 事件发了但既没 stop 也没在 unstopped_tools 里），统一发 stop
-                for (_, idx) in tool_block_indexes.drain() {
+                for (_, idx) in st.tool_block_indexes.drain() {
                     let stop = json!({
                         "type": "content_block_stop",
                         "index": idx
@@ -1032,7 +1041,7 @@ function_call: None,
                 let finish = json!({
                     "type": "message_delta",
                     "delta": {
-                        "stop_reason": if saw_tool_calls { "tool_use" } else { "end_turn" },
+                        "stop_reason": if st.saw_tool_calls { "tool_use" } else { "end_turn" },
                         "stop_sequence": Value::Null
                     },
                     "usage": usage
@@ -1094,7 +1103,7 @@ function_call: None,
             }
             ResponseFormat::OpenAI => {
                 // OpenAI: finish 帧只带 finish_reason；include_usage 时再发空 choices + usage
-                let finish_reason = if saw_tool_calls { "tool_calls" } else { "stop" };
+                let finish_reason = if st.saw_tool_calls { "tool_calls" } else { "stop" };
                 let finish_chunk = stream::build_openai_chunk(
                     &completion_id,
                     created_at,

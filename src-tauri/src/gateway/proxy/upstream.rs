@@ -743,14 +743,16 @@ pub async fn proxy_handler(
                 // 请求成功，退出重试循环
                 break (resp, current_upstream);
             }
-            Err((status, error_type, message, upstream_response_body)) => {
+            Err(e) => {
+                let (status, error_type, message, upstream_response_body) =
+                    (e.status, e.error_type, e.message.clone(), e.response_body.clone());
+                let e_rate_limit_retry_after_ms = e.rate_limit_retry_after_ms;
                 // 检查是否是 429 错误
                 if status == StatusCode::TOO_MANY_REQUESTS {
                     let account_id = extract_account_id_from_upstream(&current_upstream);
 
                     // 记录服务端指定的限流等待窗口（毫秒），全账号试完后优先于固定退避
-                    rate_limit_retry_after_ms =
-                        parse_rate_limit_retry_after_ms(&message);
+                    rate_limit_retry_after_ms = e_rate_limit_retry_after_ms;
 
                     // 保存最后一个 429 错误详情，以便最终透传
                     last_retriable_error = Some((
@@ -1288,21 +1290,6 @@ pub async fn proxy_handler(
 /// 服务端限流窗口上限（毫秒）：防病态值导致重试环长时间挂起
 const RATE_LIMIT_RETRY_AFTER_MAX_MS: u64 = 5 * 60 * 1000;
 
-/// 从 429 错误消息中解析服务端限流窗口标记 `[retry-after: <ms>ms]`
-/// （由 call_generate_assistant_response 在消费响应体前从
-/// `x-amzn-kiro-ratelimit-retry-after` 头提取，见 00 号语料 §2.3——单位毫秒）。
-fn parse_rate_limit_retry_after_ms(message: &str) -> Option<u64> {
-    static RE: OnceLock<regex::Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| {
-        regex::Regex::new(r"\[retry-after:\s*(\d{1,9})ms\]").expect("retry-after regex")
-    });
-    re.captures(message)?
-        .get(1)?
-        .as_str()
-        .parse::<u64>()
-        .ok()
-}
-
 pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
     upstream: &UpstreamCredentials,
     upstream_payload: &T,
@@ -1355,7 +1342,7 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
         .send()
         .await
         .map_err(|error| {
-            (
+            UpstreamRequestError::new(
                 StatusCode::BAD_GATEWAY,
                 "api_error",
                 sanitize_error(&format!("上游请求失败: {error}")),
@@ -1405,35 +1392,34 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
         // 402 配额不足错误不重试，直接返回让外层切换账号
         if mapped_status == StatusCode::PAYMENT_REQUIRED {
             log::warn!("[网关] 上游 402 配额不足，type={}，交给外层切换账号", error_type);
-            return Err((mapped_status, error_type, message, Some(body)));
+            return Err(UpstreamRequestError::new(mapped_status, error_type, message, Some(body)));
         }
 
         // 429 限流错误不重试，直接返回让外层切换账号；
         // 提取 Kiro 官方限流头（毫秒）夹带给外层——重试环用它替换固定退避
         if mapped_status == StatusCode::TOO_MANY_REQUESTS {
-            let retry_after_ms = rate_limit_retry_after_header;
-            let message = match retry_after_ms {
-                Some(ms) => format!("{message} [retry-after: {ms}ms]"),
-                None => message,
-            };
             log::warn!(
                 "[网关] 上游 429 限流，type={}，retry-after={}，交给外层切换账号",
                 error_type,
-                retry_after_ms.map(|ms| format!("{ms}ms")).unwrap_or_else(|| "无".to_string())
+                rate_limit_retry_after_header
+                    .map(|ms| format!("{ms}ms"))
+                    .unwrap_or_else(|| "无".to_string())
             );
-            return Err((mapped_status, error_type, message, Some(body)));
+            let mut err = UpstreamRequestError::new(mapped_status, error_type, message, Some(body));
+            err.rate_limit_retry_after_ms = rate_limit_retry_after_header;
+            return Err(err);
         }
 
         // 401 认证错误不在 HTTP 层重试；交给外层刷新当前账号 token 或切换账号。
         if mapped_status == StatusCode::UNAUTHORIZED {
             log::warn!("[网关] 上游 401 认证错误，type={}，交给外层处理", error_type);
-            return Err((mapped_status, error_type, message, Some(body)));
+            return Err(UpstreamRequestError::new(mapped_status, error_type, message, Some(body)));
         }
 
         // 403 认证错误不在 HTTP 层重试；交给外层刷新当前账号 token 或切换账号。
         if mapped_status == StatusCode::FORBIDDEN {
             log::warn!("[网关] 上游 403 错误，type={}，交给外层处理", error_type);
-            return Err((mapped_status, error_type, message, Some(body)));
+            return Err(UpstreamRequestError::new(mapped_status, error_type, message, Some(body)));
         }
 
         // 5xx 服务器错误才重试
@@ -1454,7 +1440,7 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
         }
 
         // 其他错误也直接返回原始响应（不提取 message，直接透传 JSON）
-        return Err((mapped_status, error_type, message, Some(body)));
+        return Err(UpstreamRequestError::new(mapped_status, error_type, message, Some(body)));
     }
 }
 
@@ -1499,21 +1485,4 @@ pub fn add_kiro_upstream_headers(
     }
 
     builder
-}
-
-#[cfg(test)]
-mod retry_after_tests {
-    use super::parse_rate_limit_retry_after_ms;
-
-    #[test]
-    fn parses_retry_after_marker() {
-        let msg = "Rate limited. [retry-after: 45000ms]";
-        assert_eq!(parse_rate_limit_retry_after_ms(msg), Some(45000));
-        // 无标记
-        assert_eq!(parse_rate_limit_retry_after_ms("Rate limited."), None);
-        // 非数字
-        assert_eq!(parse_rate_limit_retry_after_ms("[retry-after: abcms]"), None);
-        // 零值保留（由调用方决定是否回退）
-        assert_eq!(parse_rate_limit_retry_after_ms("[retry-after: 0ms]"), Some(0));
-    }
 }

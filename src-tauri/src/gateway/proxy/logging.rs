@@ -2,7 +2,34 @@
 
 use super::*;
 
-pub type UpstreamRequestError = (StatusCode, &'static str, String, Option<String>);
+/// 上游请求错误：原为 4 元组，结构化后可携带类型化扩展字段
+/// （如 429 的服务端限流窗口），不再靠 message 字符串夹带。
+#[derive(Debug, Clone)]
+pub struct UpstreamRequestError {
+    pub status: StatusCode,
+    pub error_type: &'static str,
+    pub message: String,
+    pub response_body: Option<String>,
+    /// 429 时 `x-amzn-kiro-ratelimit-retry-after` 指定的重试窗口（毫秒）
+    pub rate_limit_retry_after_ms: Option<u64>,
+}
+
+impl UpstreamRequestError {
+    pub fn new(
+        status: StatusCode,
+        error_type: &'static str,
+        message: String,
+        response_body: Option<String>,
+    ) -> Self {
+        Self {
+            status,
+            error_type,
+            message,
+            response_body,
+            rate_limit_retry_after_ms: None,
+        }
+    }
+}
 
 #[allow(dead_code)]
 pub const STREAMING_RESPONSE_PLACEHOLDER: &str = "[streaming response omitted from request log]";
