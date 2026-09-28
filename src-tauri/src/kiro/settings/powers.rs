@@ -67,6 +67,62 @@ pub struct PowerFrontMatter {
     pub display_name: String,
 }
 
+impl PowerFrontMatter {
+    /// Agent Plugin 布局回退：POWER.md 缺失时从 plugin.json 补元信息
+    /// （bundle X3u 解析的 name/displayName/description/author/license/keywords）。
+    /// POWER.md 已有值优先，plugin.json 只补空位。
+    fn merged_with_plugin_json(self, plugin_json: &str) -> Self {
+        let Ok(serde_json::Value::Object(map)) =
+            serde_json::from_str::<serde_json::Value>(plugin_json)
+        else {
+            return self;
+        };
+        let read_str = |key: &str| -> Option<String> {
+            map.get(key)
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(str::to_string)
+        };
+        let read_keywords = || -> Vec<String> {
+            map.get("keywords")
+                .and_then(serde_json::Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let mut merged = self;
+        if merged.name.is_empty() {
+            merged.name = read_str("name").unwrap_or_default();
+        }
+        if merged.display_name.is_empty() {
+            merged.display_name = read_str("displayName").unwrap_or_default();
+        }
+        if merged.description.is_empty() {
+            merged.description = read_str("description").unwrap_or_default();
+        }
+        if merged.author.is_empty() {
+            merged.author = map
+                .get("author")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_default();
+        }
+        if merged.license.is_empty() {
+            merged.license = read_str("license").unwrap_or_default();
+        }
+        if merged.keywords.is_empty() {
+            merged.keywords = read_keywords();
+        }
+        merged
+    }
+}
+
 /// 前端展示用的 Power 信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -374,9 +430,21 @@ impl PowersManager {
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
+
+            // 两种布局（对齐 1.1.70 bundle PowersManager）：
+            // - 传统 Power：POWER.md frontmatter 提供元信息
+            // - Agent Plugin（ULi 判定：目录含 plugin.json）：元信息在 plugin.json
+            //   的 name/displayName/description，文档在 dev.kiro/INSTRUCTIONS.md
+            let is_agent_plugin = path.join("plugin.json").is_file();
             let power_md_path = path.join("POWER.md");
             let power_md = fs::read_to_string(&power_md_path).unwrap_or_default();
-            let fm = Self::parse_power_md(&power_md);
+            let fm = if is_agent_plugin {
+                Self::parse_power_md(&power_md)
+                    .merged_with_plugin_json(&fs::read_to_string(path.join("plugin.json"))
+                        .unwrap_or_default())
+            } else {
+                Self::parse_power_md(&power_md)
+            };
 
             let installed_entry = entry_map.get(&name);
 

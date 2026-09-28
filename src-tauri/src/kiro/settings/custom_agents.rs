@@ -164,12 +164,55 @@ impl CustomAgentsManager {
         content: &str,
         scope: &str,
         project_dir: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<String>, String> {
         let dir = Self::resolve_dir(scope, project_dir)?;
         fs::create_dir_all(&dir).ok();
 
         let path = Self::safe_agent_path(&dir, file_name)?;
-        fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))
+        fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))?;
+        // .json agent 保存不阻塞草稿，但把 IDE 会解析失败的问题带回前端展示
+        Ok(Self::diagnose_content(file_name, content))
+    }
+
+    /// .json agent 内容诊断（对齐 1.1.70 bundle ProfileLoader 行为）：
+    /// - JSON 解析失败 → IDE 抛 AgentFileFormatError（invalid_config），**该 agent 不加载**
+    /// - `allowedTools` / `toolsSettings` 是 CLI-only 字段（bundle gpr）：
+    ///   无其他有效字段时整个文件被按 cli_only_agent 跳过，有则忽略字段并警告
+    /// - `.md` agent 走 frontmatter 路径（vZ），无 frontmatter 也会解析失败——仅诊断不拦截
+    fn diagnose_content(file_name: &str, content: &str) -> Vec<String> {
+        let mut issues = Vec::new();
+        if file_name.ends_with(".json") {
+            let parsed: serde_json::Value = match serde_json::from_str(content) {
+                Ok(value) => value,
+                Err(e) => {
+                    issues.push(format!("JSON 解析失败（IDE 将不加载该 agent）: {e}"));
+                    return issues;
+                }
+            };
+            let Some(obj) = parsed.as_object() else {
+                issues.push("agent 文件根节点必须是 JSON 对象（IDE 将不加载）".to_string());
+                return issues;
+            };
+            if obj.contains_key("allowedTools") || obj.contains_key("toolsSettings") {
+                issues.push(
+                    "allowedTools / toolsSettings 是 kiro-cli 专属字段，IDE 侧会忽略；若没有 IDE 侧字段（name/prompt/tools…），整个 agent 会被跳过"
+                        .to_string(),
+                );
+            }
+            if !obj.keys().any(|k| k != "allowedTools" && k != "toolsSettings") {
+                issues.push("文件只包含 CLI 专属字段，IDE 将按 cli_only_agent 跳过".to_string());
+            }
+            if let Some(name) = obj.get("name").and_then(serde_json::Value::as_str) {
+                if name.trim().is_empty() {
+                    issues.push("name 为空字符串（IDE 侧 name 用于 agent 列表显示）".to_string());
+                }
+            }
+        } else if file_name.ends_with(".md") && !content.trim_start().starts_with("---") {
+            issues.push(
+                ".md agent 需要 YAML frontmatter（name/prompt 等），缺失时 IDE 解析会失败".to_string(),
+            );
+        }
+        issues
     }
 
     pub fn delete(file_name: &str, scope: &str, project_dir: Option<&str>) -> Result<(), String> {
@@ -198,8 +241,48 @@ impl CustomAgentsManager {
             return Err(format!("文件已存在: {file_name}"));
         }
 
+        // 创建即入库：解析失败的 agent IDE 不加载，这里硬拦截
+        let issues = Self::diagnose_content(file_name, content);
+        if !issues.is_empty() {
+            return Err(issues.join("；"));
+        }
+
         fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))?;
 
         Self::load(file_name, scope, project_dir)
+    }
+}
+
+#[cfg(test)]
+mod diagnose_tests {
+    use super::CustomAgentsManager;
+
+    #[test]
+    fn agent_json_diagnosis_matches_profile_loader_behavior() {
+        // 合法 json agent
+        let ok = r#"{"name":"plan","prompt":"You are a planner","tools":["read_file"]}"#;
+        assert!(CustomAgentsManager::diagnose_content("plan.json", ok).is_empty());
+
+        // 坏 JSON → IDE 解析失败不加载
+        let issues = CustomAgentsManager::diagnose_content("broken.json", "{oops");
+        assert!(issues.iter().any(|i| i.contains("JSON 解析失败")));
+
+        // 根不是对象
+        let issues = CustomAgentsManager::diagnose_content("arr.json", "[]");
+        assert!(issues.iter().any(|i| i.contains("对象")));
+
+        // CLI-only 字段（bundle gpr：allowedTools/toolsSettings）
+        let cli_only = r#"{"allowedTools":["read_file"],"toolsSettings":{}}"#;
+        let issues = CustomAgentsManager::diagnose_content("cli.json", cli_only);
+        assert!(issues.iter().any(|i| i.contains("cli_only_agent") || i.contains("CLI 专属")));
+
+        // 混合：有 IDE 字段 + CLI 字段 → 只提示忽略
+        let mixed = r#"{"name":"a","prompt":"p","allowedTools":["read_file"]}"#;
+        let issues = CustomAgentsManager::diagnose_content("mixed.json", mixed);
+        assert!(issues.len() == 1 && issues[0].contains("忽略"));
+
+        // .md 无 frontmatter
+        let issues = CustomAgentsManager::diagnose_content("legacy.md", "plain body");
+        assert!(issues.iter().any(|i| i.contains("frontmatter")));
     }
 }
