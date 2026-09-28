@@ -533,6 +533,8 @@ pub async fn proxy_handler(
     let mut token_refreshed_account_ids: HashSet<String> = HashSet::new();
     let mut next_upstream_override: Option<UpstreamCredentials> = None;
     let mut last_retriable_error: Option<(StatusCode, String, String, Option<String>)> = None;
+    // 服务端限流响应头 x-amzn-kiro-ratelimit-retry-after 的毫秒值（00 号语料 §2.3）
+    let mut rate_limit_retry_after_ms: Option<u64> = None;
     let mut consecutive_auth_failures = 0;
     const MAX_AUTH_FAILURES: u32 = 5; // 连续认证失败次数上限
 
@@ -596,14 +598,28 @@ pub async fn proxy_handler(
             // 如果有可重试错误（429/402/401），等待后重试
             if let Some((status, _, _, _)) = &last_retriable_error {
                 if *status == StatusCode::TOO_MANY_REQUESTS || *status == StatusCode::PAYMENT_REQUIRED || *status == StatusCode::UNAUTHORIZED {
-                    let wait_seconds = 5u64 * retry_round as u64; // 每轮等待时间递增
+                    // 429：优先采用服务端 x-amzn-kiro-ratelimit-retry-after 指定的窗口
+                    //（上限 5 分钟防病态值）；402/401 沿用固定递增退避
+                    let wait = if *status == StatusCode::TOO_MANY_REQUESTS {
+                        rate_limit_retry_after_ms
+                            .filter(|ms| *ms > 0)
+                            .map(|ms| ms.min(RATE_LIMIT_RETRY_AFTER_MAX_MS))
+                            .unwrap_or_else(|| 5_000 * retry_round as u64)
+                    } else {
+                        5_000 * retry_round as u64
+                    };
                     log::warn!(
-                        "[Gateway] 所有账号都返回 {} 错误，等{} 秒后重试 (第{} 轮)",
+                        "[Gateway] 所有账号都返回 {} 错误，等{} 秒后重试 (第{} 轮{})",
                         status.as_u16(),
-                        wait_seconds,
-                        retry_round + 1
+                        wait / 1000,
+                        retry_round + 1,
+                        if *status == StatusCode::TOO_MANY_REQUESTS && rate_limit_retry_after_ms.is_some() {
+                            "（采用服务端 retry-after 窗口）"
+                        } else {
+                            ""
+                        }
                     );
-                    tokio::time::sleep(tokio::time::Duration::from_secs(wait_seconds)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(wait)).await;
 
                     // 清空已尝试账号列表，重新尝试所有账号
                     tried_account_ids.clear();
@@ -731,6 +747,10 @@ pub async fn proxy_handler(
                 // 检查是否是 429 错误
                 if status == StatusCode::TOO_MANY_REQUESTS {
                     let account_id = extract_account_id_from_upstream(&current_upstream);
+
+                    // 记录服务端指定的限流等待窗口（毫秒），全账号试完后优先于固定退避
+                    rate_limit_retry_after_ms =
+                        parse_rate_limit_retry_after_ms(&message);
 
                     // 保存最后一个 429 错误详情，以便最终透传
                     last_retriable_error = Some((
@@ -1265,6 +1285,24 @@ pub async fn proxy_handler(
     Json(response).into_response()
 }
 
+/// 服务端限流窗口上限（毫秒）：防病态值导致重试环长时间挂起
+const RATE_LIMIT_RETRY_AFTER_MAX_MS: u64 = 5 * 60 * 1000;
+
+/// 从 429 错误消息中解析服务端限流窗口标记 `[retry-after: <ms>ms]`
+/// （由 call_generate_assistant_response 在消费响应体前从
+/// `x-amzn-kiro-ratelimit-retry-after` 头提取，见 00 号语料 §2.3——单位毫秒）。
+fn parse_rate_limit_retry_after_ms(message: &str) -> Option<u64> {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        regex::Regex::new(r"\[retry-after:\s*(\d{1,9})ms\]").expect("retry-after regex")
+    });
+    re.captures(message)?
+        .get(1)?
+        .as_str()
+        .parse::<u64>()
+        .ok()
+}
+
 pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
     upstream: &UpstreamCredentials,
     upstream_payload: &T,
@@ -1327,6 +1365,13 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
 
         let status = upstream_resp.status();
 
+        // 消费 body 前先提取限流头（429 时服务端指定重试窗口，单位毫秒）
+        let rate_limit_retry_after_header = upstream_resp
+            .headers()
+            .get("x-amzn-kiro-ratelimit-retry-after")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse::<u64>().ok());
+
         if status.is_success() {
             return Ok(upstream_resp);
         }
@@ -1363,9 +1408,19 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
             return Err((mapped_status, error_type, message, Some(body)));
         }
 
-        // 429 限流错误不重试，直接返回让外层切换账号
+        // 429 限流错误不重试，直接返回让外层切换账号；
+        // 提取 Kiro 官方限流头（毫秒）夹带给外层——重试环用它替换固定退避
         if mapped_status == StatusCode::TOO_MANY_REQUESTS {
-            log::warn!("[网关] 上游 429 限流，type={}，交给外层切换账号", error_type);
+            let retry_after_ms = rate_limit_retry_after_header;
+            let message = match retry_after_ms {
+                Some(ms) => format!("{message} [retry-after: {ms}ms]"),
+                None => message,
+            };
+            log::warn!(
+                "[网关] 上游 429 限流，type={}，retry-after={}，交给外层切换账号",
+                error_type,
+                retry_after_ms.map(|ms| format!("{ms}ms")).unwrap_or_else(|| "无".to_string())
+            );
             return Err((mapped_status, error_type, message, Some(body)));
         }
 
@@ -1444,4 +1499,21 @@ pub fn add_kiro_upstream_headers(
     }
 
     builder
+}
+
+#[cfg(test)]
+mod retry_after_tests {
+    use super::parse_rate_limit_retry_after_ms;
+
+    #[test]
+    fn parses_retry_after_marker() {
+        let msg = "Rate limited. [retry-after: 45000ms]";
+        assert_eq!(parse_rate_limit_retry_after_ms(msg), Some(45000));
+        // 无标记
+        assert_eq!(parse_rate_limit_retry_after_ms("Rate limited."), None);
+        // 非数字
+        assert_eq!(parse_rate_limit_retry_after_ms("[retry-after: abcms]"), None);
+        // 零值保留（由调用方决定是否回退）
+        assert_eq!(parse_rate_limit_retry_after_ms("[retry-after: 0ms]"), Some(0));
+    }
 }
