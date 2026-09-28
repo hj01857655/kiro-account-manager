@@ -33,7 +33,8 @@ pub async fn save_workflow(
     project_dir: Option<String>,
     file_name: String,
     content: String,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
+    // 返回 schema 诊断列表（空 = 通过）；保存本身不因诊断失败
     run_blocking_task(move || {
         WorkflowManager::write_workflow(&scope, project_dir.as_deref(), &file_name, &content)
     })

@@ -56,7 +56,9 @@ struct HookWhen {
 #[serde(rename_all = "camelCase")]
 enum HookWhenType {
     UserTriggered,
+    FileCreated,
     FileEdited,
+    FileDeleted,
     PromptSubmit,
     AgentStop,
 }

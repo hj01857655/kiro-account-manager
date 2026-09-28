@@ -131,7 +131,7 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
     setSaving(true)
     try {
       const fullContent = buildContent(editState.inclusion, editState.filePattern, editState.content, editState.name, editState.description)
-      await saveSteeringFile(
+      const issues: string[] = await saveSteeringFile(
         selectedFile.fileName,
         fullContent,
         selectedFile.scope,
@@ -140,6 +140,11 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
       setFiles(files.map(f => (f.fileName === selectedFile.fileName && f.scope === selectedFile.scope) ? { ...f, content: fullContent } : f))
       setSelectedFile({ ...selectedFile, content: fullContent })
       setHasChanges(false)
+      if (Array.isArray(issues) && issues.length > 0) {
+        // 保存成功但内容会被 IDE 降级/跳过，必须明确提示
+        const detail = issues.map(i => `• ${i}`).join('\n')
+        showConfirm('Steering 已保存，但存在合规问题', `Kiro 1.1.70 将降级或跳过该文件：\n\n${detail}\n\n是否继续编辑修复？`)
+      }
     } catch (e) {
       handleUiError('保存 Steering 文件失败', e, { userMessage: t('steering.saveFailed') || '保存失败' })
     } finally {

@@ -96,9 +96,13 @@ export default function WorkflowsPanel({
     if (!selected) return
     setSaving(true)
     try {
-      await saveWorkflow(scope, projectDir, selected, draft)
+      const issues: string[] = await saveWorkflow(scope, projectDir, selected, draft)
       setBaseline(draft)
       setFiles(fs => fs.map(f => (f.fileName === selected ? { ...f, content: draft } : f)))
+      if (Array.isArray(issues) && issues.length > 0) {
+        // 保存成功但 schema 不合规：Kiro 运行前校验会拒绝该 workflow，必须明确提示
+        window.alert(`Workflow 已保存，但存在 schema 问题（Kiro 运行前校验将拒绝）：\n\n• ${issues.join('\n• ')}`)
+      }
     } finally {
       setSaving(false)
     }

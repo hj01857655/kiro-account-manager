@@ -125,7 +125,8 @@ export function getSteeringFiles<T = any[]>(projectDir: string | null = null) {
   return invoke<T>('get_steering_files', { projectDir })
 }
 
-export function saveSteeringFile(fileName: string, content: string, scope: string, projectDir: string | null = null) {
+export function saveSteeringFile(fileName: string, content: string, scope: string, projectDir: string | null = null): Promise<string[]> {
+  // 返回内容级诊断列表（空数组 = 通过）；保存本身不因诊断失败
   return invoke('save_steering_file', { fileName, content, scope, projectDir })
 }
 
@@ -261,7 +262,8 @@ export function readWorkflow<T = WorkflowFile>(scope: string, projectDir: string
   return invoke<T>('read_workflow', { scope, projectDir, fileName })
 }
 
-export function saveWorkflow(scope: string, projectDir: string | null, fileName: string, content: string) {
+export function saveWorkflow(scope: string, projectDir: string | null, fileName: string, content: string): Promise<string[]> {
+  // 返回 schema 诊断列表（空数组 = 通过）；保存本身不因诊断失败
   return invoke('save_workflow', { scope, projectDir, fileName, content })
 }
 

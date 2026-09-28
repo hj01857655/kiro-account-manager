@@ -294,12 +294,64 @@ impl SteeringManager {
         content: &str,
         scope: &str,
         project_dir: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<String>, String> {
         let dir = Self::resolve_dir(scope, project_dir)?;
         fs::create_dir_all(&dir).ok();
 
         let path = Self::resolve_file_path(file_name, scope, project_dir)?;
-        fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))
+        fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))?;
+        // 保存不阻塞，但把 IDE 侧会降级/跳过的问题带回前端展示
+        Ok(Self::diagnose_content(content))
+    }
+
+    /// 内容级诊断（对齐 1.1.70 bundle eEt zod schema 与 ProgressiveContextSource 行为）：
+    /// - inclusion 非法取值 → IDE 静默降级为 always（内容仍加载，条件失效）
+    /// - inclusion: auto 但缺 description → IDE 跳过该文件（内容不加载）
+    /// - fileMatchPattern bundle 支持 string | string[]，编辑器只产出单值，检测到数组写法时提示
+    fn diagnose_content(content: &str) -> Vec<String> {
+        let mut issues = Vec::new();
+        let trimmed = content.trim_start();
+        let Some(rest) = trimmed.strip_prefix("---") else {
+            return issues; // 无 frontmatter = always 常驻，合法
+        };
+        let frontmatter = match rest.find("\n---") {
+            Some(idx) => &rest[..idx],
+            None => rest,
+        };
+
+        let inclusion = Self::parse_field(frontmatter, "inclusion");
+        if let Some(value) = &inclusion {
+            if !matches!(value.as_str(), "always" | "fileMatch" | "manual" | "auto") {
+                issues.push(format!(
+                    "inclusion \"{value}\" 不是合法取值（always|fileMatch|manual|auto），IDE 将静默按 always 常驻处理"
+                ));
+            }
+        }
+        if inclusion.as_deref() == Some("auto")
+            && Self::parse_field(frontmatter, "description")
+                .map(|d| d.trim().is_empty())
+                .unwrap_or(true)
+        {
+            issues.push(
+                "inclusion: auto 需要搭配 description（语义匹配用），缺失时 IDE 将跳过该文件不加载"
+                    .to_string(),
+            );
+        }
+        if inclusion.as_deref() == Some("fileMatch")
+            && Self::parse_field(frontmatter, "fileMatchPattern").is_none()
+        {
+            issues.push(
+                "inclusion: fileMatch 建议提供 fileMatchPattern，缺失时按 **/* 全匹配".to_string(),
+            );
+        }
+        // 数组形态提示：bundle 支持 string[]，编辑器只产出单值
+        if frontmatter.contains("fileMatchPattern:") && frontmatter.matches("\n- ").count() > 0 {
+            issues.push(
+                "fileMatchPattern 检测到数组写法：IDE 支持 string[]，但本编辑器保存时会按单值处理"
+                    .to_string(),
+            );
+        }
+        issues
     }
 
     /// 删除 steering 文件
@@ -993,5 +1045,43 @@ mod tests {
             !refined.contains("\n\n\n"),
             "extra blank lines should be collapsed"
         );
+    }
+}
+
+#[cfg(test)]
+mod diagnose_tests {
+    use super::SteeringManager;
+
+    #[test]
+    fn steering_diagnosis_flags_invalid_inclusion_and_auto_without_description() {
+        // 非法 inclusion 取值
+        let issues = SteeringManager::diagnose_content(
+            "---\ninclusion: sometimes\n---\nBody",
+        );
+        assert!(issues.iter().any(|i| i.contains("sometimes")));
+        assert!(issues.iter().any(|i| i.contains("always|fileMatch|manual|auto")));
+
+        // auto 缺 description → IDE 跳过
+        let issues = SteeringManager::diagnose_content(
+            "---\ninclusion: auto\nname: ctx\n---\nBody",
+        );
+        assert!(issues.iter().any(|i| i.contains("description")));
+
+        // auto 带 description → 通过
+        let issues = SteeringManager::diagnose_content(
+            "---\ninclusion: auto\nname: ctx\ndescription: \"语义匹配说明\"\n---\nBody",
+        );
+        assert!(issues.is_empty());
+
+        // fileMatch 缺 pattern → 提示
+        let issues = SteeringManager::diagnose_content(
+            "---\ninclusion: fileMatch\n---\nBody",
+        );
+        assert!(issues.iter().any(|i| i.contains("fileMatchPattern")));
+
+        // 无 frontmatter = always，合法
+        assert!(SteeringManager::diagnose_content("plain body").is_empty());
+        // 常驻 always 合法
+        assert!(SteeringManager::diagnose_content("---\ninclusion: always\n---\nBody").is_empty());
     }
 }

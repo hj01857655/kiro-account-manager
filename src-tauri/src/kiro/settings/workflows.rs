@@ -15,6 +15,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +32,218 @@ pub struct WorkflowManager;
 
 /// 合法的工作流文件扩展名。
 const WORKFLOW_EXTS: &[&str] = &["workflow.json", "workflow.yaml", "workflow.yml"];
+
+// ===== 写入侧轻量 schema 校验（对齐 Kiro 1.1.70 bundle 系统提示词 "WORKFLOW SCHEMA" 披露）=====
+// 运行前服务端按 schema 校验；未知 modelId 过校验但运行时必失败（无静默降级）。
+// 管理端做同构校验把错误提前到编辑时刻；只报确定性错误，不猜 modelId。
+
+const WORKFLOW_NODE_TYPES: &[&str] = &["step", "repeat", "sequence", "parallel", "watch"];
+
+/// 校验 workflow 内容，返回错误列表（空 = 通过）。
+/// JSON / YAML 均先转 serde_json::Value 再走同一套节点校验。
+pub fn diagnose_workflow_content(content: &str) -> Vec<String> {
+    let mut issues = Vec::new();
+
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        // 空文件是 create_workflow 的合法初始态，交由运行时处理
+        return issues;
+    }
+
+    let value: serde_json::Value = if trimmed.starts_with('{') {
+        match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(e) => {
+                issues.push(format!("JSON 解析失败: {e}"));
+                return issues;
+            }
+        }
+    } else {
+        match serde_yaml::from_str(trimmed) {
+            Ok(v) => v,
+            Err(e) => {
+                issues.push(format!("YAML 解析失败: {e}"));
+                return issues;
+            }
+        }
+    };
+
+    let Some(obj) = value.as_object() else {
+        issues.push("根节点必须是对象（name/inputs/steps）".to_string());
+        return issues;
+    };
+
+    let name = obj
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if name.trim().is_empty() {
+        issues.push("缺少 name 字段（workflow 必须有名字）".to_string());
+    }
+
+    if let Some(effort) = obj.get("effortLevel").and_then(serde_json::Value::as_str) {
+        if !matches!(
+            effort,
+            "low" | "medium" | "high" | "xhigh" | "max" | "auto"
+        ) {
+            issues.push(format!(
+                "workflow 级 effortLevel \"{effort}\" 非常规取值（常见: low|medium|high|xhigh|max），运行时若不支持会回落模型默认"
+            ));
+        }
+    }
+
+    let Some(steps) = obj.get("steps").and_then(serde_json::Value::as_array) else {
+        issues.push("缺少 steps 数组（workflow 必须至少有一个节点）".to_string());
+        return issues;
+    };
+    if steps.is_empty() {
+        issues.push("steps 数组为空（workflow 必须至少有一个节点）".to_string());
+    }
+
+    let mut seen_ids = std::collections::HashSet::new();
+    for (index, node) in steps.iter().enumerate() {
+        diagnose_workflow_node(node, &format!("steps[{index}]"), &mut seen_ids, &mut issues);
+    }
+
+    issues
+}
+
+fn diagnose_workflow_node(
+    node: &serde_json::Value,
+    path: &str,
+    seen_ids: &mut std::collections::HashSet<String>,
+    issues: &mut Vec<String>,
+) {
+    let Some(obj) = node.as_object() else {
+        issues.push(format!("{path}: 节点必须是对象"));
+        return;
+    };
+
+    let node_type = obj
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if !WORKFLOW_NODE_TYPES.contains(&node_type) {
+        issues.push(format!(
+            "{path}: 未知节点类型 \"{}\"（合法: {}）",
+            if node_type.is_empty() { "<空>" } else { node_type },
+            WORKFLOW_NODE_TYPES.join("|")
+        ));
+        return;
+    }
+
+    let node_id = obj
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if node_id.trim().is_empty() {
+        issues.push(format!("{path}: 缺少 id（节点必须有唯一 id）"));
+    } else if !seen_ids.insert(node_id.clone()) {
+        issues.push(format!("{path}: 节点 id \"{node_id}\" 重复"));
+    }
+
+    match node_type {
+        "step" => {
+            for field in ["agent", "prompt"] {
+                if obj
+                    .get(field)
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .is_empty()
+                {
+                    issues.push(format!("{path}: step 节点缺少必填字段 {field}"));
+                }
+            }
+        }
+        "repeat" => {
+            if obj.get("steps").and_then(serde_json::Value::as_array).is_none() {
+                issues.push(format!("{path}: repeat 节点缺少 steps 子节点数组"));
+            }
+            match obj.get("maxIterations").and_then(serde_json::Value::as_i64) {
+                Some(n) if (1..=1000).contains(&n) => {}
+                Some(n) => issues.push(format!(
+                    "{path}: maxIterations={n} 超出范围（1-1000）"
+                )),
+                None => issues.push(format!(
+                    "{path}: repeat 节点缺少 maxIterations（1-1000）"
+                )),
+            }
+            let on_max = obj
+                .get("onMaxIterations")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            if !matches!(on_max, "abort" | "continue" | "pause") {
+                issues.push(format!(
+                    "{path}: onMaxIterations 必须是 abort|continue|pause（当前: \"{}\"）",
+                    if on_max.is_empty() { "<空>" } else { on_max }
+                ));
+            }
+            let has_stop_condition = obj.get("stopCondition").is_some_and(|v| !v.is_null());
+            let has_stop_when = obj
+                .get("stopWhen")
+                .and_then(serde_json::Value::as_str)
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+            match (has_stop_condition, has_stop_when) {
+                (false, false) => issues.push(format!(
+                    "{path}: repeat 节点必须提供 stopCondition 或 stopWhen 之一"
+                )),
+                (true, true) => issues.push(format!(
+                    "{path}: stopCondition 与 stopWhen 只能二选一"
+                )),
+                _ => {}
+            }
+        }
+        "sequence" => {
+            if obj.get("steps").and_then(serde_json::Value::as_array).is_none() {
+                issues.push(format!("{path}: sequence 节点缺少 steps 子节点数组"));
+            }
+        }
+        "parallel" => {
+            let has_branches = obj
+                .get("branches")
+                .and_then(serde_json::Value::as_array)
+                .is_some();
+            if !has_branches {
+                issues.push(format!("{path}: parallel 节点缺少 branches 数组"));
+            }
+            let join = obj
+                .get("joinPolicy")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            if !matches!(join, "all" | "allSettled" | "any") {
+                issues.push(format!(
+                    "{path}: joinPolicy 必须是 all|allSettled|any（当前: \"{}\"）",
+                    if join.is_empty() { "<空>" } else { join }
+                ));
+            }
+        }
+        "watch" => {
+            if obj
+                .get("handler")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default()
+                .is_empty()
+            {
+                issues.push(format!("{path}: watch 节点缺少必填字段 handler"));
+            }
+        }
+        _ => {}
+    }
+
+    // 递归子节点
+    for child_key in ["steps", "branches"] {
+        if let Some(children) = obj.get(child_key).and_then(serde_json::Value::as_array) {
+            for (index, child) in children.iter().enumerate() {
+                diagnose_workflow_node(child, &format!("{path}.{child_key}[{index}]"), seen_ids, issues);
+            }
+        }
+    }
+}
+
 
 impl WorkflowManager {
     /// 用户级 workflows 目录：`~/.kiro/workflows`
@@ -144,12 +357,14 @@ impl WorkflowManager {
         project_dir: Option<&str>,
         file_name: &str,
         content: &str,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<String>, String> {
         let file_name = Self::sanitize_file_name(file_name)?;
         let root = Self::resolve_root(scope, project_dir)?;
         fs::create_dir_all(&root).map_err(|e| format!("创建 workflows 目录失败: {e}"))?;
         let path = root.join(&file_name);
-        fs::write(&path, content).map_err(|e| format!("写入 {file_name} 失败: {e}"))
+        fs::write(&path, content).map_err(|e| format!("写入 {file_name} 失败: {e}"))?;
+        // 保存不阻塞草稿，但把运行时必失败的 schema 问题带回前端展示
+        Ok(diagnose_workflow_content(content))
     }
 
     /// 新建一个空 workflow 文件（已存在则报错，避免覆盖已有内容）。
@@ -181,5 +396,72 @@ impl WorkflowManager {
             return Ok(());
         }
         fs::remove_file(&path).map_err(|e| format!("删除 {file_name} 失败: {e}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::diagnose_workflow_content;
+
+    #[test]
+    fn valid_workflow_passes() {
+        let wf = r#"{
+            "name": "ralph",
+            "inputs": {"goal": "prompt"},
+            "steps": [{
+                "type": "repeat", "id": "loop", "maxIterations": 10,
+                "onMaxIterations": "abort",
+                "stopCondition": {"containsText": "DONE"},
+                "steps": [
+                    {"type": "step", "id": "s1", "agent": "coder", "prompt": "work {{goal}}"}
+                ]
+            }]
+        }"#;
+        assert!(diagnose_workflow_content(wf).is_empty());
+    }
+
+    #[test]
+    fn invalid_workflows_produce_specific_errors() {
+        // repeat: 缺 stopCondition/stopWhen、maxIterations 越界、onMaxIterations 非法
+        let wf = r#"{"name":"x","steps":[{"type":"repeat","id":"l","maxIterations":5000,"onMaxIterations":"maybe","steps":[]}]}"#;
+        let issues = diagnose_workflow_content(wf);
+        assert!(issues.iter().any(|i| i.contains("stopCondition")));
+        assert!(issues.iter().any(|i| i.contains("1-1000")));
+        assert!(issues.iter().any(|i| i.contains("abort|continue|pause")));
+
+        // parallel: 缺 joinPolicy；step: 缺 agent/prompt；未知类型；重复 id
+        let wf = r#"{"name":"x","steps":[
+            {"type":"parallel","id":"p1","branches":[]},
+            {"type":"step","id":"s","prompt":"x"},
+            {"type":"dance","id":"d"},
+            {"type":"step","id":"s","agent":"a","prompt":"p"}
+        ]}"#;
+        let issues = diagnose_workflow_content(wf);
+        assert!(issues.iter().any(|i| i.contains("joinPolicy")));
+        assert!(issues.iter().any(|i| i.contains("agent")));
+        assert!(issues.iter().any(|i| i.contains("未知节点类型")));
+        assert!(issues.iter().any(|i| i.contains("重复")));
+
+        // 顶层：缺 name / 空 steps
+        let issues = diagnose_workflow_content(r#"{"steps":[]}"#);
+        assert!(issues.iter().any(|i| i.contains("name")));
+        assert!(issues.iter().any(|i| i.contains("steps 数组为空")));
+
+        // 坏 JSON
+        assert!(diagnose_workflow_content("{oops").iter().any(|i| i.contains("JSON 解析失败")));
+    }
+
+    #[test]
+    fn yaml_workflows_are_diagnosed_too() {
+        let wf = "name: y\nsteps:\n  - type: step\n    id: a\n    agent: coder\n    prompt: hi\n";
+        assert!(diagnose_workflow_content(wf).is_empty());
+        let bad = "name: y\nsteps:\n  - type: step\n    id: a\n    prompt: hi\n";
+        assert!(diagnose_workflow_content(bad).iter().any(|i| i.contains("agent")));
+    }
+
+    #[test]
+    fn empty_content_is_allowed_as_initial_state() {
+        assert!(diagnose_workflow_content("").is_empty());
+        assert!(diagnose_workflow_content("   \n").is_empty());
     }
 }
