@@ -360,11 +360,16 @@ pub async fn proxy_handler(
     let response_id = format!("resp_{}", short_uuid());
 
     // ===== WebSearch 强制工具子请求（Claude Code 内置搜索）=====
-    // 检测 tool_choice 强制 web_search + 服务端工具定义；命中则用当前账号凭证调
-    // Kiro 远程 MCP（runtime /mcp tools/call）执行搜索，把结果注入请求后剥掉工具，
+    // 检测 tool_choice 强制 web_search + 服务端工具定义（归一化后服务端工具已剥离，
+    // 名单在 server_tool_names）；命中则用当前账号凭证调 Kiro 远程 MCP
+    // （runtime /mcp tools/call）执行搜索，把结果注入请求后剥掉工具，
     // 复用既有流式/非流式管线返回纯文本。见 websearch.rs 模块文档。
     if state.config.web_search_enabled
-        && super::websearch::is_forced_web_search_request(&request.tool_choice, &request.tools)
+        && super::websearch::is_forced_web_search_request(
+            &request.tool_choice,
+            &request.tools,
+            &request.server_tool_names,
+        )
     {
         super::websearch::handle_forced_web_search(&upstream, &mut request).await;
     }

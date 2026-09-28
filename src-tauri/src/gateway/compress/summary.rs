@@ -167,6 +167,7 @@ pub(super) async fn generate_summary(
             thinking: None,
             include_usage: false,
             tool_name_map: std::collections::HashMap::new(),
+            server_tool_names: Vec::new(),
         },
         None,
         None,

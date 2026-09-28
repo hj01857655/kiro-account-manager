@@ -181,8 +181,10 @@ pub const VERIFIED_CAPABILITIES: &[&str] = &[
     "web_fetch",
     "web_search",
     "context",
-    "filesystem",
+    "skill",
     "power",
+    "diagnostics",
+    "filesystem",
     "all",
 ];
 

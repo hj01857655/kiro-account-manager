@@ -238,6 +238,8 @@ pub fn normalize_openai_chat_request(request: &OpenAIChatRequest) -> Result<Norm
         thinking: None,
         include_usage,
         tool_name_map,
+        // OpenAI Chat 协议无 Anthropic 式服务端工具
+        server_tool_names: Vec::new(),
     })
 }
 

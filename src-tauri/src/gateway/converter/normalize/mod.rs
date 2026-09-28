@@ -183,6 +183,8 @@ pub fn build_normalized_request_from_payload(
             .and_then(Value::as_bool)
             .unwrap_or(false),
         tool_name_map,
+        // Responses 协议的服务端工具项（web_search_call 等）是消息内容而非工具定义
+        server_tool_names: Vec::new(),
     }
 }
 

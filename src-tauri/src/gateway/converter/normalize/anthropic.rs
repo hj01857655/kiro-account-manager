@@ -47,15 +47,30 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
     }
 
     let mut tool_name_map = std::collections::HashMap::new();
+    // Anthropic 服务端工具（type 非 "custom" 的具名类型，如 web_search_20250305）：
+    // 记录 sanitized 名单，payload 构建时剥离（Kiro 上游无服务端执行环境）。
+    // 保留在 request.tools 中是为了 tool_choice 校验与 WebSearch 子请求检测。
+    let mut server_tool_names = Vec::new();
     let tools = request.tools.as_ref().map(|tools| {
         tools
             .iter()
-            .map(|tool| {
+            .filter_map(|tool| {
+                let is_server_tool = tool
+                    .r#type
+                    .as_deref()
+                    .map(|t| !t.is_empty() && t != "custom")
+                    .unwrap_or(false);
+                if is_server_tool {
+                    server_tool_names.push(crate::gateway::converter::sanitize_tool_name(
+                        &tool.name,
+                    ));
+                    return None;
+                }
                 let (converted_tool, mapping) = convert_anthropic_tool(tool);
                 if let Some((sanitized, original)) = mapping {
                     tool_name_map.insert(sanitized, original);
                 }
-                converted_tool
+                Some(converted_tool)
             })
             .collect()
     });
@@ -74,6 +89,7 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
         thinking: request.thinking.clone(),
         include_usage: false,
         tool_name_map,
+        server_tool_names,
     };
 
     // 检测模型名是否包含 "thinking" 后缀，若包含则自动启用 thinking

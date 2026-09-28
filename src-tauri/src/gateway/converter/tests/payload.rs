@@ -65,6 +65,7 @@ async fn build_kiro_payload_moves_long_tool_docs_and_tool_results_into_context()
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let payload = build_kiro_payload(
@@ -142,6 +143,7 @@ async fn build_kiro_payload_uses_cached_style_model_ids_for_claude_45() {
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -180,6 +182,7 @@ async fn build_kiro_payload_uses_cached_style_model_ids_for_claude_46() {
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -229,6 +232,7 @@ async fn build_kiro_payload_preserves_responses_tool_choice() {
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -286,6 +290,7 @@ async fn build_kiro_payload_includes_tools_when_current_message_has_tool_results
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -383,6 +388,7 @@ async fn build_kiro_payload_orders_current_tool_results_like_previous_tool_uses(
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -439,6 +445,7 @@ async fn build_kiro_payload_reuses_previous_response_id_as_conversation_id() {
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -481,6 +488,7 @@ async fn build_kiro_payload_rejects_unknown_tool_choice_function() {
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let error = build_kiro_payload(&Client::new(), &request, None, None)
@@ -560,6 +568,7 @@ async fn build_kiro_payload_preserves_assistant_message_metadata() {
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)

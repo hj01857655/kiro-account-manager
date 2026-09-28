@@ -48,20 +48,25 @@ use super::*;
 
 /// 检测是否为 Claude Code 的 WebSearch 强制工具子请求（归一化后调用）。
 ///
-/// 归一化层会把工具名 sanitize 成 camelCase（`web_search` → `webSearch`），
-/// 服务端工具因此变成一个空 schema 的普通工具定义；tool_choice 保留原始
-/// Anthropic/OpenAI 形状。两侧按 sanitize 后的名字比对。
+/// 归一化层会把工具名 sanitize 成 camelCase（`web_search` → `webSearch`）：
+/// - 服务端工具（type 形如 web_search_20250305）已被剥离出 tools，名字记录在
+///   `server_tool_names`；
+/// - 客户端也可能传名为 web_search 的普通自定义工具（保留在 tools 中）。
+/// 两侧任一命中 + tool_choice 强制同名即判定。
 pub(super) fn is_forced_web_search_request(
     tool_choice: &Option<Value>,
     tools: &Option<Vec<Tool>>,
+    server_tool_names: &[String],
 ) -> bool {
-    let Some(items) = tools else {
-        return false;
-    };
-    if !items
-        .iter()
-        .any(|tool| tool.function.name == WEB_SEARCH_SANITIZED_NAME)
-    {
+    let web_search_tool_present = tools
+        .as_ref()
+        .is_some_and(|items| {
+            items
+                .iter()
+                .any(|tool| tool.function.name == WEB_SEARCH_SANITIZED_NAME)
+        })
+        || server_tool_names.iter().any(|name| name == WEB_SEARCH_SANITIZED_NAME);
+    if !web_search_tool_present {
         return false;
     }
 
@@ -407,6 +412,7 @@ mod tests {
             thinking: None,
             include_usage: false,
             tool_name_map: HashMap::new(),
+            server_tool_names: Vec::new(),
         }
     }
 
@@ -443,7 +449,8 @@ mod tests {
         );
         assert!(is_forced_web_search_request(
             &request.tool_choice,
-            &request.tools
+            &request.tools,
+            &request.server_tool_names
         ));
     }
 
@@ -456,7 +463,8 @@ mod tests {
         );
         assert!(is_forced_web_search_request(
             &request.tool_choice,
-            &request.tools
+            &request.tools,
+            &request.server_tool_names
         ));
     }
 
@@ -466,7 +474,8 @@ mod tests {
         let request = normalized_request(None, Some(vec![web_search_tool()]), "hi");
         assert!(!is_forced_web_search_request(
             &request.tool_choice,
-            &request.tools
+            &request.tools,
+            &request.server_tool_names
         ));
         // auto
         let request = normalized_request(
@@ -476,7 +485,8 @@ mod tests {
         );
         assert!(!is_forced_web_search_request(
             &request.tool_choice,
-            &request.tools
+            &request.tools,
+            &request.server_tool_names
         ));
         // 强制的是别的工具
         let request = normalized_request(
@@ -486,7 +496,8 @@ mod tests {
         );
         assert!(!is_forced_web_search_request(
             &request.tool_choice,
-            &request.tools
+            &request.tools,
+            &request.server_tool_names
         ));
         // 强制 web_search 但工具列表里没有
         let request = normalized_request(
@@ -496,7 +507,8 @@ mod tests {
         );
         assert!(!is_forced_web_search_request(
             &request.tool_choice,
-            &request.tools
+            &request.tools,
+            &request.server_tool_names
         ));
     }
 
@@ -593,5 +605,52 @@ mod tests {
             }
             other => panic!("unexpected content: {other:?}"),
         }
+    }
+
+    #[test]
+    fn anthropic_server_tools_are_recorded_stripped_and_detected() {
+        let payload = json!({
+            "model": "claude-opus-4.8",
+            "max_tokens": 100,
+            "stream": true,
+            "messages": [{"role": "user",
+                "content": [{"type": "text", "text": "Perform a web search for the query: test"}]}],
+            "tools": [
+                {"name": "web_search", "type": "web_search_20250305", "max_uses": 8},
+                {"name": "my_tool", "type": "custom",
+                 "input_schema": {"type": "object", "properties": {}}}
+            ],
+            "tool_choice": {"type": "tool", "name": "web_search"}
+        });
+        let request: AnthropicMessagesRequest = serde_json::from_value(payload).unwrap();
+        let normalized = normalize_anthropic_request(&request);
+
+        // 服务端工具被记录（sanitized）并从 tools 中剥离；自定义工具保留
+        assert_eq!(normalized.server_tool_names, vec!["webSearch"]);
+        let names: Vec<&str> = normalized
+            .tools
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|tool| tool.function.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["myTool"]);
+
+        // WebSearch 子请求检测经由 server_tool_names 命中
+        assert!(is_forced_web_search_request(
+            &normalized.tool_choice,
+            &normalized.tools,
+            &normalized.server_tool_names
+        ));
+
+        // 服务端工具在场但未强制 → 不命中
+        let not_forced = normalized_request(None, None, "hi");
+        let mut not_forced = not_forced;
+        not_forced.server_tool_names = vec!["webSearch".to_string()];
+        assert!(!is_forced_web_search_request(
+            &not_forced.tool_choice,
+            &not_forced.tools,
+            &not_forced.server_tool_names
+        ));
     }
 }

@@ -64,6 +64,12 @@ pub struct NormalizedRequest {
     /// 用于在响应中还原工具名称（camelCase -> snake_case）
     #[serde(skip)]
     pub tool_name_map: std::collections::HashMap<String, String>,
+    /// Anthropic 服务端工具（type 形如 web_search_20250305 等，非 "custom"）的
+    /// sanitized 名称清单。这类工具由 Anthropic 服务端执行，Kiro 上游没有对应
+    /// 执行环境，下发只会得到空 schema 的普通工具定义、可能引发客户端无法
+    /// 执行的 tool_use —— 在 payload 构建时按此清单剥离。
+    #[serde(default, skip)]
+    pub server_tool_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

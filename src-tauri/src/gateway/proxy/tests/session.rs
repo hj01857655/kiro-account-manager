@@ -52,6 +52,7 @@ async fn restore_responses_session_messages_replays_previous_assistant_turn() {
         thinking: None,
         include_usage: false,
         tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
     };
 
     let merged = restore_responses_session_messages(&state, &request).await;
