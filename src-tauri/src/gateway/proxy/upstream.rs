@@ -277,10 +277,8 @@ pub async fn proxy_handler(
     }
 
     // 创建 log context
-    let request_log_context = RequestLogContext {
-        request: Some(&request),
-        ..base_log_context.clone()
-    };
+    // （原在 upstream 解析前创建；WebSearch 子请求需要在拿到凭证后原地改写 request，
+    //  为避免可变借用冲突，把绑定挪到改写完成之后——见下方。）
 
     let preferred_account_id_ref = preferred_account_id.as_deref();
     let upstream = match resolve_upstream_credentials(
@@ -292,6 +290,10 @@ pub async fn proxy_handler(
     {
         Ok(creds) => creds,
         Err(message) => {
+            let request_log_context = RequestLogContext {
+                request: Some(&request),
+                ..base_log_context.clone()
+            };
             // 如果是 token refresh 429，尝试换一个账号而不是直接返回错误
             // 指定了 x-account-id 时不换号，直接返回限流错误
             if preferred_account_id_ref.is_none()
@@ -356,6 +358,21 @@ pub async fn proxy_handler(
         }
     };
     let response_id = format!("resp_{}", short_uuid());
+
+    // ===== WebSearch 强制工具子请求（Claude Code 内置搜索）=====
+    // 检测 tool_choice 强制 web_search + 服务端工具定义；命中则用当前账号凭证调
+    // Kiro 远程 MCP（runtime /mcp tools/call）执行搜索，把结果注入请求后剥掉工具，
+    // 复用既有流式/非流式管线返回纯文本。见 websearch.rs 模块文档。
+    if state.config.web_search_enabled
+        && super::websearch::is_forced_web_search_request(&request.tool_choice, &request.tools)
+    {
+        super::websearch::handle_forced_web_search(&upstream, &mut request).await;
+    }
+
+    let request_log_context = RequestLogContext {
+        request: Some(&request),
+        ..base_log_context.clone()
+    };
     let message_id = format!("msg_{}", short_uuid());
     let created_at = chrono::Utc::now().timestamp();
 

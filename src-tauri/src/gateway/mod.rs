@@ -125,6 +125,11 @@ pub struct GatewayConfig {
     /// 响应缓存：TTL（秒）
     #[serde(default = "default_cache_ttl")]
     pub response_cache_ttl: u64,
+    /// WebSearch 子请求处理：Claude Code 强制 web_search 工具调用时，
+    /// 用账号凭证调 Kiro 远程 MCP（runtime /mcp）执行搜索并注入结果。
+    /// 关闭后此类子请求会因 tool_choice 无法映射而被拒绝。
+    #[serde(default = "default_true_val")]
+    pub web_search_enabled: bool,
 }
 
 fn default_cache_ttl() -> u64 {
@@ -464,6 +469,7 @@ impl Default for GatewayConfig {
             log_requests: true,
             response_cache_enabled: true,
             response_cache_ttl: default_cache_ttl(),
+            web_search_enabled: true,
         }
     }
 }

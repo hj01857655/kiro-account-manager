@@ -76,6 +76,7 @@ mod responses;
 mod errors;
 mod upstream;
 mod streaming;
+mod websearch;
 
 pub use auth::*;
 pub use tokens::*;

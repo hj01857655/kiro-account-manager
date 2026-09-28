@@ -177,9 +177,17 @@ pub fn normalize_tool_choice(
                         .to_string()
                 })?;
 
+            // 归一化后的 tools 已经过 sanitize（web_search → webSearch），
+            // 客户端传的 name 是原始名：两侧都按 sanitize 规则比对，否则
+            // "指定的工具不存在" 误报（Claude Code WebSearch 子请求实测踩中）。
+            let wanted = sanitize_tool_name(name);
             let tool_exists = tools
                 .as_ref()
-                .map(|items| items.iter().any(|tool| tool.function.name == name))
+                .map(|items| {
+                    items
+                        .iter()
+                        .any(|tool| tool.function.name == name || tool.function.name == wanted)
+                })
                 .unwrap_or(false);
             if !tool_exists {
                 return Err(format!("tool_choice 指定的工具不存在: {name}"));
