@@ -121,10 +121,14 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
     setSaving(true)
     try {
       const fullContent = buildSkillContent(editState.name, editState.description, editState.body)
-      await saveSkill(selectedSkill.name, fullContent, selectedSkill.scope, projectDir || null)
+      const issues: string[] = await saveSkill(selectedSkill.name, fullContent, selectedSkill.scope, projectDir || null)
       setSkills(skills.map(s => (s.name === selectedSkill.name && s.scope === selectedSkill.scope) ? { ...s, content: fullContent } : s))
       setSelectedSkill({ ...selectedSkill, content: fullContent })
       setHasChanges(false)
+      if (Array.isArray(issues) && issues.length > 0) {
+        // 保存成功但内容不合规：Kiro IDE 会静默跳过该 skill，必须明确提示
+        showConfirm('Skill 已保存，但存在合规问题', `Kiro 1.1.70 将静默跳过不合规的 skill：\n\n• ${issues.join('\n• ')}\n\n是否继续编辑修复？`)
+      }
     } catch (e) {
       handleUiError('保存 Skill 失败', e, { userMessage: t('skills.saveFailed') || '保存失败' })
     } finally {

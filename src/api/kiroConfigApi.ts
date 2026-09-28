@@ -108,7 +108,8 @@ export function getSkills<T = any[]>(projectDir: string | null = null) {
   return invoke<T>('get_skills', { projectDir })
 }
 
-export function saveSkill(name: string, content: string, scope: string, projectDir: string | null = null) {
+export function saveSkill(name: string, content: string, scope: string, projectDir: string | null = null): Promise<string[]> {
+  // 返回内容级合规诊断（空数组 = 通过）；保存本身不因诊断失败
   return invoke('save_skill', { name, content, scope, projectDir })
 }
 

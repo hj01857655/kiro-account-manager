@@ -25,8 +25,9 @@ pub async fn save_skill(
     content: String,
     scope: Option<String>,
     project_dir: Option<String>,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     let scope = scope.unwrap_or_else(|| "user".to_string());
+    // 返回内容级诊断列表（空 = 完全合规）；保存本身不因诊断失败
     run_blocking_task(move || SkillsManager::save(&name, &content, &scope, project_dir.as_deref()))
         .await
 }

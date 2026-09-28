@@ -1,9 +1,21 @@
 // Skills 管理（读取/编辑 ~/.kiro/skills/<name>/SKILL.md 和 <project>/.kiro/skills/）
+//
+// 校验规则对齐 Kiro 1.1.70 bundle（mCt 校验器 + zod schema，kiro_agent_pretty.js gCt 段）：
+// - 目录/frontmatter name：^[a-z0-9]([a-z0-9-]*[a-z0-9])?$，1-64 字符，不可含 "--"
+// - description：1-1024 字符，与 name 同为必填
+// - IDE 对不合规 skill **静默跳过**（仅 debug 日志），因此管理端必须在写入侧拦截，
+//   否则用户创建的 skill 不会生效且无任何提示。
 
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
+
+/// Kiro 1.1.70 skill name 规则：小写字母/数字开头结尾，中间可含单个连字符
+const SKILL_NAME_RE: &str = r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$";
+/// frontmatter description 上限（bundle U3u：1..=1024）
+const SKILL_DESCRIPTION_MAX_CHARS: usize = 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,7 +133,97 @@ impl SkillsManager {
                 return Err("Skill 名称非法".to_string());
             }
         }
+
+        // Kiro 1.1.70 硬规则：name 不合规时 IDE 静默跳过整个 skill
+        let re = OnceLock::<regex::Regex>::new();
+        let re = re.get_or_init(|| regex::Regex::new(SKILL_NAME_RE).expect("skill name regex"));
+        if name.chars().count() > 64 {
+            return Err("Skill 名称过长（Kiro 上限 64 字符）".to_string());
+        }
+        if !re.is_match(name) {
+            return Err(
+                "Skill 名称需为小写字母/数字与连字符组成、以字母或数字开头结尾（Kiro 1.1.70 规则，不合规将被 IDE 静默跳过）"
+                    .to_string(),
+            );
+        }
+        if name.contains("--") {
+            return Err("Skill 名称不能包含连续连字符 \"--\"".to_string());
+        }
         Ok(())
+    }
+
+    /// 解析 SKILL.md frontmatter 的轻量实现（`---` 围栏内的 key: value 行）。
+    ///
+    /// 与 bundle 的 YAML 解析相比只覆盖扁平键值场景；对嵌套/复杂 YAML 的
+    /// frontmatter 返回 None，由调用方跳过内容级校验（不做误报）。
+    fn parse_flat_frontmatter(content: &str) -> Option<(String, String)> {
+        let trimmed = content.trim_start();
+        let rest = trimmed.strip_prefix("---")?;
+        let body = rest.lines();
+        let mut name = None;
+        let mut description = None;
+        for line in body {
+            // 结束围栏
+            if line.trim() == "---" {
+                break;
+            }
+            let line = line.trim();
+            if line.starts_with('#') || line.is_empty() {
+                continue;
+            }
+            // 嵌套结构（缩进键）说明不是扁平 frontmatter，交由调用方跳过
+            if line.starts_with(' ') || line.starts_with('\t') {
+                return None;
+            }
+            let Some((key, value)) = line.split_once(':') else {
+                continue;
+            };
+            let key = key.trim();
+            let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+            match key {
+                "name" => name = Some(value.to_string()),
+                "description" => description = Some(value.to_string()),
+                _ => {}
+            }
+        }
+        Some((name?, description?))
+    }
+
+    /// SKILL.md 内容级诊断（对齐 bundle mCt 校验器）。
+    ///
+    /// 返回错误信息列表；空列表 = 通过。保存路径上**不阻塞写入**（允许草稿），
+    /// 由前端展示诊断；创建/导入路径上视为校验失败（避免入库即失效）。
+    fn diagnose_skill_content(content: &str) -> Vec<String> {
+        let mut issues = Vec::new();
+        let trimmed = content.trim_start();
+        if !trimmed.starts_with("---") {
+            issues.push("SKILL.md 缺少 frontmatter 块（--- 围栏），Kiro 将静默跳过该 skill".to_string());
+            return issues;
+        }
+        match Self::parse_flat_frontmatter(content) {
+            None => issues.push(
+                "SKILL.md frontmatter 无法解析（复杂 YAML 或缺少 name/description 扁平字段），Kiro 可能跳过该 skill"
+                    .to_string(),
+            ),
+            Some((name, description)) => {
+                if name.is_empty() {
+                    issues.push("frontmatter 缺少 name 字段，Kiro 将静默跳过该 skill".to_string());
+                } else if let Err(e) = Self::validate_skill_name(&name) {
+                    issues.push(format!("frontmatter name 不合规: {e}"));
+                } else {
+                    // 目录名与 frontmatter name 不一致只是 warning（bundle 仅记录 mismatch）
+                }
+                let desc_len = description.chars().count();
+                if description.is_empty() {
+                    issues.push("frontmatter 缺少 description 字段，Kiro 将静默跳过该 skill".to_string());
+                } else if desc_len > SKILL_DESCRIPTION_MAX_CHARS {
+                    issues.push(format!(
+                        "frontmatter description 超长（{desc_len} > {SKILL_DESCRIPTION_MAX_CHARS} 字符），Kiro 将静默跳过该 skill"
+                    ));
+                }
+            }
+        }
+        issues
     }
 
     /// 校验用户传入的 git 分支名,防止把 `--upload-pack=...` 之类的选项或控制字符
@@ -277,6 +379,18 @@ impl SkillsManager {
                 return Err(format!("Skill 已存在: {skill_name}"));
             }
             fs::remove_dir_all(&target_dir).map_err(|e| format!("覆盖旧 Skill 失败: {e}"))?;
+        }
+
+        // 导入前先校验源 SKILL.md：不合规的 skill 进了目录也不会被 Kiro 加载
+        let source_skill_md = source_dir.join("SKILL.md");
+        let content = fs::read_to_string(&source_skill_md)
+            .map_err(|e| format!("读取源 SKILL.md 失败: {e}"))?;
+        let issues = Self::diagnose_skill_content(&content);
+        if !issues.is_empty() {
+            return Err(format!(
+                "导入的 SKILL.md 不符合 Kiro 规范（导入后将被 IDE 静默跳过）：{}",
+                issues.join("；")
+            ));
         }
 
         Self::copy_skill_tree(source_dir, &target_dir)?;
@@ -435,11 +549,13 @@ impl SkillsManager {
         content: &str,
         scope: &str,
         project_dir: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<String>, String> {
         let dir = Self::resolve_dir(scope, project_dir)?;
         let skill_dir = Self::safe_skill_dir(&dir, name)?;
         fs::create_dir_all(&skill_dir).ok();
-        fs::write(skill_dir.join("SKILL.md"), content).map_err(|e| format!("写入失败: {e}"))
+        fs::write(skill_dir.join("SKILL.md"), content).map_err(|e| format!("写入失败: {e}"))?;
+        // 保存不阻塞草稿，但把 IDE 侧会触发静默跳过的问题带回给前端展示
+        Ok(Self::diagnose_skill_content(content))
     }
 
     pub fn delete(name: &str, scope: &str, project_dir: Option<&str>) -> Result<(), String> {
@@ -457,6 +573,11 @@ impl SkillsManager {
         scope: &str,
         project_dir: Option<&str>,
     ) -> Result<SkillInfo, String> {
+        // 创建即入库，内容不合规会导致 skill 被 IDE 静默跳过——这里硬拦截
+        let issues = Self::diagnose_skill_content(content);
+        if !issues.is_empty() {
+            return Err(issues.join("；"));
+        }
         let dir = Self::resolve_dir(scope, project_dir)?;
         let skill_dir = Self::safe_skill_dir(&dir, name)?;
         if skill_dir.exists() {
@@ -523,6 +644,91 @@ mod tests {
             imported_dir.join("templates").is_dir(),
             "nested directories should be copied"
         );
+
+        fs::remove_dir_all(source_root).ok();
+        fs::remove_dir_all(project_root).ok();
+    }
+
+    #[test]
+    fn skill_name_validation_matches_kiro_1_1_70_rules() {
+        // 合法
+        assert!(SkillsManager::validate_skill_name("code-review").is_ok());
+        assert!(SkillsManager::validate_skill_name("a").is_ok());
+        assert!(SkillsManager::validate_skill_name("a1").is_ok());
+        // 非法：大写 / 下划线 / 开头结尾连字符 / 双连字符 / 超长
+        assert!(SkillsManager::validate_skill_name("My-Skill").is_err());
+        assert!(SkillsManager::validate_skill_name("my_skill").is_err());
+        assert!(SkillsManager::validate_skill_name("-skill").is_err());
+        assert!(SkillsManager::validate_skill_name("skill-").is_err());
+        assert!(SkillsManager::validate_skill_name("my--skill").is_err());
+        assert!(SkillsManager::validate_skill_name(&"a".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn skill_content_diagnosis_flags_invalid_frontmatter() {
+        // 缺 frontmatter
+        let issues = SkillsManager::diagnose_skill_content("just body");
+        assert!(issues.iter().any(|i| i.contains("frontmatter")));
+
+        // 缺 description
+        let issues = SkillsManager::diagnose_skill_content("---\nname: code-review\n---\nBody");
+        assert!(issues.iter().any(|i| i.contains("description")));
+
+        // name 不合规（大写）
+        let issues = SkillsManager::diagnose_skill_content(
+            "---\nname: My-Skill\ndescription: ok\n---\nBody",
+        );
+        assert!(issues.iter().any(|i| i.contains("name")));
+
+        // description 超长（>1024）
+        let long_desc = "d".repeat(1025);
+        let content = format!("---\nname: code-review\ndescription: \"{long_desc}\"\n---\nBody");
+        let issues = SkillsManager::diagnose_skill_content(&content);
+        assert!(issues.iter().any(|i| i.contains("description 超长")));
+
+        // 完整合规
+        let issues = SkillsManager::diagnose_skill_content(
+            "---\nname: code-review\ndescription: \"Review code\"\n---\nBody",
+        );
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn create_rejects_noncompliant_content_and_import_validates_source() {
+        let project_root = temp_dir("create-guard");
+
+        // create：大写 name 的 frontmatter 内容被硬拦截
+        let err = SkillsManager::create(
+            "code-review",
+            "---\nname: CodeReview\ndescription: ok\n---\nBody",
+            "project",
+            Some(project_root.to_string_lossy().as_ref()),
+        )
+        .unwrap_err();
+        assert!(err.contains("name"));
+
+        // 目录也不该被创建
+        assert!(!project_root.join(".kiro/skills/code-review").exists());
+
+        // 导入：源 frontmatter 缺 description → 拒绝且不落盘
+        let source_root = temp_dir("import-guard");
+        let source_skill = source_root.join("broken-skill");
+        fs::create_dir_all(&source_skill).expect("skill dir");
+        fs::write(
+            source_skill.join("SKILL.md"),
+            "---\nname: broken-skill\n---\nBody",
+        )
+        .expect("skill file");
+        let err = SkillsManager::import_local(
+            source_skill.to_string_lossy().as_ref(),
+            None,
+            "project",
+            Some(project_root.to_string_lossy().as_ref()),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("description") || err.contains("静默跳过"));
+        assert!(!project_root.join(".kiro/skills/broken-skill").exists());
 
         fs::remove_dir_all(source_root).ok();
         fs::remove_dir_all(project_root).ok();
