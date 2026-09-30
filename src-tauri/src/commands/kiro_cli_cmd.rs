@@ -575,6 +575,15 @@ pub fn logout_cli_account(db_path: String) -> Result<usize, String> {
     crate::kiro::cli::logout_cli_account(&expanded_path)
 }
 
+/// 把账号的 social provider（"Google" / "Github"）映射成 kiro-cli token 里要求的小写值。
+fn social_cli_provider(provider: &str) -> Result<&'static str, String> {
+    match provider.to_ascii_lowercase().as_str() {
+        "google" => Ok("google"),
+        "github" => Ok("github"),
+        _ => Err(format!("不支持的 social provider: {provider}")),
+    }
+}
+
 /// 构造切号载荷（从 Account 转换为 CLI 2.0 格式）
 fn build_switch_payload(
     account: &Account,
@@ -667,6 +676,10 @@ fn build_switch_payload(
             .filter(|s| !s.is_empty())
             .unwrap_or(SOCIAL_PROFILE_ARN);
         token_data["profile_arn"] = serde_json::json!(profile_arn);
+        // kiro-cli 的 SocialToken 结构要求 provider 字段，且只认小写 "google" / "github"：
+        // - 缺失 → `kiro-cli whoami` 显示 "Not logged in"
+        // - "Google"（首字母大写）→ whoami 正常，但发请求时 NoToken → "dispatch failure"
+        token_data["provider"] = serde_json::json!(social_cli_provider(provider)?);
     }
 
     let token_value =
@@ -717,5 +730,38 @@ mod tests {
 
         let err = lock_account_store(&mutex).expect_err("poisoned mutex should return error");
         assert!(err.contains("store lock"));
+    }
+
+    fn social_account(provider: &str) -> crate::core::account::Account {
+        let mut account = crate::core::account::Account::new(
+            "user@example.com".to_string(),
+            "test".to_string(),
+        );
+        account.provider = Some(provider.to_string());
+        account.access_token = Some("access".to_string());
+        account.refresh_token = Some("refresh".to_string());
+        account
+    }
+
+    #[test]
+    fn social_switch_payload_writes_lowercase_provider_for_kiro_cli() {
+        for (provider, expected) in [("Google", "google"), ("Github", "github")] {
+            let payload = super::build_switch_payload(&social_account(provider))
+                .expect("social payload should build");
+            assert_eq!(payload.token_key, "kirocli:social:token");
+            let token: serde_json::Value =
+                serde_json::from_str(&payload.token_value).expect("token should be json");
+            assert_eq!(token["provider"], expected);
+            assert!(token["profile_arn"].as_str().is_some_and(|s| !s.is_empty()));
+        }
+    }
+
+    #[test]
+    fn idc_switch_payload_has_no_provider_field() {
+        let payload = super::build_switch_payload(&social_account("BuilderId"))
+            .expect("builder id payload should build");
+        let token: serde_json::Value =
+            serde_json::from_str(&payload.token_value).expect("token should be json");
+        assert!(token.get("provider").is_none());
     }
 }
