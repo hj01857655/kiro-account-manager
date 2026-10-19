@@ -7,6 +7,13 @@ import { AppSettingsProvider } from './contexts/AppSettingsContext'
 import { I18nProvider } from './i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { THEME_KEYS } from './lib/themeRegistry'
+import { applyOsAttribute } from './utils/os'
+
+// 平台标记：给 <html> 打 data-os，供 CSS 区分 macOS 交通灯避让与滚动条样式。
+// 同样必须早于 render——晚一步会在 macOS 上闪一帧无避让的布局。
+// CSS 层无法胜任：Tauri 三端里 macOS 与 Linux 同为 WebKit 系，
+// 任何特性查询都会把 Linux 误判成 macOS（详见 src/utils/os.ts 注释）。
+applyOsAttribute()
 
 // 生产环境禁用浏览器快捷键
 if (import.meta.env.PROD) {

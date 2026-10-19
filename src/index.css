@@ -251,11 +251,40 @@
   }
 }
 
-/* 滚动条细化 */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-thumb { background: rgb(var(--primary-rgb) / 0.2); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: rgb(var(--primary-rgb) / 0.4); }
-::-webkit-scrollbar-track { background: transparent; }
+/* macOS 交通灯避让：窗口左上角的红黄绿按钮约 70×28px，浮在内容之上。
+
+   侧栏第一个可点元素原本距顶仅 12px（p-3），完全落在按钮范围内，
+   macOS 用户点侧栏首项会命中关闭按钮。
+
+   36px 略大于按钮高度 28px，留出视觉间距；按钮只覆盖左侧约 70px，
+   而侧栏宽 192px，因此文字与图标右半部分仍可点。
+
+   平台判定用 <html data-os> 而非 CSS 特性查询：这里此前写作
+   @media (-webkit-touch-callout: none)，而 -webkit-touch-callout 是元素
+   属性不是媒体特性，按规范整条查询被替换为 not all、恒为假，避让从未生效。
+   @supports 也不行——Tauri 的 macOS(WKWebView) 与 Linux(WebKitGTK) 同属
+   WebKit 系，会把没有交通灯的 Linux 也判成 macOS。
+   标记由 src/utils/os.ts 在 render 前写入，CSS 只消费。 */
+[data-os='macos'] .sidebar-top-inset { padding-top: 36px; }
+
+/* 滚动条细化：只对非 macOS 生效。
+
+   macOS（WKWebView）用 overlay 滚动条：不占布局宽度、滚动时才浮现、
+   外观由系统管理。这里强制 6px 会把它变成常驻，且在 Retina 上细到难以命中，
+   与系统观感冲突。
+
+   判定同样走 data-os。此前写作 @media not all and (-webkit-touch-callout: none)，
+   取反一个恒假的查询仍是恒假，导致该样式在所有平台一起失效——
+   连 Windows/Linux 本该有的细滚动条也丢了，已一并修正为按平台区分。
+
+   限定必须挂在 html 上而非裸写 :not()：data-os 只写在根元素，若写
+   :not([data-os='macos']) ::-webkit-scrollbar，macOS 上只有 html 自身被排除，
+   body 与所有内部元素仍会匹配，滚动条照样被细化。
+   html 不带标记（探测失败）时退化为细滚动条，与改动前的无条件生效一致。 */
+html:not([data-os='macos']) ::-webkit-scrollbar { width: 6px; height: 6px; }
+html:not([data-os='macos']) ::-webkit-scrollbar-thumb { background: rgb(var(--primary-rgb) / 0.2); border-radius: 10px; }
+html:not([data-os='macos']) ::-webkit-scrollbar-thumb:hover { background: rgb(var(--primary-rgb) / 0.4); }
+html:not([data-os='macos']) ::-webkit-scrollbar-track { background: transparent; }
 
 /* 隐藏滚动条但保留滚动能力。
    此前该工具类被 6 处引用却全项目无定义（纯空类）：
