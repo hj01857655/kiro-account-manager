@@ -134,6 +134,8 @@ pub fn extract_model_ids(models: &[Value]) -> Vec<String> {
 /// 上游清单派生的档位档案。
 #[derive(Debug, Clone, Default)]
 pub struct ModelEffortProfile {
+    /// 上游清单里的全部模型 ID（用于区分「上游明确说不支持」与「清单里没有」）
+    model_ids: std::collections::HashSet<String>,
     /// model_id → 该模型声明的 AMRF schema（存在即代表支持顶层 AMRF）
     schemas: std::collections::HashMap<String, Value>,
     /// model_id → effort 枚举
@@ -142,12 +144,15 @@ pub struct ModelEffortProfile {
 
 impl ModelEffortProfile {
     pub fn from_models(models: &[Value]) -> Self {
+        let mut model_ids = std::collections::HashSet::new();
         let mut schemas = std::collections::HashMap::new();
         let mut profiles = std::collections::HashMap::new();
         for model in models {
             let Some(model_id) = model.get("modelId").and_then(Value::as_str) else {
                 continue;
             };
+            model_ids.insert(model_id.to_string());
+
             let Some(schema) = model.get("additionalModelRequestFieldsSchema") else {
                 continue;
             };
@@ -159,12 +164,16 @@ impl ModelEffortProfile {
             }
             schemas.insert(model_id.to_string(), schema.clone());
         }
-        Self { schemas, profiles }
+        Self {
+            model_ids,
+            schemas,
+            profiles,
+        }
     }
 
     /// 该模型是否出现在上游清单里（用于区分"上游明确声明不支持"与"清单里没有"）。
     pub fn has_model(&self, model_id: &str) -> bool {
-        self.schemas.contains_key(model_id)
+        self.model_ids.contains(model_id)
     }
 
     /// 上游是否为该模型声明了 AMRF schema（声明即支持）。
@@ -241,6 +250,13 @@ pub fn fallback_effort_field(model_id: &str) -> Option<EffortField> {
 }
 
 /// 统一的档位解析入口：上游声明优先，缺失时用官方静态表兜底。
+///
+/// 兜底的适用范围有讲究：
+/// - 上游清单里该模型**声明了** effort 枚举 → 完全按上游来；
+/// - 上游清单里该模型**存在但没声明** effort → 不下发 effort（上游没说的档位
+///   它多半不认，硬发会 400）；
+/// - 该模型**不在**上游清单里（清单取不到、或模型确实不在账号权限内）
+///   → 用官方静态表兜底，行为不降级。
 pub fn resolve_effort_level(
     profile: Option<&ModelEffortProfile>,
     model_id: &str,
@@ -249,6 +265,10 @@ pub fn resolve_effort_level(
     if let Some(profile) = profile {
         if profile.allowed_levels(model_id).is_some() {
             return profile.resolve_level(model_id, requested);
+        }
+        // 上游清单里明确有该模型，却没声明 effort 枚举 → 不下发
+        if profile.has_model(model_id) {
+            return None;
         }
     }
     let allowed = fallback_allowed_levels(model_id)?;

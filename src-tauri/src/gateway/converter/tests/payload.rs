@@ -740,6 +740,101 @@ async fn build_kiro_payload_omits_additional_fields_without_thinking() {
     assert!(payload.additional_model_request_fields.is_none());
 }
 
+// effort 与 thinking 正交（官方：「effort works whether or not thinking is
+// enabled」）：客户端只发 output_config.effort 而不带 thinking 时，effort 仍必须
+// 下发到上游——否则 Claude Code 这类客户端的 effort 会被静默丢弃。
+#[tokio::test]
+async fn build_kiro_payload_sends_effort_without_thinking() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "max"] }
+                    }
+                },
+                "thinking": {
+                    "type": "object",
+                    "properties": {
+                        "type": { "type": "string", "enum": ["adaptive", "disabled"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    let mut request = minimal_request_with_thinking("claude-sonnet-4.6", None);
+    request.effort = Some("high".to_string());
+
+    let fields = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields
+        .expect("effort should be forwarded even without thinking");
+
+    assert_eq!(fields["output_config"]["effort"], "high");
+    // 未启用 thinking 时不应带 thinking 信封
+    assert!(fields.get("thinking").is_none());
+}
+
+// Anthropic 协议端到端：output_config.effort 必须一路走到 payload。
+#[tokio::test]
+async fn anthropic_output_config_effort_reaches_payload() {
+    use crate::gateway::converter::normalize_anthropic_request;
+    use crate::gateway::models::AnthropicMessagesRequest;
+
+    let request = AnthropicMessagesRequest {
+        model: "claude-sonnet-4.6".to_string(),
+        messages: vec![crate::gateway::models::AnthropicMessage {
+            role: "user".to_string(),
+            content: json!([{ "type": "text", "text": "hi" }]),
+        }],
+        max_tokens: 1024,
+        system: None,
+        stream: false,
+        temperature: None,
+        top_p: None,
+        top_k: None,
+        stop_sequences: None,
+        tools: None,
+        tool_choice: None,
+        thinking: None,
+        output_config: Some(json!({ "effort": "xhigh" })),
+        metadata: None,
+    };
+
+    let normalized = normalize_anthropic_request(&request);
+    assert_eq!(normalized.effort.as_deref(), Some("xhigh"));
+
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    let fields = build_kiro_payload(&Client::new(), &normalized, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields
+        .expect("effort should reach payload");
+
+    // 4.6 代无 xhigh → 向上取 max
+    assert_eq!(fields["output_config"]["effort"], "max");
+}
+
 // effort 档位透传：上游模型清单（ListAvailableModels 的
 // additionalModelRequestFieldsSchema）是权威来源——档位按模型枚举 clamp，
 // 且 effort 字段位置（output_config / reasoning）由上游声明决定。
@@ -839,6 +934,28 @@ async fn build_kiro_payload_clamps_effort_to_upstream_declared_levels() {
     let models = vec![json!({"modelId": "claude-sonnet-4.5"})];
     let fields = build(&client, "claude-sonnet-4.5", Some("high"), Some(&models)).await;
     assert!(fields.is_none());
+
+    // 上游清单里该模型存在但没声明 effort 枚举 → 不下发 effort
+    // （上游没说的档位它多半不认，硬发会 400）
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "thinking": {
+                    "type": "object",
+                    "properties": {
+                        "type": { "type": "string", "enum": ["adaptive", "disabled"] }
+                    }
+                }
+            }
+        }
+    })];
+    let fields = build(&client, "claude-sonnet-4.6", Some("high"), Some(&models))
+        .await
+        .expect("fields should exist");
+    assert!(fields.get("output_config").is_none());
+    assert_eq!(fields["thinking"]["type"], "adaptive");
 
     // 上游清单取不到 → 退回官方静态表（4.6 无 xhigh → max；5.5 保留 xhigh）
     let fields = build(&client, "claude-sonnet-4.6", Some("xhigh"), None)

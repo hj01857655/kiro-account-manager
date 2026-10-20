@@ -6,7 +6,7 @@ pub async fn build_kiro_payload(
     client: &Client,
     request: &NormalizedRequest,
     profile_arn: Option<String>,
-    available_models: Option<&[String]>,
+    available_models: Option<&[Value]>,
 ) -> Result<KiroPayload, String> {
     // 校验 tool_choice（如果指定了 function，则必须在 tools 列表中存在）
     // 虽然 Kiro 上游请求不包含 tool_choice 字段，但网关层仍需做入参校验，
@@ -205,7 +205,7 @@ pub async fn build_kiro_payload(
     );
 
     let model_id = if let Some(models) = available_models {
-        get_internal_model_id_with_fallback(&request.model, models)?
+        get_internal_model_id_with_fallback(&request.model, &extract_model_ids(models))?
     } else {
         get_internal_model_id(&request.model)?
     };
@@ -244,7 +244,6 @@ pub async fn build_kiro_payload(
             request.thinking = Some(Thinking {
                 thinking_type: thinking_type.to_string(),
                 budget_tokens: 20000,
-                effort: None,
             });
         }
     }
@@ -543,41 +542,74 @@ pub async fn build_kiro_payload(
     }
     let current_images = extract_images(client, current_message.content.as_ref()).await;
 
-    // 官方 thinking 通道：thinking 启用且模型在白名单时，带顶层
-    // additionalModelRequestFields，上游返回原生 reasoningContentEvent（带签名）。
-    // 4.5 代际 / GPT-5.6 / 开源模型 / auto 不支持该字段，保持 None 走标签路径。
-    // 客户端带 effort 档位（如 OpenAI reasoning.effort）时追加 output_config.effort。
-    // effort 归一化（kiro.rs 实测规则）：4.5/4.6 系列不接受 xhigh，降级 high；
-    // Opus 4.7+/Fable 保留；未知值回退 high。
-    let additional_model_request_fields = if request.thinking.is_some()
-        && supports_additional_model_request_fields(&model_id)
-    {
-        let thinking_cfg = serde_json::json!({
-            "thinking": { "type": "adaptive", "display": "summarized" }
-        });
-        if let Some(effort) = request
-            .thinking
-            .as_ref()
-            .and_then(|t| t.effort.as_deref())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            let normalized = effort.to_ascii_lowercase();
-            let is_46_generation = model_id.contains("4.6") || model_id.contains("4-6");
-            let effort_value = match normalized.as_str() {
-                "xhigh" if is_46_generation => "high",
-                "low" | "medium" | "high" | "xhigh" => normalized.as_str(),
-                _ => "high",
-            };
-            Some(serde_json::json!({
-                "thinking": { "type": "adaptive", "display": "summarized" },
-                "output_config": { "effort": effort_value }
-            }))
-        } else {
-            Some(thinking_cfg)
+    // 官方 thinking 通道：带顶层 additionalModelRequestFields，上游返回原生
+    // reasoningContentEvent（带签名）。
+    //
+    // 档位与字段位置均由上游 `ListAvailableModels` 的
+    // additionalModelRequestFieldsSchema 决定（权威来源，模型换代无需改代码）：
+    // - 有 schema → 该模型支持 AMRF；
+    // - schema 里 `output_config.effort` → Claude 系，走 output_config（需 thinking 启用）；
+    // - schema 里 `reasoning.effort` → GPT-5.6 系，走 reasoning（不需 thinking 启用，
+    //   且不能带 Claude 的 output_config/thinking 信封，上游会当未知字段拒收）。
+    // 上游没声明（无 schema / 未取到清单）→ 退回官方文档静态表兜底。
+    let effort_profile = available_models.map(ModelEffortProfile::from_models);
+    let supports_amrf = effort_profile
+        .as_ref()
+        .map(|profile| profile.supports_amrf(&model_id))
+        .unwrap_or_else(|| supports_additional_model_request_fields(&model_id));
+
+    let requested_effort = request
+        .effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    // 档位归一化到该模型允许的枚举（上游声明优先，缺失时官方静态表兜底）
+    let resolved_effort =
+        requested_effort.and_then(|effort| resolve_effort_level(effort_profile.as_ref(), &model_id, effort));
+
+    // effort 字段位置：上游声明优先，否则按官方表兜底
+    let field = effort_profile
+        .as_ref()
+        .and_then(|profile| profile.effort_field(&model_id))
+        .or_else(|| fallback_effort_field(&model_id))
+        .unwrap_or(EffortField::OutputConfig);
+
+    let additional_model_request_fields = match field {
+        // GPT-5.6 系：只发 reasoning.effort，不带 Claude 信封；
+        // effort 独立于 thinking 生效（官方表：GPT-5.6 默认 effort=high）。
+        EffortField::Reasoning => resolved_effort.map(|effort| {
+            serde_json::json!({
+                "reasoning": { "effort": effort }
+            })
+        }),
+        // Claude 系：output_config.effort 与 thinking 信封各自独立——
+        // 官方明确「effort works whether or not thinking is enabled」，
+        // 所以只发 effort 不发 thinking 时 effort 仍必须下发。
+        EffortField::OutputConfig => {
+            if !supports_amrf {
+                None
+            } else {
+                let mut fields = serde_json::Map::new();
+                if request.thinking.is_some() {
+                    fields.insert(
+                        "thinking".to_string(),
+                        serde_json::json!({ "type": "adaptive", "display": "summarized" }),
+                    );
+                }
+                if let Some(effort) = resolved_effort {
+                    fields.insert(
+                        "output_config".to_string(),
+                        serde_json::json!({ "effort": effort }),
+                    );
+                }
+                if fields.is_empty() {
+                    None
+                } else {
+                    Some(serde_json::Value::Object(fields))
+                }
+            }
         }
-    } else {
-        None
     };
 
     // 始终设置 agent_continuation_id 和 agent_task_type
