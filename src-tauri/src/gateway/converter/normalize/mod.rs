@@ -133,6 +133,7 @@ pub fn build_normalized_request_from_payload(
         Thinking {
             thinking_type: "enabled".to_string(),
             budget_tokens,
+            effort: Some(effort.to_string()),
         }
     });
 
@@ -247,5 +248,6 @@ pub fn override_thinking_from_model_name(request: &mut NormalizedRequest) {
     request.thinking = Some(Thinking {
         thinking_type: thinking_type.to_string(),
         budget_tokens: 20000,
+        effort: None,
     });
 }

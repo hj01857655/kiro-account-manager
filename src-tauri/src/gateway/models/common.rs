@@ -15,6 +15,10 @@ pub struct Thinking {
         deserialize_with = "deserialize_budget_tokens"
     )]
     pub budget_tokens: i32,
+    /// 客户端原始 effort 档位（如 OpenAI reasoning.effort），仅用于
+    /// additionalModelRequestFields.output_config 的原生透传，不参与序列化语义。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
 }
 
 impl Thinking {

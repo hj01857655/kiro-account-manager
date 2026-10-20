@@ -183,6 +183,7 @@ fn override_thinking_respects_explicit_client_config() {
     let explicit = crate::gateway::models::Thinking {
         thinking_type: "enabled".to_string(),
         budget_tokens: 12345,
+        effort: None,
     };
     let converted = normalize_anthropic_request(&base_thinking_request(
         "claude-sonnet-4.5-thinking",

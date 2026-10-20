@@ -667,6 +667,7 @@ async fn build_kiro_payload_adds_additional_fields_only_for_supported_models() {
     let thinking = Some(crate::gateway::models::Thinking {
         thinking_type: "adaptive".to_string(),
         budget_tokens: 20000,
+        effort: None,
     });
 
     for model in [
@@ -730,6 +731,58 @@ async fn build_kiro_payload_omits_additional_fields_without_thinking() {
     assert!(payload.additional_model_request_fields.is_none());
 }
 
+// effort 档位原生透传（kiro.rs 实测规则）：客户端 effort 进 output_config.effort；
+// 4.6 代不接受 xhigh 降级 high；5.x/fable 保留 xhigh；无 effort 不带 output_config。
+#[tokio::test]
+async fn build_kiro_payload_passes_effort_into_output_config() {
+    let client = Client::new();
+    async fn build(
+        client: &Client,
+        model: &str,
+        effort: Option<&str>,
+    ) -> serde_json::Value {
+        let request = minimal_request_with_thinking(
+            model,
+            Some(crate::gateway::models::Thinking {
+                thinking_type: "adaptive".to_string(),
+                budget_tokens: 20000,
+                effort: effort.map(str::to_string),
+            }),
+        );
+        build_kiro_payload(client, &request, None, None)
+            .await
+            .expect("payload should build")
+            .additional_model_request_fields
+            .expect("fields should exist")
+    }
+
+    // sonnet-4.6 + xhigh → 降级 high（4.6 代不接受 xhigh）
+    let fields = build(&client, "claude-sonnet-4.6", Some("xhigh"))
+        .await;
+    assert_eq!(fields["output_config"]["effort"], "high");
+
+    // sonnet-5.5 + xhigh → 保留
+    let fields = build(&client, "claude-sonnet-5.5", Some("xhigh"))
+        .await;
+    assert_eq!(fields["output_config"]["effort"], "xhigh");
+
+    // opus-5.5 + high → 原样
+    let fields = build(&client, "claude-opus-5.5", Some("high"))
+        .await;
+    assert_eq!(fields["output_config"]["effort"], "high");
+
+    // 未知档位 → 回退 high
+    let fields = build(&client, "claude-sonnet-5.5", Some("turbo"))
+        .await;
+    assert_eq!(fields["output_config"]["effort"], "high");
+
+    // 无 effort → 只有 thinking 子字段，不带 output_config
+    let fields = build(&client, "claude-sonnet-5.5", None)
+        .await;
+    assert!(fields.get("output_config").is_none());
+    assert_eq!(fields["thinking"]["type"], "adaptive");
+}
+
 // 客户端 budget_tokens 必须传导到 <max_thinking_length> 标签（clamp 到
 // [1024, 24576]，kiro.rs 实测上限），否则「尊重显式配置」是空话。
 #[tokio::test]
@@ -738,6 +791,7 @@ async fn build_kiro_payload_clamps_budget_tokens_into_thinking_tag() {
         Some(crate::gateway::models::Thinking {
             thinking_type: "enabled".to_string(),
             budget_tokens: budget,
+            effort: None,
         })
     };
 

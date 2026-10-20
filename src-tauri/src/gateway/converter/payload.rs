@@ -244,6 +244,7 @@ pub async fn build_kiro_payload(
             request.thinking = Some(Thinking {
                 thinking_type: thinking_type.to_string(),
                 budget_tokens: 20000,
+                effort: None,
             });
         }
     }
@@ -545,12 +546,36 @@ pub async fn build_kiro_payload(
     // 官方 thinking 通道：thinking 启用且模型在白名单时，带顶层
     // additionalModelRequestFields，上游返回原生 reasoningContentEvent（带签名）。
     // 4.5 代际 / GPT-5.6 / 开源模型 / auto 不支持该字段，保持 None 走标签路径。
+    // 客户端带 effort 档位（如 OpenAI reasoning.effort）时追加 output_config.effort。
+    // effort 归一化（kiro.rs 实测规则）：4.5/4.6 系列不接受 xhigh，降级 high；
+    // Opus 4.7+/Fable 保留；未知值回退 high。
     let additional_model_request_fields = if request.thinking.is_some()
         && supports_additional_model_request_fields(&model_id)
     {
-        Some(serde_json::json!({
+        let thinking_cfg = serde_json::json!({
             "thinking": { "type": "adaptive", "display": "summarized" }
-        }))
+        });
+        if let Some(effort) = request
+            .thinking
+            .as_ref()
+            .and_then(|t| t.effort.as_deref())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            let normalized = effort.to_ascii_lowercase();
+            let is_46_generation = model_id.contains("4.6") || model_id.contains("4-6");
+            let effort_value = match normalized.as_str() {
+                "xhigh" if is_46_generation => "high",
+                "low" | "medium" | "high" | "xhigh" => normalized.as_str(),
+                _ => "high",
+            };
+            Some(serde_json::json!({
+                "thinking": { "type": "adaptive", "display": "summarized" },
+                "output_config": { "effort": effort_value }
+            }))
+        } else {
+            Some(thinking_cfg)
+        }
     } else {
         None
     };
