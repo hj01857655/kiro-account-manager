@@ -392,7 +392,7 @@ pub async fn proxy_handler(
             log::debug!(
                 "[Gateway] 账号 {} 可用模型: {:?}",
                 upstream.source_label,
-                models
+                extract_model_ids(&models)
             );
             Some(models)
         }

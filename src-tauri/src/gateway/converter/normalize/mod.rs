@@ -121,19 +121,27 @@ pub fn build_normalized_request_from_payload(
         }
     }
 
-    // 处理 reasoning.effort → Kiro thinking 映射（OpenAI Responses API）
-    let thinking = payload.get("reasoning").and_then(|r| r.get("effort")).and_then(Value::as_str).map(|effort| {
+    // 处理 effort 档位（OpenAI Responses 用 reasoning.effort，OpenAI Chat 用
+    // reasoning_effort；Anthropic 协议走 output_config.effort，在各自归一化里取）
+    let requested_effort = payload
+        .get("reasoning")
+        .and_then(|r| r.get("effort"))
+        .or_else(|| payload.get("reasoning_effort"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let thinking = requested_effort.as_deref().map(|effort| {
         let budget_tokens = match effort {
             "low" => 1024,
             "medium" => 4096,
-            "high" => 16384,
+            "high" | "xhigh" | "max" => 16384,
             _ => 4096,
         };
         log::info!("[模型映射] reasoning.effort=\"{}\" → thinking enabled, budget_tokens={}", effort, budget_tokens);
         Thinking {
             thinking_type: "enabled".to_string(),
             budget_tokens,
-            effort: Some(effort.to_string()),
         }
     });
 
@@ -178,6 +186,7 @@ pub fn build_normalized_request_from_payload(
             .filter(|value| !value.is_empty())
             .map(str::to_string),
         thinking,
+        effort: requested_effort,
         include_usage: payload
             .get("stream_options")
             .and_then(|opts| opts.get("include_usage"))
@@ -248,6 +257,5 @@ pub fn override_thinking_from_model_name(request: &mut NormalizedRequest) {
     request.thinking = Some(Thinking {
         thinking_type: thinking_type.to_string(),
         budget_tokens: 20000,
-        effort: None,
     });
 }

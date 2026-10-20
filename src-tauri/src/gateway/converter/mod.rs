@@ -28,6 +28,7 @@ mod images;
 mod content;
 mod history;
 mod payload;
+mod effort;
 
 pub use normalize::*;
 pub use models::*;
@@ -36,6 +37,7 @@ pub use images::*;
 pub use content::*;
 pub use history::*;
 pub use payload::*;
+pub use effort::*;
 
 /// 工具描述长度上限，超过则外移到 system prompt 的 Tool Documentation 段。
 pub const TOOL_DESCRIPTION_MAX_LENGTH: usize = 10237;

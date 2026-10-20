@@ -50,6 +50,7 @@ async fn restore_responses_session_messages_replays_previous_assistant_turn() {
         tool_choice: None,
         previous_response_id: Some("resp_prev_123".to_string()),
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),

@@ -236,6 +236,12 @@ pub fn normalize_openai_chat_request(request: &OpenAIChatRequest) -> Result<Norm
         tool_choice: request.tool_choice.clone(),
         previous_response_id: None,
         thinking: None,
+        effort: request
+            .reasoning_effort
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
         include_usage,
         tool_name_map,
         // OpenAI Chat 协议无 Anthropic 式服务端工具

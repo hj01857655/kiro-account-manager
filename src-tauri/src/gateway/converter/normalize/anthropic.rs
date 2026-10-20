@@ -87,6 +87,17 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
         tool_choice: request.tool_choice.clone(),
         previous_response_id: None,
         thinking: request.thinking.clone(),
+        // Anthropic 官方 effort 字段是顶层的 output_config.effort
+        // （Kiro 官方文档的 Claude 示例全部用 output_config.effort），
+        // 与 thinking 正交——thinking 未启用时 effort 依然生效。
+        effort: request.output_config.as_ref().and_then(|config| {
+            config
+                .get("effort")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        }),
         include_usage: false,
         tool_name_map,
         server_tool_names,

@@ -68,6 +68,9 @@ pub struct OpenAIChatRequest {
     #[serde(default)]
     #[allow(dead_code)]
     pub service_tier: Option<String>,
+    /// OpenAI Chat 的 effort 档位（reasoning_effort）
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

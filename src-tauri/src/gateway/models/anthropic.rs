@@ -24,6 +24,9 @@ pub struct AnthropicMessagesRequest {
     pub tools: Option<Vec<AnthropicTool>>,
     pub tool_choice: Option<serde_json::Value>,
     pub thinking: Option<Thinking>,
+    /// 顶层 output_config（官方 effort 档位放在 output_config.effort）
+    #[serde(default)]
+    pub output_config: Option<serde_json::Value>,
     #[allow(dead_code)]
     pub metadata: Option<serde_json::Value>,
 }

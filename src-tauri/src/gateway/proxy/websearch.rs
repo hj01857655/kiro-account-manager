@@ -410,6 +410,7 @@ mod tests {
             tool_choice,
             previous_response_id: None,
             thinking: None,
+            effort: None,
             include_usage: false,
             tool_name_map: HashMap::new(),
             server_tool_names: Vec::new(),

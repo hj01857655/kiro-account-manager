@@ -40,6 +40,7 @@ fn normalize_anthropic_request_keeps_system_tools_and_tool_result() {
         }]),
         tool_choice: Some(json!({"type":"auto"})),
         thinking: None,
+        output_config: None,
         metadata: None,
         top_k: None,
     };
@@ -86,6 +87,7 @@ fn normalize_anthropic_request_preserves_image_content() {
         tools: None,
         tool_choice: None,
         thinking: None,
+        output_config: None,
         metadata: None,
     };
 
@@ -144,8 +146,35 @@ fn base_thinking_request(
         tools: None,
         tool_choice: None,
         thinking,
+        output_config: None,
         metadata: None,
     }
+}
+
+// Anthropic 协议的 effort 走顶层 output_config.effort（Kiro 官方文档的 Claude
+// 示例全部用它），且与 thinking 正交——thinking 未启用时 effort 依然要被抓到，
+// 否则 Claude Code 这类客户端的 effort 会被静默丢弃。
+#[test]
+fn normalize_anthropic_request_extracts_output_config_effort() {
+    let mut request = base_thinking_request("claude-sonnet-5.5", None);
+    request.output_config = Some(json!({ "effort": "xhigh" }));
+
+    let converted = normalize_anthropic_request(&request);
+    assert_eq!(converted.effort.as_deref(), Some("xhigh"));
+    // effort 不应顺带开启 thinking——两者语义正交
+    assert!(converted.thinking.is_none());
+}
+
+// 空档位与空白档位不应下发（避免上游收到无意义值）。
+#[test]
+fn normalize_anthropic_request_ignores_blank_effort() {
+    let mut request = base_thinking_request("claude-sonnet-5.5", None);
+    request.output_config = Some(json!({ "effort": "   " }));
+    assert!(normalize_anthropic_request(&request).effort.is_none());
+
+    let mut request = base_thinking_request("claude-sonnet-5.5", None);
+    request.output_config = Some(json!({ "other": "value" }));
+    assert!(normalize_anthropic_request(&request).effort.is_none());
 }
 
 // 4.7+ 模型官方仅接受 adaptive thinking（docs.anthropic.com extended-thinking），
@@ -183,7 +212,6 @@ fn override_thinking_respects_explicit_client_config() {
     let explicit = crate::gateway::models::Thinking {
         thinking_type: "enabled".to_string(),
         budget_tokens: 12345,
-        effort: None,
     };
     let converted = normalize_anthropic_request(&base_thinking_request(
         "claude-sonnet-4.5-thinking",

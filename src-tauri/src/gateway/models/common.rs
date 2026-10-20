@@ -15,10 +15,6 @@ pub struct Thinking {
         deserialize_with = "deserialize_budget_tokens"
     )]
     pub budget_tokens: i32,
-    /// 客户端原始 effort 档位（如 OpenAI reasoning.effort），仅用于
-    /// additionalModelRequestFields.output_config 的原生透传，不参与序列化语义。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effort: Option<String>,
 }
 
 impl Thinking {
@@ -61,6 +57,14 @@ pub struct NormalizedRequest {
     pub previous_response_id: Option<String>,
     #[serde(default)]
     pub thinking: Option<Thinking>,
+    /// 客户端请求的 effort 档位（原始值，如 OpenAI `reasoning_effort`、
+    /// Anthropic `output_config.effort`）。
+    ///
+    /// 与 thinking 正交——官方语义里 effort 影响整体响应（文本 / 工具调用 / 思考），
+    /// 不依赖 thinking 是否启用，因此独立于 `thinking` 存放。最终下发到上游哪个字段
+    /// （`output_config.effort` 还是 `reasoning.effort`）由上游模型清单决定。
+    #[serde(default)]
+    pub effort: Option<String>,
     /// OpenAI stream_options.include_usage：流式时是否在 [DONE] 前额外发送空 choices + usage 帧
     #[serde(default)]
     pub include_usage: bool,

@@ -51,7 +51,7 @@ const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 1.15;
 use super::{
     append_gateway_request_log,
     converter::{
-        build_kiro_payload, get_available_models, normalize_anthropic_request,
+        build_kiro_payload, extract_model_ids, get_available_models, normalize_anthropic_request,
         normalize_openai_chat_payload, normalize_openai_responses_request,
     },
     effective_client_api_keys,

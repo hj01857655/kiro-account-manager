@@ -63,6 +63,7 @@ async fn build_kiro_payload_moves_long_tool_docs_and_tool_results_into_context()
         tool_choice: None,
         previous_response_id: None,
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -141,6 +142,7 @@ async fn build_kiro_payload_uses_cached_style_model_ids_for_claude_45() {
         tool_choice: None,
         previous_response_id: None,
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -180,6 +182,7 @@ async fn build_kiro_payload_uses_cached_style_model_ids_for_claude_46() {
         tool_choice: None,
         previous_response_id: None,
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -230,6 +233,7 @@ async fn build_kiro_payload_preserves_responses_tool_choice() {
         tool_choice: Some(json!({ "type": "function", "name": "search_docs" })),
         previous_response_id: None,
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -288,6 +292,7 @@ async fn build_kiro_payload_includes_tools_when_current_message_has_tool_results
         tool_choice: None,
         previous_response_id: None,
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -386,6 +391,7 @@ async fn build_kiro_payload_orders_current_tool_results_like_previous_tool_uses(
         tool_choice: None,
         previous_response_id: None,
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -443,6 +449,7 @@ async fn build_kiro_payload_reuses_previous_response_id_as_conversation_id() {
         tool_choice: None,
         previous_response_id: Some("resp_prev_123".to_string()),
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -486,6 +493,7 @@ async fn build_kiro_payload_rejects_unknown_tool_choice_function() {
         tool_choice: Some(json!({ "type": "function", "name": "missing_tool" })),
         previous_response_id: None,
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -566,6 +574,7 @@ async fn build_kiro_payload_preserves_assistant_message_metadata() {
         tool_choice: None,
         previous_response_id: None,
         thinking: None,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -653,6 +662,7 @@ fn minimal_request_with_thinking(model: &str, thinking: Option<crate::gateway::m
         tool_choice: None,
         previous_response_id: None,
         thinking,
+        effort: None,
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
@@ -667,7 +677,6 @@ async fn build_kiro_payload_adds_additional_fields_only_for_supported_models() {
     let thinking = Some(crate::gateway::models::Thinking {
         thinking_type: "adaptive".to_string(),
         budget_tokens: 20000,
-        effort: None,
     });
 
     for model in [
@@ -731,54 +740,138 @@ async fn build_kiro_payload_omits_additional_fields_without_thinking() {
     assert!(payload.additional_model_request_fields.is_none());
 }
 
-// effort 档位原生透传（kiro.rs 实测规则）：客户端 effort 进 output_config.effort；
-// 4.6 代不接受 xhigh 降级 high；5.x/fable 保留 xhigh；无 effort 不带 output_config。
+// effort 档位透传：上游模型清单（ListAvailableModels 的
+// additionalModelRequestFieldsSchema）是权威来源——档位按模型枚举 clamp，
+// 且 effort 字段位置（output_config / reasoning）由上游声明决定。
 #[tokio::test]
-async fn build_kiro_payload_passes_effort_into_output_config() {
+async fn build_kiro_payload_clamps_effort_to_upstream_declared_levels() {
     let client = Client::new();
+
     async fn build(
         client: &Client,
         model: &str,
         effort: Option<&str>,
-    ) -> serde_json::Value {
-        let request = minimal_request_with_thinking(
+        models: Option<&[Value]>,
+    ) -> Option<Value> {
+        let mut request = minimal_request_with_thinking(
             model,
             Some(crate::gateway::models::Thinking {
                 thinking_type: "adaptive".to_string(),
                 budget_tokens: 20000,
-                effort: effort.map(str::to_string),
             }),
         );
-        build_kiro_payload(client, &request, None, None)
+        request.effort = effort.map(str::to_string);
+        build_kiro_payload(client, &request, None, models)
             .await
             .expect("payload should build")
             .additional_model_request_fields
-            .expect("fields should exist")
     }
 
-    // sonnet-4.6 + xhigh → 降级 high（4.6 代不接受 xhigh）
-    let fields = build(&client, "claude-sonnet-4.6", Some("xhigh"))
-        .await;
-    assert_eq!(fields["output_config"]["effort"], "high");
+    // 上游声明 4.6 代允许 low/medium/high/max（无 xhigh）→ xhigh 向上取 max
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+    let fields = build(&client, "claude-sonnet-4.6", Some("xhigh"), Some(&models))
+        .await
+        .expect("fields should exist");
+    assert_eq!(fields["output_config"]["effort"], "max");
 
-    // sonnet-5.5 + xhigh → 保留
-    let fields = build(&client, "claude-sonnet-5.5", Some("xhigh"))
-        .await;
+    // 上游声明 5.5 允许 5 档 → xhigh 保留
+    let models = vec![json!({
+        "modelId": "claude-sonnet-5.5",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+    let fields = build(&client, "claude-sonnet-5.5", Some("xhigh"), Some(&models))
+        .await
+        .expect("fields should exist");
     assert_eq!(fields["output_config"]["effort"], "xhigh");
 
-    // opus-5.5 + high → 原样
-    let fields = build(&client, "claude-opus-5.5", Some("high"))
-        .await;
-    assert_eq!(fields["output_config"]["effort"], "high");
+    // 上游声明 max 档 → max 保留（不再回落 high）
+    let fields = build(&client, "claude-sonnet-5.5", Some("max"), Some(&models))
+        .await
+        .expect("fields should exist");
+    assert_eq!(fields["output_config"]["effort"], "max");
 
-    // 未知档位 → 回退 high
-    let fields = build(&client, "claude-sonnet-5.5", Some("turbo"))
-        .await;
-    assert_eq!(fields["output_config"]["effort"], "high");
+    // 上游声明 GPT-5.6 走 reasoning.effort → 不带 Claude 的 output_config/thinking 信封
+    let models = vec![json!({
+        "modelId": "gpt-5.6-sol",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "reasoning": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["none", "low", "medium", "high", "xhigh", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+    let fields = build(&client, "gpt-5.6-sol", Some("xhigh"), Some(&models))
+        .await
+        .expect("fields should exist");
+    assert_eq!(fields["reasoning"]["effort"], "xhigh");
+    assert!(fields.get("output_config").is_none());
+    assert!(fields.get("thinking").is_none());
+
+    // 上游未声明该模型（无 schema）→ 不带 AMRF
+    let models = vec![json!({"modelId": "claude-sonnet-4.5"})];
+    let fields = build(&client, "claude-sonnet-4.5", Some("high"), Some(&models)).await;
+    assert!(fields.is_none());
+
+    // 上游清单取不到 → 退回官方静态表（4.6 无 xhigh → max；5.5 保留 xhigh）
+    let fields = build(&client, "claude-sonnet-4.6", Some("xhigh"), None)
+        .await
+        .expect("fields should exist");
+    assert_eq!(fields["output_config"]["effort"], "max");
+    let fields = build(&client, "claude-sonnet-5.5", Some("xhigh"), None)
+        .await
+        .expect("fields should exist");
+    assert_eq!(fields["output_config"]["effort"], "xhigh");
+
+    // 未知档位 → 不下发（让模型用自身默认档，避免上游 400）
+    let fields = build(&client, "claude-sonnet-5.5", Some("turbo"), Some(&models)).await;
+    assert!(fields.is_none());
 
     // 无 effort → 只有 thinking 子字段，不带 output_config
-    let fields = build(&client, "claude-sonnet-5.5", None)
-        .await;
+    let models = vec![json!({
+        "modelId": "claude-sonnet-5.5",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+    let fields = build(&client, "claude-sonnet-5.5", None, Some(&models))
+        .await
+        .expect("fields should exist");
     assert!(fields.get("output_config").is_none());
     assert_eq!(fields["thinking"]["type"], "adaptive");
 }
@@ -791,7 +884,6 @@ async fn build_kiro_payload_clamps_budget_tokens_into_thinking_tag() {
         Some(crate::gateway::models::Thinking {
             thinking_type: "enabled".to_string(),
             budget_tokens: budget,
-            effort: None,
         })
     };
 

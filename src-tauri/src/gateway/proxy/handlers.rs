@@ -14,12 +14,15 @@ pub fn build_health_response() -> Value {
     json!({ "ok": true })
 }
 
-/// 获取账号可用模型列表
+/// 获取账号可用模型列表（含上游声明的 AMRF schema）
 ///
-/// 调用 Kiro Management API 的 ListAvailableModels 接口获取账号权限内的模型
+/// 调用 Kiro Management API 的 ListAvailableModels 接口获取账号权限内的模型。
+/// 返回完整的模型条目数组而非仅 modelId 列表——`additionalModelRequestFieldsSchema`
+/// 里带着该模型支持的 effort 档位枚举与 effort 字段位置（output_config / reasoning），
+/// 是档位判定的权威来源。
 pub async fn get_available_models_for_upstream(
     upstream: &UpstreamCredentials,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<Value>, String> {
     let client = KiroClient::from_client(upstream.http.clone());
     let (machine_id, profile_arn) = get_available_models_call_context(upstream);
 
@@ -35,15 +38,10 @@ pub async fn get_available_models_for_upstream(
     // 解析返回的模型列表
     let models = response
         .get("models")
+        .or_else(|| response.get("availableModels"))
         .and_then(|v| v.as_array())
         .ok_or("Invalid response: missing models array")?
-        .iter()
-        .filter_map(|m| {
-            m.get("modelId")
-                .and_then(|id| id.as_str())
-                .map(String::from)
-        })
-        .collect();
+        .clone();
 
     Ok(models)
 }
