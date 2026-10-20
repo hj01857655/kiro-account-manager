@@ -123,3 +123,71 @@ fn normalize_anthropic_request_preserves_image_content() {
         "image source should be preserved"
     );
 }
+
+fn base_thinking_request(
+    model: &str,
+    thinking: Option<crate::gateway::models::Thinking>,
+) -> AnthropicMessagesRequest {
+    AnthropicMessagesRequest {
+        model: model.to_string(),
+        messages: vec![crate::gateway::models::AnthropicMessage {
+            role: "user".to_string(),
+            content: json!([{ "type": "text", "text": "hi" }]),
+        }],
+        max_tokens: 1024,
+        system: None,
+        stream: false,
+        temperature: None,
+        top_p: None,
+        top_k: None,
+        stop_sequences: None,
+        tools: None,
+        tool_choice: None,
+        thinking,
+        metadata: None,
+    }
+}
+
+// 4.7+ 模型官方仅接受 adaptive thinking（docs.anthropic.com extended-thinking），
+// 模型名含 -thinking 且客户端未显式传 thinking 时必须判为 adaptive。
+#[test]
+fn override_thinking_uses_adaptive_for_47_plus_models() {
+    for model in [
+        "claude-sonnet-5.5-thinking",
+        "claude-opus-5.5-thinking",
+        "claude-opus-5-thinking",
+        "claude-fable-5-thinking",
+        "claude-opus-4-7-thinking",
+        "claude-sonnet-4.6-thinking",
+    ] {
+        let converted = normalize_anthropic_request(&base_thinking_request(model, None));
+        let thinking = converted
+            .thinking
+            .as_ref()
+            .unwrap_or_else(|| panic!("{model} should have thinking injected"));
+        assert_eq!(thinking.thinking_type, "adaptive", "{model} should be adaptive");
+    }
+    // 4.5 代官方只有 extended 模式，保持 enabled
+    let converted =
+        normalize_anthropic_request(&base_thinking_request("claude-sonnet-4.5-thinking", None));
+    assert_eq!(
+        converted.thinking.as_ref().expect("4.5 should think").thinking_type,
+        "enabled"
+    );
+}
+
+// 客户端显式传了 thinking 配置（如 Claude Code 的 budget_tokens）时必须尊重：
+// 后缀只作为无参客户端的兜底开关，不覆写显式配置。
+#[test]
+fn override_thinking_respects_explicit_client_config() {
+    let explicit = crate::gateway::models::Thinking {
+        thinking_type: "enabled".to_string(),
+        budget_tokens: 12345,
+    };
+    let converted = normalize_anthropic_request(&base_thinking_request(
+        "claude-sonnet-4.5-thinking",
+        Some(explicit),
+    ));
+    let thinking = converted.thinking.as_ref().expect("explicit config kept");
+    assert_eq!(thinking.budget_tokens, 12345);
+}

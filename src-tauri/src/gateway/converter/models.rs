@@ -10,14 +10,21 @@ pub fn get_internal_model_id(external_model: &str) -> Result<String, String> {
         "auto" | "default" => return Ok("auto".to_string()),
         // opus 系列：裸 "opus" 指向当前最新的 Opus（5）
         "opus" | "opus-5" | "opus-5-0" => return Ok("claude-opus-5".to_string()),
+        "opus-5-5" | "opus-5.5" => return Ok("claude-opus-5.5".to_string()),
         "opus-4-7" => return Ok("claude-opus-4.7".to_string()),
         "sonnet" | "sonnet-4-6" => return Ok("claude-sonnet-4.6".to_string()),
+        "sonnet-5-5" | "sonnet-5.5" => return Ok("claude-sonnet-5.5".to_string()),
         "haiku" | "haiku-4-5" => return Ok("claude-haiku-4.5".to_string()),
         "claude-sonnet-latest" => return Ok("claude-sonnet-5".to_string()),
         "claude-sonnet-5" => return Ok("claude-sonnet-5".to_string()),
-        // OpenAI GPT 兼容映射（默认映射到 claude-sonnet-4；用户可以在前端「模型映射」配置里覆盖）
+        // Claude Fable 5.1（Enterprise 预览；上游内部 ID 经社区项目旁证为 claude-fable-5）
+        "fable" | "fable-5" | "fable-5.1" | "claude-fable-5" | "claude-fable-5-1" => {
+            return Ok("claude-fable-5".to_string())
+        }
+        // OpenAI GPT 兼容映射（默认映射到 claude-sonnet-4.5；用户可以在前端「模型映射」配置里覆盖。
+        // 兜底目标曾指向 claude-sonnet-4，该模型已于 2026-10 从 ListAvailableModels 摘除，改指 4.5）
         "gpt-4" | "gpt-4o" | "gpt-4-turbo" | "gpt-3.5-turbo" | "gpt-4o-mini" => {
-            return Ok("claude-sonnet-4".to_string());
+            return Ok("claude-sonnet-4.5".to_string());
         }
         // GPT-5.6 系列（Kiro 原生 GPT 模型，不做映射）
         "gpt-5-6-sol" | "gpt-5.6-sol" => return Ok("gpt-5.6-sol".to_string()),
@@ -29,6 +36,9 @@ pub fn get_internal_model_id(external_model: &str) -> Result<String, String> {
         "minimax-m2-5" | "minimax-m2.5" | "minimax" => return Ok("minimax-m2.5".to_string()),
         "minimax-m2-1" | "minimax-m2.1" => return Ok("minimax-m2.1".to_string()),
         "glm-5" | "glm5" => return Ok("glm-5".to_string()),
+        "kimi-k3" | "kimi-k-3" | "kimi" | "kimi-k3-thinking" => {
+            return Ok("kimi-k3".to_string())
+        }
         "qwen3-coder-next" | "qwen3-coder" | "qwen3" | "qwen" => {
             return Ok("qwen3-coder-next".to_string())
         }
@@ -53,9 +63,9 @@ pub fn get_internal_model_id(external_model: &str) -> Result<String, String> {
 }
 
 /// 判断模型 ID 是否符合 Kiro API 接受的格式
-/// - claude-{sonnet|haiku|opus}-{version} （包括 4.5 / 4.6 / 4.7 / 5 + 未来新版本）
+/// - claude-{sonnet|haiku|opus|fable}-{version} （包括 4.5 / 4.6 / 4.7 / 5 + 未来新版本）
 /// - gpt-5.6-{sol|terra|luna} （Kiro 原生 GPT 模型）
-/// - 开源模型：deepseek-3.2 / minimax-m2.5 / minimax-m2.1 / glm-5 / qwen3-coder-next
+/// - 开源模型：deepseek-3.2 / minimax-m2.5 / minimax-m2.1 / glm-5 / kimi-k3 / qwen3-coder-next
 /// - 特殊值：auto
 pub fn is_kiro_supported_model_format(model: &str) -> bool {
     if model == "auto" {
@@ -64,6 +74,7 @@ pub fn is_kiro_supported_model_format(model: &str) -> bool {
     if model.starts_with("claude-sonnet-")
         || model.starts_with("claude-haiku-")
         || model.starts_with("claude-opus-")
+        || model.starts_with("claude-fable-")
     {
         return true;
     }
@@ -72,7 +83,12 @@ pub fn is_kiro_supported_model_format(model: &str) -> bool {
     }
     matches!(
         model,
-        "deepseek-3.2" | "minimax-m2.5" | "minimax-m2.1" | "glm-5" | "qwen3-coder-next"
+        "deepseek-3.2"
+            | "minimax-m2.5"
+            | "minimax-m2.1"
+            | "glm-5"
+            | "kimi-k3"
+            | "qwen3-coder-next"
     )
 }
 
@@ -168,9 +184,6 @@ pub fn get_internal_model_id_with_fallback(
         return Ok(mapped_model);
     }
 
-    // 检测原始模型名是否要求 thinking（用于降级后保留 -thinking 后缀）
-    let requires_thinking = external_model.to_lowercase().contains("thinking");
-
     // GPT-5.6 系列降级到最便宜的 luna 变体（避免跨协议降级到 Claude）
     if mapped_model.starts_with("gpt-5.6-") {
         if available_models.contains(&"gpt-5.6-luna".to_string()) {
@@ -183,12 +196,11 @@ pub fn get_internal_model_id_with_fallback(
         // 如果连 luna 都没有，再降级到 Claude
     }
 
-    // 简单粗暴：一律降级到 claude-sonnet-4.5（Free 用户最高可用模型）
-    let fallback = if requires_thinking {
-        "claude-sonnet-4.5-thinking"
-    } else {
-        "claude-sonnet-4.5"
-    };
+    // 简单粗暴：一律降级到 claude-sonnet-4.5（Free 用户最高可用模型）。
+    // 实测证据（python-prototype/kiro_probe.py，2026-10-20）：带 -thinking 后缀的
+    // modelId 会被上游 400 INVALID_MODEL_ID——上游靠 system prompt 的 <thinking_mode>
+    // 标签启用思考，与模型 ID 无关，所以降级结果一律用裸 ID，thinking 由 payload 层注入。
+    let fallback = "claude-sonnet-4.5";
 
     log::warn!(
         "[Gateway] 模型 {} 不在可用列表中，降级到 {}",
@@ -203,14 +215,52 @@ pub fn normalize_external_model_alias(external_model: &str) -> String {
     external_model.trim().to_ascii_lowercase()
 }
 
+/// 判断模型是否支持顶层 additionalModelRequestFields（官方 thinking 通道）。
+///
+/// 社区实测证据（2026-10，kiro.rs / OmniRoute / kiro2cc-proxy）：
+/// - 4.6 代际起（含 5.x / Fable）接受 `thinking: { type: "adaptive" }`，上游返回
+///   原生 reasoningContentEvent（带签名）；
+/// - 4.5 代际与 GPT-5.6 系列不支持该字段，盲传会被上游 400 或整体跳过，
+///   只能继续走 `<thinking_mode>` 标签；
+/// - 开源模型与 auto 无证据支持，保守跳过（auto 会路由到任意模型，不能赌）。
+pub fn supports_additional_model_request_fields(model_id: &str) -> bool {
+    if model_id.starts_with("gpt-5.6-") || model_id.starts_with("gpt-5-6-") {
+        return false;
+    }
+    // 4.5 代际（sonnet-4.5 / opus-4.5 / haiku-4.5 及更早）与全部 haiku
+    if model_id.starts_with("claude-haiku-")
+        || model_id.contains("4.5")
+        || model_id.contains("4-5")
+        || model_id.contains("4.0")
+        || model_id.contains("4-0")
+    {
+        return false;
+    }
+    model_id.starts_with("claude-fable-")
+        || (model_id.contains("opus")
+            && (model_id.contains("4.6")
+                || model_id.contains("4-6")
+                || model_id.contains("opus-5")))
+        || (model_id.contains("sonnet")
+            && (model_id.contains("4.6")
+                || model_id.contains("4-6")
+                || model_id.contains("sonnet-5")))
+}
+
 pub fn get_available_models() -> Vec<ModelInfo> {
-    // 数据来源：Kiro ListAvailableModels API 实际返回
-    // 注意：Claude 模型只保留 -thinking 版本，不带后缀的已删除
+    // 数据来源：Kiro ListAvailableModels API 实际返回的裸模型 ID（经真机核实，
+    // 上游返回不含 -thinking 后缀）。这里的 Claude -thinking 条目是网关合成的
+    // 对外变体：发上游前由 normalize_claude_model_format 剥掉后缀，思考由
+    // system prompt 的 <thinking_mode> 标签启用。
+    // 注意：claude-sonnet-4 已于 2026-10-14 EOL 并从 API 摘除，不再列出。
     //       GPT-5.6 系列是 Kiro 原生 GPT 模型，没有 thinking 变体
     [
         // 自动选择
         ("auto", "anthropic"),
-        // Claude 系列（仅 thinking 版本）
+        // Claude 系列（仅 thinking 版本；fable 为 Enterprise 预览，上游无 thinking 变体证据，按裸 ID 列出）
+        ("claude-opus-5.5-thinking", "anthropic"),
+        ("claude-sonnet-5.5-thinking", "anthropic"),
+        ("claude-fable-5", "anthropic"),
         ("claude-sonnet-5-thinking", "anthropic"),
         ("claude-opus-4.8-thinking", "anthropic"),
         ("claude-opus-4.7-thinking", "anthropic"),
@@ -219,7 +269,6 @@ pub fn get_available_models() -> Vec<ModelInfo> {
         ("claude-opus-4.5-thinking", "anthropic"),
         ("claude-sonnet-4.5-thinking", "anthropic"),
         ("claude-haiku-4.5-thinking", "anthropic"),
-        ("claude-sonnet-4-thinking", "anthropic"),
         // GPT-5.6 系列（Kiro 原生 GPT 模型）
         ("gpt-5.6-sol", "openai"),
         ("gpt-5.6-terra", "openai"),
@@ -229,6 +278,7 @@ pub fn get_available_models() -> Vec<ModelInfo> {
         ("minimax-m2.5", "minimax"),
         ("minimax-m2.1", "minimax"),
         ("glm-5", "zhipu"),
+        ("kimi-k3", "moonshot"),
         ("qwen3-coder-next", "alibaba"),
     ]
     .into_iter()

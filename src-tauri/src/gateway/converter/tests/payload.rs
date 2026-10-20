@@ -633,3 +633,156 @@ async fn build_kiro_payload_preserves_assistant_message_metadata() {
         other => panic!("unexpected history item: {other:?}"),
     }
 }
+
+fn minimal_request_with_thinking(model: &str, thinking: Option<crate::gateway::models::Thinking>) -> NormalizedRequest {
+    NormalizedRequest {
+        model: model.to_string(),
+        messages: vec![NormalizedMessage {
+            role: "user".to_string(),
+            content: Some(json!("1+1=?")),
+            tool_calls: None,
+            tool_call_id: None,
+            metadata: None,
+        }],
+        stream: false,
+        max_tokens: Some(1024),
+        temperature: None,
+        top_p: None,
+        stop: None,
+        tools: None,
+        tool_choice: None,
+        previous_response_id: None,
+        thinking,
+        include_usage: false,
+        tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
+    }
+}
+
+// 官方 thinking 通道白名单：thinking 启用且模型支持时才带
+// additionalModelRequestFields；4.5 代际 / GPT-5.6 / 开源 / auto 必须为 None
+// （社区实测：盲传会被上游 400 或整体跳过）。
+#[tokio::test]
+async fn build_kiro_payload_adds_additional_fields_only_for_supported_models() {
+    let thinking = Some(crate::gateway::models::Thinking {
+        thinking_type: "adaptive".to_string(),
+        budget_tokens: 20000,
+    });
+
+    for model in [
+        "claude-sonnet-4.6",
+        "claude-opus-4.6",
+        "claude-opus-5.5",
+        "claude-sonnet-5",
+        "claude-fable-5",
+    ] {
+        let payload = build_kiro_payload(
+            &Client::new(),
+            &minimal_request_with_thinking(model, thinking.clone()),
+            None,
+            None,
+        )
+        .await
+        .expect("payload should build");
+        let fields = payload
+            .additional_model_request_fields
+            .unwrap_or_else(|| panic!("{model} should carry additionalModelRequestFields"));
+        assert_eq!(
+            fields["thinking"]["type"], "adaptive",
+            "{model} thinking type should be adaptive"
+        );
+    }
+
+    for model in [
+        "claude-sonnet-4.5",
+        "claude-opus-4.5",
+        "claude-haiku-4.5",
+        "gpt-5.6-sol",
+        "deepseek-3.2",
+        "auto",
+    ] {
+        let payload = build_kiro_payload(
+            &Client::new(),
+            &minimal_request_with_thinking(model, thinking.clone()),
+            None,
+            None,
+        )
+        .await
+        .expect("payload should build");
+        assert!(
+            payload.additional_model_request_fields.is_none(),
+            "{model} must NOT carry additionalModelRequestFields"
+        );
+    }
+}
+
+// thinking 未启用时不带该字段（非 thinking 请求不受影响）。
+#[tokio::test]
+async fn build_kiro_payload_omits_additional_fields_without_thinking() {
+    let payload = build_kiro_payload(
+        &Client::new(),
+        &minimal_request_with_thinking("claude-sonnet-4.6", None),
+        None,
+        None,
+    )
+    .await
+    .expect("payload should build");
+    assert!(payload.additional_model_request_fields.is_none());
+}
+
+// 客户端 budget_tokens 必须传导到 <max_thinking_length> 标签（clamp 到
+// [1024, 24576]，kiro.rs 实测上限），否则「尊重显式配置」是空话。
+#[tokio::test]
+async fn build_kiro_payload_clamps_budget_tokens_into_thinking_tag() {
+    let make_thinking = |budget| {
+        Some(crate::gateway::models::Thinking {
+            thinking_type: "enabled".to_string(),
+            budget_tokens: budget,
+        })
+    };
+
+    // 范围内：原样映射
+    let payload = build_kiro_payload(
+        &Client::new(),
+        &minimal_request_with_thinking("claude-sonnet-4.5", make_thinking(10_000)),
+        None,
+        None,
+    )
+    .await
+    .expect("payload should build");
+    let content = &payload.conversation_state.current_message.user_input_message.content;
+    assert!(
+        content.contains("<max_thinking_length>10000</max_thinking_length>"),
+        "budget 10000 should be mapped as-is, got: {content}"
+    );
+
+    // 超上限：夹紧到 24576（不能回落到更大的 200000，客户端限制意图必须保留）
+    let payload = build_kiro_payload(
+        &Client::new(),
+        &minimal_request_with_thinking("claude-sonnet-4.5", make_thinking(60_000)),
+        None,
+        None,
+    )
+    .await
+    .expect("payload should build");
+    let content = &payload.conversation_state.current_message.user_input_message.content;
+    assert!(
+        content.contains("<max_thinking_length>24576</max_thinking_length>"),
+        "budget 60000 should clamp to 24576, got: {content}"
+    );
+
+    // 低于官方最小值：夹紧到 1024
+    let payload = build_kiro_payload(
+        &Client::new(),
+        &minimal_request_with_thinking("claude-sonnet-4.5", make_thinking(100)),
+        None,
+        None,
+    )
+    .await
+    .expect("payload should build");
+    let content = &payload.conversation_state.current_message.user_input_message.content;
+    assert!(
+        content.contains("<max_thinking_length>1024</max_thinking_length>"),
+        "budget 100 should clamp to 1024, got: {content}"
+    );
+}

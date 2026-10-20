@@ -222,9 +222,17 @@ pub async fn build_kiro_payload(
             );
 
             // 判断降级后的模型是否支持 Adaptive Thinking
-            let supports_adaptive =
-                (model_id.contains("opus") && (model_id.contains("4.7") || model_id.contains("4-7")))
-                || (model_id.contains("sonnet") && (model_id.contains("4.6") || model_id.contains("4-6")));
+            // （与 normalize/mod.rs 的 override_thinking_from_model_name 同一规则：
+            //   官方 4.7+ 仅接受 adaptive；"sonnet-5" 同时覆盖 5 与 5.5）
+            let supports_adaptive = model_id.contains("fable")
+                || (model_id.contains("opus")
+                    && (model_id.contains("4.7")
+                        || model_id.contains("4-7")
+                        || model_id.contains("opus-5")))
+                || (model_id.contains("sonnet")
+                    && (model_id.contains("4.6")
+                        || model_id.contains("4-6")
+                        || model_id.contains("sonnet-5")));
 
             let thinking_type = if supports_adaptive {
                 "adaptive"
@@ -279,10 +287,19 @@ pub async fn build_kiro_payload(
 
     // Thinking 模式：在 system prompt 前注入 thinking 标签
     // Kiro API 通过 system prompt 中的 <thinking_mode> 标签启用思考
-    if request.thinking.is_some() {
-        let thinking_prompt = "<thinking_mode>enabled</thinking_mode>\n<max_thinking_length>200000</max_thinking_length>";
+    if let Some(thinking) = &request.thinking {
+        // 客户端显式传了 budget_tokens（如 Claude Code）时映射到 max_thinking_length，
+        // 让「尊重显式配置」名副其实；clamp 到 [1024, 24576]：
+        //   - 下限 1024 是 Anthropic 官方 budget 最小值；
+        //   - 上限 24576 是社区实测的 Kiro 标签值上限（kiro.rs：budget_tokens 限制在 24576 以内）。
+        // 越界值夹紧而非丢弃——客户端限制思考预算的意图必须被保留。
+        let max_thinking_length = thinking.budget_tokens.clamp(1024, 24_576);
+        let thinking_prompt = format!(
+            "<thinking_mode>enabled</thinking_mode>\n<max_thinking_length>{}</max_thinking_length>",
+            max_thinking_length
+        );
         system_prompt = if system_prompt.is_empty() {
-            thinking_prompt.to_string()
+            thinking_prompt
         } else {
             format!("{}\n\n{}", thinking_prompt, system_prompt)
         };
@@ -525,6 +542,19 @@ pub async fn build_kiro_payload(
     }
     let current_images = extract_images(client, current_message.content.as_ref()).await;
 
+    // 官方 thinking 通道：thinking 启用且模型在白名单时，带顶层
+    // additionalModelRequestFields，上游返回原生 reasoningContentEvent（带签名）。
+    // 4.5 代际 / GPT-5.6 / 开源模型 / auto 不支持该字段，保持 None 走标签路径。
+    let additional_model_request_fields = if request.thinking.is_some()
+        && supports_additional_model_request_fields(&model_id)
+    {
+        Some(serde_json::json!({
+            "thinking": { "type": "adaptive", "display": "summarized" }
+        }))
+    } else {
+        None
+    };
+
     // 始终设置 agent_continuation_id 和 agent_task_type
     // 根据抓包验证，Kiro API 在所有情况下都接受这两个字段
     Ok(KiroPayload {
@@ -554,5 +584,6 @@ pub async fn build_kiro_payload(
             workspace_id: None,
         },
         profile_arn,
+        additional_model_request_fields,
     })
 }

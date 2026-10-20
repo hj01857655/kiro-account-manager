@@ -193,28 +193,43 @@ pub fn build_normalized_request_from_payload(
 /// 根据 Anthropic 官方文档 (https://platform.claude.com/docs/en/docs/about-claude/models):
 ///
 /// **Adaptive Thinking** (type: "adaptive"):
-/// - Claude Opus 4.7
-/// - Claude Sonnet 4.6
+/// - Claude Opus 4.7 / 5 / 5.5
+/// - Claude Sonnet 4.6 / 5 / 5.5
+/// - Claude Fable 5（4.7+ 官方仅接受 adaptive，enabled 会被 400 拒绝）
 ///
 /// **Extended Thinking** (type: "enabled"):
 /// - Claude Haiku 4.5
 /// - Claude Sonnet 4.5
 /// - Claude Opus 4.5
 ///
-/// budget_tokens 固定为 20000
+/// budget_tokens 固定为 20000（仅客户端未显式传 thinking 时注入）
 pub fn override_thinking_from_model_name(request: &mut NormalizedRequest) {
     let model_lower = request.model.to_lowercase();
     if !model_lower.contains("thinking") {
         return;
     }
 
-    // 判断是否支持 Adaptive Thinking
-    let supports_adaptive =
-        // Claude Opus 4.7
-        (model_lower.contains("opus") && (model_lower.contains("4-7") || model_lower.contains("4.7")))
-        ||
-        // Claude Sonnet 4.6
-        (model_lower.contains("sonnet") && (model_lower.contains("4-6") || model_lower.contains("4.6")));
+    // 客户端显式传了 thinking 配置（如 Claude Code 的 budget_tokens）时尊重之：
+    // Anthropic 官方契约里 budget 由客户端可配（最小 1024），后缀仅作无参客户端的兜底开关
+    if request.thinking.is_some() {
+        return;
+    }
+
+    // 判断是否支持 Adaptive Thinking。
+    // 官方规范（docs.anthropic.com extended-thinking）：type:"enabled" 在 4.6 上已
+    // deprecated，4.7 及之后的模型（Opus 4.7/5/5.5、Sonnet 4.6/5/5.5、Fable）只接受
+    // type:"adaptive"，请求 enabled 会 400。4.5 及更早只有 extended（enabled）模式。
+    // 注意 contains 匹配边界："sonnet-5" 同时覆盖 sonnet-5 与 sonnet-5.5，
+    // 但不会误伤 sonnet-4.5 / sonnet-4。
+    let supports_adaptive = model_lower.contains("fable")
+        || (model_lower.contains("opus")
+            && (model_lower.contains("4.7")
+                || model_lower.contains("4-7")
+                || model_lower.contains("opus-5")))
+        || (model_lower.contains("sonnet")
+            && (model_lower.contains("4.6")
+                || model_lower.contains("4-6")
+                || model_lower.contains("sonnet-5")));
 
     let thinking_type = if supports_adaptive {
         "adaptive"

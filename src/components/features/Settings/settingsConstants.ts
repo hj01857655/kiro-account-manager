@@ -1,15 +1,19 @@
 import { THEME_REGISTRY } from '@/lib/themeRegistry'
 
 export const AI_MODELS = [
+  { value: 'claude-opus-5.5', label: 'Claude Opus 5.5 (1M) - 2.0x', recommended: false },
   { value: 'claude-opus-5', label: 'Claude Opus 5 (1M) - 2.2x', recommended: false },
   { value: 'claude-opus-4.8', label: 'Claude Opus 4.8 (1M) - 2.2x', recommended: false },
   { value: 'claude-opus-4.7', label: 'Claude Opus 4.7 (1M) - 2.2x', recommended: false },
   { value: 'claude-opus-4.6', label: 'Claude Opus 4.6 (1M) - 2.2x', recommended: false },
   { value: 'claude-opus-4.5', label: 'Claude Opus 4.5 (200K) - 2.2x', recommended: false },
+  { value: 'claude-sonnet-5.5', label: 'Claude Sonnet 5.5 (1M) - 1.3x', recommended: false },
   { value: 'claude-sonnet-5', label: 'Claude Sonnet 5 (1M) - 1.3x', recommended: true },
   { value: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6 (1M) - 1.3x', recommended: false },
   { value: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5 (200K) - 1.3x', recommended: false },
-  { value: 'claude-sonnet-4', label: 'Claude Sonnet 4.0 (200K) - 1.3x', recommended: false },
+  // claude-sonnet-4（Sonnet 4.0）已于 2026-10-14 EOL 并从 Kiro ListAvailableModels 摘除，不再提供
+  // Claude Fable 5.1 为 Enterprise 预览（仅 US East），普通套餐不可见，按并集列出
+  { value: 'claude-fable-5', label: 'Claude Fable 5.1 (1M) - 6x', recommended: false },
   { value: 'auto', label: 'Auto (智能选择) - 1.0x', recommended: false },
   // GPT-5.6 已升级至 1M 上下文（原 272K），改为两档计费：≤272K 按下列短上下文费率，>272K 翻倍
   { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol (1M) - 4.4x/8.8x', recommended: false },
@@ -20,6 +24,7 @@ export const AI_MODELS = [
   { value: 'deepseek-3.2', label: 'DeepSeek 3.2 (128K) - 0.25x', recommended: false },
   { value: 'minimax-m2.5', label: 'MiniMax M2.5 (200K) - 0.25x', recommended: false },
   { value: 'minimax-m2.1', label: 'MiniMax M2.1 (200K) - 0.15x', recommended: false },
+  { value: 'kimi-k3', label: 'Kimi K3 (1M) - 2.4x', recommended: false },
   { value: 'qwen3-coder-next', label: 'Qwen3 Coder Next (256K) - 0.05x', recommended: false },
 ]
 

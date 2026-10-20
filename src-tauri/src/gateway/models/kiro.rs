@@ -8,6 +8,11 @@ pub struct KiroPayload {
     pub conversation_state: ConversationState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_arn: Option<String>,
+    /// 官方 thinking 通道：4.6+ 模型接受顶层 additionalModelRequestFields，
+    /// 上游由此返回原生 reasoningContentEvent（带签名）；4.5 代际与 GPT-5.6
+    /// 不支持该字段，必须保持 None（盲传会被上游 400 / 整体跳过）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub additional_model_request_fields: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
