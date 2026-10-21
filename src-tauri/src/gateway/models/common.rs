@@ -23,6 +23,12 @@ impl Thinking {
     pub fn is_enabled(&self) -> bool {
         self.thinking_type == "enabled" || self.thinking_type == "adaptive"
     }
+
+    /// 客户端是否显式禁用了 thinking（官方 schema 里 4.6+ 的
+    /// thinking.type 接受 adaptive / disabled）
+    pub fn is_disabled(&self) -> bool {
+        self.thinking_type == "disabled"
+    }
 }
 
 fn default_budget_tokens() -> i32 {

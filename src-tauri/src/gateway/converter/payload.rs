@@ -213,38 +213,49 @@ pub async fn build_kiro_payload(
     // 如果模型被降级，需要根据降级后的模型重新调整 thinking 配置
     // 避免出现不兼容的组合（例如：sonnet-4.5 + adaptive thinking）
     if request.thinking.is_some() {
-        let original_model = get_internal_model_id(&request.model).unwrap_or_default();
-        if model_id != original_model {
-            log::info!(
-                "[网关] 模型从 {} 降级到 {}，重新调整 thinking 配置",
-                original_model,
-                model_id
-            );
+        // 客户端显式禁用 thinking 时不做重建——disabled 对任何模型都兼容，
+        // 重建会把客户端的「关闭」意图反转成「开启」。
+        if request
+            .thinking
+            .as_ref()
+            .map(|thinking| thinking.is_disabled())
+            .unwrap_or(false)
+        {
+            log::info!("[网关] 客户端显式禁用 thinking，模型降级后保持禁用");
+        } else {
+            let original_model = get_internal_model_id(&request.model).unwrap_or_default();
+            if model_id != original_model {
+                log::info!(
+                    "[网关] 模型从 {} 降级到 {}，重新调整 thinking 配置",
+                    original_model,
+                    model_id
+                );
 
-            // 判断降级后的模型是否支持 Adaptive Thinking
-            // （与 normalize/mod.rs 的 override_thinking_from_model_name 同一规则：
-            //   官方 4.7+ 仅接受 adaptive；"sonnet-5" 同时覆盖 5 与 5.5）
-            let supports_adaptive = model_id.contains("fable")
-                || (model_id.contains("opus")
-                    && (model_id.contains("4.7")
-                        || model_id.contains("4-7")
-                        || model_id.contains("opus-5")))
-                || (model_id.contains("sonnet")
-                    && (model_id.contains("4.6")
-                        || model_id.contains("4-6")
-                        || model_id.contains("sonnet-5")));
+                // 判断降级后的模型是否支持 Adaptive Thinking
+                // （与 normalize/mod.rs 的 override_thinking_from_model_name 同一规则：
+                //   官方 4.7+ 仅接受 adaptive；"sonnet-5" 同时覆盖 5 与 5.5）
+                let supports_adaptive = model_id.contains("fable")
+                    || (model_id.contains("opus")
+                        && (model_id.contains("4.7")
+                            || model_id.contains("4-7")
+                            || model_id.contains("opus-5")))
+                    || (model_id.contains("sonnet")
+                        && (model_id.contains("4.6")
+                            || model_id.contains("4-6")
+                            || model_id.contains("sonnet-5")));
 
-            let thinking_type = if supports_adaptive {
-                "adaptive"
-            } else {
-                "enabled"
-            };
+                let thinking_type = if supports_adaptive {
+                    "adaptive"
+                } else {
+                    "enabled"
+                };
 
-            use crate::gateway::models::Thinking;
-            request.thinking = Some(Thinking {
-                thinking_type: thinking_type.to_string(),
-                budget_tokens: 20000,
-            });
+                use crate::gateway::models::Thinking;
+                request.thinking = Some(Thinking {
+                    thinking_type: thinking_type.to_string(),
+                    budget_tokens: 20000,
+                });
+            }
         }
     }
 
@@ -287,22 +298,29 @@ pub async fn build_kiro_payload(
 
     // Thinking 模式：在 system prompt 前注入 thinking 标签
     // Kiro API 通过 system prompt 中的 <thinking_mode> 标签启用思考
+    //
+    // 客户端显式传 thinking.type="disabled" 时必须真的关掉——官方 schema 里
+    // 4.6+ 的 thinking.type 接受 adaptive / disabled，客户端要关就不能又开。
     if let Some(thinking) = &request.thinking {
-        // 客户端显式传了 budget_tokens（如 Claude Code）时映射到 max_thinking_length，
-        // 让「尊重显式配置」名副其实；clamp 到 [1024, 24576]：
-        //   - 下限 1024 是 Anthropic 官方 budget 最小值；
-        //   - 上限 24576 是社区实测的 Kiro 标签值上限（kiro.rs：budget_tokens 限制在 24576 以内）。
-        // 越界值夹紧而非丢弃——客户端限制思考预算的意图必须被保留。
-        let max_thinking_length = thinking.budget_tokens.clamp(1024, 24_576);
-        let thinking_prompt = format!(
-            "<thinking_mode>enabled</thinking_mode>\n<max_thinking_length>{}</max_thinking_length>",
-            max_thinking_length
-        );
-        system_prompt = if system_prompt.is_empty() {
-            thinking_prompt
+        if thinking.is_disabled() {
+            log::info!("[网关] 客户端显式禁用 thinking，跳过 thinking 标签注入");
         } else {
-            format!("{}\n\n{}", thinking_prompt, system_prompt)
-        };
+            // 客户端显式传了 budget_tokens（如 Claude Code）时映射到 max_thinking_length，
+            // 让「尊重显式配置」名副其实；clamp 到 [1024, 24576]：
+            //   - 下限 1024 是 Anthropic 官方 budget 最小值；
+            //   - 上限 24576 是社区实测的 Kiro 标签值上限（kiro.rs：budget_tokens 限制在 24576 以内）。
+            // 越界值夹紧而非丢弃——客户端限制思考预算的意图必须被保留。
+            let max_thinking_length = thinking.budget_tokens.clamp(1024, 24_576);
+            let thinking_prompt = format!(
+                "<thinking_mode>enabled</thinking_mode>\n<max_thinking_length>{}</max_thinking_length>",
+                max_thinking_length
+            );
+            system_prompt = if system_prompt.is_empty() {
+                thinking_prompt
+            } else {
+                format!("{}\n\n{}", thinking_prompt, system_prompt)
+            };
+        }
     }
 
     // 用边界标记包裹整个系统提示（包括 thinking 标签）
@@ -585,13 +603,19 @@ pub async fn build_kiro_payload(
         }),
         // Claude 系：output_config.effort 与 thinking 信封各自独立——
         // 官方明确「effort works whether or not thinking is enabled」，
-        // 所以只发 effort 不发 thinking 时 effort 仍必须下发。
+        // 所以只发 effort 不发 thinking 时 effort 仍必须下发；
+        // 客户端显式 thinking.type="disabled" 时不下发 thinking 信封。
         EffortField::OutputConfig => {
             if !supports_amrf {
                 None
             } else {
                 let mut fields = serde_json::Map::new();
-                if request.thinking.is_some() {
+                if request
+                    .thinking
+                    .as_ref()
+                    .map(|thinking| !thinking.is_disabled())
+                    .unwrap_or(false)
+                {
                     fields.insert(
                         "thinking".to_string(),
                         serde_json::json!({ "type": "adaptive", "display": "summarized" }),

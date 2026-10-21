@@ -835,6 +835,68 @@ async fn anthropic_output_config_effort_reaches_payload() {
     assert_eq!(fields["output_config"]["effort"], "max");
 }
 
+// 客户端显式传 thinking.type="disabled" 时必须真的关掉思考：
+// 既不注入 <thinking_mode> 标签，也不下发 AMRF 的 thinking 信封。
+// （官方 schema 里 4.6+ 的 thinking.type 接受 adaptive / disabled）
+#[tokio::test]
+async fn build_kiro_payload_respects_explicit_thinking_disabled() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "thinking": {
+                    "type": "object",
+                    "properties": {
+                        "type": { "type": "string", "enum": ["adaptive", "disabled"] }
+                    }
+                },
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    let mut request = minimal_request_with_thinking(
+        "claude-sonnet-4.6",
+        Some(crate::gateway::models::Thinking {
+            thinking_type: "disabled".to_string(),
+            budget_tokens: 20000,
+        }),
+    );
+    request.effort = Some("high".to_string());
+
+    let payload = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build");
+
+    // 不得注入 thinking 标签（system_prompt 最终合并进 current_content）
+    let content = &payload.conversation_state.current_message.user_input_message.content;
+    assert!(
+        !content.contains("<thinking_mode>"),
+        "disabled thinking must not inject thinking tag, got: {content}"
+    );
+    assert!(
+        !content.contains("<max_thinking_length>"),
+        "disabled thinking must not inject max_thinking_length, got: {content}"
+    );
+
+    // 不得下发 AMRF thinking 信封
+    if let Some(fields) = &payload.additional_model_request_fields {
+        assert!(
+            fields.get("thinking").is_none(),
+            "disabled thinking must not send thinking envelope, got: {fields}"
+        );
+        // effort 与 thinking 正交，显式禁用思考时 effort 仍应下发
+        assert_eq!(fields["output_config"]["effort"], "high");
+    }
+}
+
 // effort 档位透传：上游模型清单（ListAvailableModels 的
 // additionalModelRequestFieldsSchema）是权威来源——档位按模型枚举 clamp，
 // 且 effort 字段位置（output_config / reasoning）由上游声明决定。
