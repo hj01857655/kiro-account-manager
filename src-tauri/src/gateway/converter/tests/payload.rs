@@ -1008,6 +1008,147 @@ async fn build_kiro_payload_does_not_default_effort_for_gpt_family() {
     );
 }
 
+// auto 是 Kiro 的路由模型（实际服务模型由上游决定，不是固定 SKU）：无论上游
+// 是否给它挂 AMRF schema，都不能下发 output_config.effort——否则可能落到
+// 不支持该档位的模型上。
+#[tokio::test]
+async fn build_kiro_payload_never_sends_amrf_to_auto_model() {
+    let client = Client::new();
+    // 上游给 auto 挂了 schema（含 effort 枚举）——仍必须排除
+    let models = vec![json!({
+        "modelId": "auto",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    let mut request = minimal_request_with_thinking(
+        "auto",
+        Some(crate::gateway::models::Thinking {
+            thinking_type: "adaptive".to_string(),
+            budget_tokens: 20000,
+        }),
+    );
+    request.effort = Some("high".to_string());
+
+    let fields = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields;
+    assert!(
+        fields.is_none(),
+        "auto must never receive AMRF, got: {fields:?}"
+    );
+}
+
+// max_tokens 必须随 AMRF 下发（客户端的输出长度意图要送到上游），并 clamp 到
+// 该模型的输出窗口（上游 tokenLimits.maxOutputTokens），下限 1024。
+#[tokio::test]
+async fn build_kiro_payload_sends_max_tokens_clamped_to_output_window() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "tokenLimits": { "maxInputTokens": 1000000, "maxOutputTokens": 64000 },
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "thinking": {
+                    "type": "object",
+                    "properties": {
+                        "type": { "type": "string", "enum": ["adaptive", "disabled"] }
+                    }
+                },
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "max"] }
+                    }
+                },
+                "max_tokens": { "type": "integer" }
+            }
+        }
+    })];
+
+    async fn build_with(
+        client: &Client,
+        models: &[Value],
+        max_tokens: i32,
+    ) -> serde_json::Value {
+        let mut request = minimal_request_with_thinking(
+            "claude-sonnet-4.6",
+            Some(crate::gateway::models::Thinking {
+                thinking_type: "adaptive".to_string(),
+                budget_tokens: 20000,
+            }),
+        );
+        request.max_tokens = Some(max_tokens);
+        build_kiro_payload(client, &request, None, Some(models))
+            .await
+            .expect("payload should build")
+            .additional_model_request_fields
+            .expect("fields should exist")
+    }
+
+    // 窗口内：原样
+    let fields = build_with(&client, &models, 4096).await;
+    assert_eq!(fields["max_tokens"], 4096);
+
+    // 超窗口：夹到 64000
+    let fields = build_with(&client, &models, 200_000).await;
+    assert_eq!(fields["max_tokens"], 64000);
+
+    // 低于官方最小值：夹到 1024
+    let fields = build_with(&client, &models, 10).await;
+    assert_eq!(fields["max_tokens"], 1024);
+}
+
+// 上游 schema 没声明 max_tokens 字段时不发（上游没声明的字段硬发可能被拒收）。
+#[tokio::test]
+async fn build_kiro_payload_omits_max_tokens_when_schema_does_not_declare_it() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    let mut request = minimal_request_with_thinking(
+        "claude-sonnet-4.6",
+        Some(crate::gateway::models::Thinking {
+            thinking_type: "adaptive".to_string(),
+            budget_tokens: 20000,
+        }),
+    );
+    request.max_tokens = Some(4096);
+
+    let fields = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields
+        .expect("fields should exist");
+    assert!(
+        fields.get("max_tokens").is_none(),
+        "max_tokens must not be sent when schema does not declare it, got: {fields}"
+    );
+}
+
 // effort 档位透传：上游模型清单（ListAvailableModels 的
 // additionalModelRequestFieldsSchema）是权威来源——档位按模型枚举 clamp，
 // 且 effort 字段位置（output_config / reasoning）由上游声明决定。

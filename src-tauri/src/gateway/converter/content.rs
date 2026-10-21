@@ -313,6 +313,35 @@ pub fn extract_tool_results_from_tool_message(message: &NormalizedMessage) -> Ve
     }]
 }
 
+/// 剥离 system prompt 里任意数值的 `<max_thinking_length>N</max_thinking_length>` 标签。
+///
+/// 客户端（Claude Code）可能带任意数值——早期实现只剥离固定的 `200000`，
+/// 其他数值会残留，与 converter 注入的标签形成重复标签。
+fn strip_max_thinking_length_tag(text: &str) -> String {
+    const OPEN: &str = "<max_thinking_length>";
+    const CLOSE: &str = "</max_thinking_length>";
+
+    let mut result = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(OPEN) {
+        result.push_str(&rest[..start]);
+        let after_open = &rest[start + OPEN.len()..];
+        match after_open.find(CLOSE) {
+            Some(end) => {
+                // 跳过整段标签（含闭合标签）
+                rest = &after_open[end + CLOSE.len()..];
+            }
+            None => {
+                // 标签不完整（缺闭合），原样保留剩余部分
+                result.push_str(&rest[start..]);
+                return result;
+            }
+        }
+    }
+    result.push_str(rest);
+    result
+}
+
 /// Clean system prompt: remove Claude Code and Kiro IDE injected content
 pub fn clean_system_prompt(text: &str) -> String {
     let mut result = text.to_string();
@@ -323,9 +352,10 @@ pub fn clean_system_prompt(text: &str) -> String {
         .replace("--- END SYSTEM PROMPT ---", "");
 
     // Remove thinking_mode tags (will be re-injected by converter)
-    result = result
-        .replace("<thinking_mode>enabled</thinking_mode>", "")
-        .replace("<max_thinking_length>200000</max_thinking_length>", "");
+    result = result.replace("<thinking_mode>enabled</thinking_mode>", "");
+    // 剥离任意数值的 max_thinking_length——客户端（Claude Code）可能带任意
+    // 数值，这里按值剥离才不会残留（残留会与注入的标签形成重复标签）。
+    result = strip_max_thinking_length_tag(&result);
 
     // Remove Claude Code backend instructions (injected by prompt filter)
     result = result

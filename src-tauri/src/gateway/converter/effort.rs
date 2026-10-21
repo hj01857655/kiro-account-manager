@@ -118,6 +118,12 @@ pub fn parse_effort_enum(schema: &Value) -> Option<EffortEnum> {
     None
 }
 
+/// 是否是 Kiro 的 auto 路由模型（不是固定 SKU，服务模型由上游决定）。
+pub fn is_auto_model(model_id: &str) -> bool {
+    let model = model_id.trim().to_ascii_lowercase();
+    model == "auto" || model == "default"
+}
+
 /// 从上游模型条目数组中取出模型 ID 列表（用于模型降级判定）。
 pub fn extract_model_ids(models: &[Value]) -> Vec<String> {
     models
@@ -140,6 +146,8 @@ pub struct ModelEffortProfile {
     schemas: std::collections::HashMap<String, Value>,
     /// model_id → effort 枚举
     profiles: std::collections::HashMap<String, EffortEnum>,
+    /// model_id → 输出窗口上限（上游 tokenLimits.maxOutputTokens）
+    output_limits: std::collections::HashMap<String, i64>,
 }
 
 impl ModelEffortProfile {
@@ -147,11 +155,21 @@ impl ModelEffortProfile {
         let mut model_ids = std::collections::HashSet::new();
         let mut schemas = std::collections::HashMap::new();
         let mut profiles = std::collections::HashMap::new();
+        let mut output_limits = std::collections::HashMap::new();
         for model in models {
             let Some(model_id) = model.get("modelId").and_then(Value::as_str) else {
                 continue;
             };
             model_ids.insert(model_id.to_string());
+
+            // 输出窗口上限（上游 tokenLimits.maxOutputTokens）
+            if let Some(limit) = model
+                .get("tokenLimits")
+                .and_then(|limits| limits.get("maxOutputTokens"))
+                .and_then(Value::as_i64)
+            {
+                output_limits.insert(model_id.to_string(), limit);
+            }
 
             let Some(schema) = model.get("additionalModelRequestFieldsSchema") else {
                 continue;
@@ -168,6 +186,7 @@ impl ModelEffortProfile {
             model_ids,
             schemas,
             profiles,
+            output_limits,
         }
     }
 
@@ -177,7 +196,15 @@ impl ModelEffortProfile {
     }
 
     /// 上游是否为该模型声明了 AMRF schema（声明即支持）。
+    ///
+    /// `auto` 例外：它是 Kiro 的路由模型，实际服务模型由上游决定（官方 effort
+    /// 文档：「Auto maintains a high quality bar...」），不是固定 SKU。给 auto
+    /// 下发 `output_config.effort` 存在落到不支持该档位的模型上的风险，
+    /// 因此无论上游是否给它挂 schema，一律排除。
     pub fn supports_amrf(&self, model_id: &str) -> bool {
+        if is_auto_model(model_id) {
+            return false;
+        }
         self.schemas.contains_key(model_id)
     }
 
@@ -191,6 +218,25 @@ impl ModelEffortProfile {
         self.profiles
             .get(model_id)
             .map(|effort| effort.levels.as_slice())
+    }
+
+    /// 该模型的输出窗口上限（上游 tokenLimits.maxOutputTokens）。
+    pub fn output_limit(&self, model_id: &str) -> Option<i64> {
+        self.output_limits.get(model_id).copied()
+    }
+
+    /// 上游 schema 是否声明了 max_tokens 字段。
+    ///
+    /// 用于判断能不能把客户端的输出长度上限放进 AMRF——上游没声明的字段硬发
+    /// 可能被当未知字段拒收（社区 OmniRoute 实测：GPT-5.6 系会拒收 Claude
+    /// 的 output_config/thinking 信封）。
+    pub fn declares_max_tokens(&self, model_id: &str) -> bool {
+        self.schemas
+            .get(model_id)
+            .and_then(|schema| schema.get("properties"))
+            .and_then(Value::as_object)
+            .map(|properties| properties.contains_key("max_tokens"))
+            .unwrap_or(false)
     }
 
     /// 把客户端请求的档位归一化到该模型允许的档位。

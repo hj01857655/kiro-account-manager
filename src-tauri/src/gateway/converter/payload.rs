@@ -625,6 +625,29 @@ pub async fn build_kiro_payload(
         .as_deref()
         .and_then(|effort| resolve_effort_level(effort_profile.as_ref(), &model_id, effort));
 
+    // max_tokens 随 AMRF 下发：客户端设的输出长度上限必须送到上游，否则
+    // 上游按自己的默认窗口生成，客户端的输出意图丢失。clamp 到该模型的输出
+    // 窗口（上游 tokenLimits.maxOutputTokens），下限 1024（官方各模型的
+    // max_tokens 最小值都是 1024）。
+    // 仅在上游 schema 明确声明 max_tokens 字段时才下发——上游没声明的字段
+    // 硬发可能被当未知字段拒收。
+    let max_output_tokens = request.max_tokens.map(|value| {
+        let value = value as i64;
+        let limit = effort_profile
+            .as_ref()
+            .and_then(|profile| profile.output_limit(&model_id));
+        match limit {
+            Some(limit) if limit > 0 => value.clamp(1024, limit),
+            _ => value.max(1024),
+        }
+    });
+    let max_output_tokens = max_output_tokens.filter(|_| {
+        effort_profile
+            .as_ref()
+            .map(|profile| profile.declares_max_tokens(&model_id))
+            .unwrap_or(false)
+    });
+
     let additional_model_request_fields = match field {
         // GPT-5.6 系：只发 reasoning.effort，不带 Claude 信封；
         // effort 独立于 thinking 生效（官方表：GPT-5.6 默认 effort=high）。
@@ -653,6 +676,9 @@ pub async fn build_kiro_payload(
                         "output_config".to_string(),
                         serde_json::json!({ "effort": effort }),
                     );
+                }
+                if let Some(max_tokens) = max_output_tokens {
+                    fields.insert("max_tokens".to_string(), serde_json::json!(max_tokens));
                 }
                 if fields.is_empty() {
                     None
