@@ -62,6 +62,7 @@ use super::{
         ToolCallFunction,
     },
     stream::{self, parse_kiro_event_full, KiroEvent},
+    stop_sequence::{self, StopSequenceMatcher},
     thinking_parser::{SegmentType, ThinkingParser},
     GatewayConfig, GatewayRequestLogEntry, ResponseFormat, ResponsesSessionEntry, RouterState,
     DEFAULT_AGENT_MODE,

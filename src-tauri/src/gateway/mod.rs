@@ -9,6 +9,7 @@ pub mod prompt_filter;
 mod proxy;
 pub mod response_cache;
 mod stream;
+pub(crate) mod stop_sequence;
 mod thinking_parser;
 mod token_cache;
 mod token_estimator;

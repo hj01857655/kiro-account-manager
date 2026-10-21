@@ -986,6 +986,7 @@ pub async fn proxy_handler(
             request.previous_response_id.clone(),
             request.tool_name_map.clone(),
             request.include_usage,
+            request.stop.clone(),
             static_log_context,
         );
     }
@@ -1203,8 +1204,26 @@ pub async fn proxy_handler(
         }
     }
 
+    // stop 序列截断：Kiro 上游无 stop 字段对应物，由网关在响应侧截断
+    // （社区 kirocc 同样 "enforces stop_sequences adapter-side"）。
+    // 只在可见文本上匹配与截断——thinking 块是模型内部推理，
+    // 客户端给的 stop 序列不应在推理内容里生效。
+    let mut stop_sequence_hit: Option<String> = None;
+    if let Some(stops) = request.stop.as_ref().filter(|list| !list.is_empty()) {
+        let visible = stop_sequence::visible_text(&aggregated.text);
+        let (truncated, hit) = stop_sequence::truncate_at_stop_sequence(&visible, stops);
+        if let Some(sequence) = hit {
+            stop_sequence_hit = Some(sequence);
+            aggregated.text = truncated;
+        }
+    }
+
     let response = match format {
-        ResponseFormat::Anthropic => build_anthropic_response(&request.model, &aggregated),
+        ResponseFormat::Anthropic => build_anthropic_response_with_stop(
+            &request.model,
+            &aggregated,
+            stop_sequence_hit.as_deref(),
+        ),
         ResponseFormat::Responses => build_responses_response_with_ids(
             &request.model,
             &aggregated,

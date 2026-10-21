@@ -20,6 +20,11 @@ struct StreamState {
     responses_sequence_number: usize,
     responses_next_output_index: usize,
     responses_tool_output_indexes: HashMap<String, usize>,
+    /// stop 序列匹配器：Kiro 上游无 stop 字段对应物，由网关在响应侧截断。
+    /// 跨 delta 边界匹配（"EN" + "D" 分两次到达也要能命中）。
+    stop_matcher: StopSequenceMatcher,
+    /// 是否因命中 stop 序列而提前终止
+    stopped_by_sequence: bool,
 }
 
 pub fn stream_proxy_response(
@@ -33,6 +38,8 @@ pub fn stream_proxy_response(
     previous_response_id: Option<String>,
     tool_name_map: std::collections::HashMap<String, String>,
     include_usage: bool,
+    // 客户端的 stop 序列：Kiro 上游无对应字段，由网关在响应侧截断。
+    stop_sequences: Option<Vec<String>>,
     log_context: RequestLogContext<'static>,
 ) -> Response {
     let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(2048);
@@ -49,6 +56,7 @@ pub fn stream_proxy_response(
         let mut parser = ThinkingParser::new();
         let mut aggregated = stream::AggregatedKiroResponse::default();
         let mut st = StreamState::default();
+        st.stop_matcher = StopSequenceMatcher::new(stop_sequences.as_deref().unwrap_or(&[]));
         let mut input_tokens = 0i32;
         let mut output_tokens = 0i32;
         let anthropic_id = format!("msg_{}", short_uuid());
@@ -268,8 +276,27 @@ function_call: None,
                                             aggregated.thinking_signature = Some(sig);
                                         }
                                         KiroEvent::Text(text) => {
-                                            aggregated.text.push_str(&text);
-                                            for segment in parser.push_and_parse(&text) {
+                                            // stop 序列截断：Kiro 上游无 stop 字段对应物，
+                                            // 由网关在响应侧截断（社区 kirocc 同样
+                                            // "enforces stop_sequences adapter-side"）。
+                                            // 命中后停止下发后续文本。
+                                            if st.stop_matcher.stopped() {
+                                                continue;
+                                            }
+                                            let visible = stop_sequence::visible_text(&text);
+                                            let Some(emittable) = st.stop_matcher.feed(&visible) else {
+                                                log::info!(
+                                                    "[流式] 命中 stop 序列 {:?}，停止下发后续文本",
+                                                    st.stop_matcher.matched()
+                                                );
+                                                st.stopped_by_sequence = true;
+                                                continue;
+                                            };
+                                            if emittable.is_empty() {
+                                                continue;
+                                            }
+                                            aggregated.text.push_str(&emittable);
+                                            for segment in parser.push_and_parse(&emittable) {
                                                 handle_stream_text(
                                                     &tx,
                                                     format,
@@ -837,6 +864,36 @@ function_call: None,
             }
         }
 
+        // 冲刷 stop 匹配器的待定尾巴：流结束时若没有命中 stop，
+        // 保留的尾部（可能是 stop 前缀但最终没构成 stop）必须下发。
+        if let Some(tail) = st.stop_matcher.flush() {
+            if !tail.is_empty() {
+                aggregated.text.push_str(&tail);
+                for segment in parser.push_and_parse(&tail) {
+                    handle_stream_text(
+                        &tx,
+                        format,
+                        &model,
+                        &anthropic_id,
+                        &response_id,
+                        &completion_id,
+                        created_at,
+                        &segment.content,
+                        segment.segment_type == SegmentType::Thinking,
+                        &mut st.message_started,
+                        &mut st.next_block_index,
+                        &mut st.text_block_index,
+                        &mut st.thinking_block_index,
+                        input_tokens,
+                        output_tokens,
+                        aggregated.cache_read_input_tokens,
+                        aggregated.cache_creation_input_tokens,
+                    )
+                    .await;
+                }
+            }
+        }
+
         for segment in parser.flush() {
             handle_stream_text(
                 &tx,
@@ -1041,8 +1098,18 @@ function_call: None,
                 let finish = json!({
                     "type": "message_delta",
                     "delta": {
-                        "stop_reason": if st.saw_tool_calls { "tool_use" } else { "end_turn" },
-                        "stop_sequence": Value::Null
+                        "stop_reason": if st.stopped_by_sequence {
+                            "stop_sequence"
+                        } else if st.saw_tool_calls {
+                            "tool_use"
+                        } else {
+                            "end_turn"
+                        },
+                        "stop_sequence": if st.stopped_by_sequence {
+                            json!(st.stop_matcher.matched())
+                        } else {
+                            Value::Null
+                        }
                     },
                     "usage": usage
                 });

@@ -149,19 +149,32 @@ pub fn build_anthropic_content_blocks(
 }
 
 pub fn build_anthropic_response(model: &str, aggregated: &stream::AggregatedKiroResponse) -> Value {
+    build_anthropic_response_with_stop(model, aggregated, None)
+}
+
+/// 构建 Anthropic 响应；命中 stop 序列时 stop_reason 为 `stop_sequence`
+/// 并回填命中的 stop_sequence（Anthropic 协议要求）。
+pub fn build_anthropic_response_with_stop(
+    model: &str,
+    aggregated: &stream::AggregatedKiroResponse,
+    stop_sequence: Option<&str>,
+) -> Value {
     let content = build_anthropic_content_blocks(aggregated);
+    let stop_reason = if stop_sequence.is_some() {
+        "stop_sequence".to_string()
+    } else if aggregated.tool_calls.is_empty() {
+        "end_turn".to_string()
+    } else {
+        "tool_use".to_string()
+    };
     serde_json::to_value(AnthropicMessagesResponse {
         id: format!("msg_{}", short_uuid()),
         response_type: "message".to_string(),
         role: "assistant".to_string(),
         content,
         model: model.to_string(),
-        stop_reason: Some(if aggregated.tool_calls.is_empty() {
-            "end_turn".to_string()
-        } else {
-            "tool_use".to_string()
-        }),
-        stop_sequence: None,
+        stop_reason: Some(stop_reason),
+        stop_sequence: stop_sequence.map(str::to_string),
         usage: AnthropicUsage {
             input_tokens: aggregated.input_tokens,
             output_tokens: aggregated.output_tokens,
