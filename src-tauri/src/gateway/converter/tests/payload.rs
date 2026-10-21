@@ -1364,3 +1364,92 @@ async fn build_kiro_payload_clamps_budget_tokens_into_thinking_tag() {
         "budget 100 should clamp to 1024, got: {content}"
     );
 }
+
+// 官方原生 AMRF 的信封形状（官方扩展 `Cbt` / `bui` / `rAu`）：
+// - effort 走 schema 声明的字段路径——`{output_config:{effort}}` 或
+//   `{reasoning:{effort}}`；
+// - thinking 信封恒为 `{thinking:{type}}`，**不带 display**——`display` 是
+//   `/v1/responses` 路径的输入字段（`Tui` 读它映射为 `reasoning.summary`），
+//   原生链路不消费。
+// - 三者全空 → AMRF 整个字段不出现（不是空对象）。
+#[tokio::test]
+async fn build_kiro_payload_amrf_thinking_envelope_matches_official_shape() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "thinking": {
+                    "type": "object",
+                    "properties": {
+                        "type": { "type": "string", "enum": ["adaptive", "disabled"] }
+                    }
+                },
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    let mut request = minimal_request_with_thinking(
+        "claude-sonnet-4.6",
+        Some(crate::gateway::models::Thinking {
+            thinking_type: "adaptive".to_string(),
+            budget_tokens: 20000,
+        }),
+    );
+    request.effort = Some("high".to_string());
+
+    let fields = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields
+        .expect("fields should exist");
+
+    // thinking 信封只含 type
+    assert_eq!(fields["thinking"], json!({ "type": "adaptive" }));
+    assert!(
+        fields["thinking"].get("display").is_none(),
+        "official native AMRF thinking envelope must not carry display, got: {fields}"
+    );
+    // effort 走 output_config 路径
+    assert_eq!(fields["output_config"], json!({ "effort": "high" }));
+}
+
+// AMRF 三个来源全空时整个字段不出现（官方 `Cbt` 的
+// `Object.keys(r).length>0?r:void 0`），不是空对象。
+#[tokio::test]
+async fn build_kiro_payload_omits_amrf_when_nothing_to_send() {
+    let client = Client::new();
+    // 上游声明了 schema 但只支持 thinking，客户端又完全没给 effort
+    // 且没启用 thinking → 没有可下发的字段。
+    let models = vec![json!({
+        "modelId": "claude-sonnet-4.6",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    let request = minimal_request_with_thinking("claude-sonnet-4.6", None);
+    let payload = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build");
+    assert!(
+        payload.additional_model_request_fields.is_none(),
+        "empty AMRF must be omitted entirely, got: {:?}",
+        payload.additional_model_request_fields
+    );
+}

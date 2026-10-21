@@ -666,9 +666,13 @@ pub async fn build_kiro_payload(
             } else {
                 let mut fields = serde_json::Map::new();
                 if thinking_enabled {
+                    // 官方原生 AMRF 的 thinking 信封恒为 `{thinking:{type}}`：
+                    // 官方扩展 `rAu` 只写 type，不写 display——`display` 是
+                    // `/v1/responses` 路径的**输入**字段（`Tui` 读它映射为
+                    // `reasoning.summary`），原生链路不消费它。
                     fields.insert(
                         "thinking".to_string(),
-                        serde_json::json!({ "type": "adaptive", "display": "summarized" }),
+                        serde_json::json!({ "type": "adaptive" }),
                     );
                 }
                 if let Some(effort) = resolved_effort {
