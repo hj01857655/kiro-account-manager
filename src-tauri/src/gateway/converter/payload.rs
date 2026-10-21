@@ -2,6 +2,13 @@
 
 use super::*;
 
+/// thinking 启用但客户端未给 effort 时的默认档位。
+///
+/// 社区做法一致：kirocc v0.4.0 回落 medium，OmniRoute 回落 high。
+/// 取 high——Claude 多数模型的官方默认档就是 high（Opus 5.5 / Haiku 5.5 默认
+/// medium），语义上更接近「不改变客户端可见行为，只保证思考意图送达后端」。
+pub const DEFAULT_THINKING_EFFORT_LEVEL: &str = "high";
+
 pub async fn build_kiro_payload(
     client: &Client,
     request: &NormalizedRequest,
@@ -576,22 +583,47 @@ pub async fn build_kiro_payload(
         .map(|profile| profile.supports_amrf(&model_id))
         .unwrap_or_else(|| supports_additional_model_request_fields(&model_id));
 
-    let requested_effort = request
-        .effort
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-
-    // 档位归一化到该模型允许的枚举（上游声明优先，缺失时官方静态表兜底）
-    let resolved_effort =
-        requested_effort.and_then(|effort| resolve_effort_level(effort_profile.as_ref(), &model_id, effort));
-
     // effort 字段位置：上游声明优先，否则按官方表兜底
     let field = effort_profile
         .as_ref()
         .and_then(|profile| profile.effort_field(&model_id))
         .or_else(|| fallback_effort_field(&model_id))
         .unwrap_or(EffortField::OutputConfig);
+
+    let thinking_enabled = request
+        .thinking
+        .as_ref()
+        .map(|thinking| !thinking.is_disabled())
+        .unwrap_or(false);
+
+    let requested_effort = request
+        .effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+
+    // thinking 已启用但客户端没给 effort 时补一个默认档位，把「我要思考」的意图
+    // 送到后端——否则 adaptive 语义下由模型自行决定是否思考，客户端显式启用
+    // thinking 的诉求可能落空。
+    // 社区做法一致：kirocc v0.4.0 回落 medium，OmniRoute 回落 high。
+    // 这里取 high——Claude 多数模型官方默认档就是 high（Opus 5.5 / Haiku 5.5
+    // 默认 medium），语义上更接近「不改客户端行为，只保证意图送达」。
+    // 只补 Claude 系：GPT-5.6 的 reasoning.effort 默认本来就是 high，官方明确
+    // 「省略 effort ≡ 显式填该模型默认档」，补过去是冗余字段，不如不发。
+    // 最终仍走上游枚举 clamp：模型若不允许该档会被夹到最近的有效档。
+    let requested_effort = match requested_effort {
+        Some(effort) => Some(effort),
+        None if thinking_enabled && field == EffortField::OutputConfig => {
+            Some(DEFAULT_THINKING_EFFORT_LEVEL.to_string())
+        }
+        None => None,
+    };
+
+    // 档位归一化到该模型允许的枚举（上游声明优先，缺失时官方静态表兜底）
+    let resolved_effort = requested_effort
+        .as_deref()
+        .and_then(|effort| resolve_effort_level(effort_profile.as_ref(), &model_id, effort));
 
     let additional_model_request_fields = match field {
         // GPT-5.6 系：只发 reasoning.effort，不带 Claude 信封；
@@ -610,12 +642,7 @@ pub async fn build_kiro_payload(
                 None
             } else {
                 let mut fields = serde_json::Map::new();
-                if request
-                    .thinking
-                    .as_ref()
-                    .map(|thinking| !thinking.is_disabled())
-                    .unwrap_or(false)
-                {
+                if thinking_enabled {
                     fields.insert(
                         "thinking".to_string(),
                         serde_json::json!({ "type": "adaptive", "display": "summarized" }),

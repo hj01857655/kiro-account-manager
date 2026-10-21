@@ -897,6 +897,117 @@ async fn build_kiro_payload_respects_explicit_thinking_disabled() {
     }
 }
 
+// thinking 启用但客户端没给 effort 时补默认档位，把「我要思考」的意图送到后端
+// （社区一致：kirocc 回落 medium、OmniRoute 回落 high；这里取 high）。
+// 没有这层兜底时 adaptive 语义下由模型自行决定是否思考，客户端显式启用
+// thinking 的诉求可能落空。
+#[tokio::test]
+async fn build_kiro_payload_defaults_effort_when_thinking_enabled_without_effort() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "claude-sonnet-5.5",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "thinking": {
+                    "type": "object",
+                    "properties": {
+                        "type": { "type": "string", "enum": ["adaptive", "disabled"] }
+                    }
+                },
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    // thinking 启用 + 无 effort → 补 high
+    let request = minimal_request_with_thinking(
+        "claude-sonnet-5.5",
+        Some(crate::gateway::models::Thinking {
+            thinking_type: "adaptive".to_string(),
+            budget_tokens: 20000,
+        }),
+    );
+    let fields = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields
+        .expect("fields should exist");
+    assert_eq!(fields["output_config"]["effort"], "high");
+    assert_eq!(fields["thinking"]["type"], "adaptive");
+
+    // thinking 被显式禁用 → 不补默认档位（客户端不要思考）
+    // thinking 信封也不下发 → 字段全空 → 整个 AMRF 不发
+    let request = minimal_request_with_thinking(
+        "claude-sonnet-5.5",
+        Some(crate::gateway::models::Thinking {
+            thinking_type: "disabled".to_string(),
+            budget_tokens: 20000,
+        }),
+    );
+    let fields = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields;
+    assert!(
+        fields.is_none(),
+        "disabled thinking must not get a default effort, got: {fields:?}"
+    );
+
+    // 完全没有 thinking → 不补默认档位（非 thinking 请求不受影响）
+    let request = minimal_request_with_thinking("claude-sonnet-5.5", None);
+    let fields = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields;
+    assert!(
+        fields.is_none(),
+        "request without thinking must not get default effort, got: {fields:?}"
+    );
+}
+
+// GPT-5.6 系不补默认 effort：其 reasoning.effort 默认本来就是 high，官方明确
+// 「省略 effort ≡ 显式填该模型默认档」，补过去是冗余字段。
+#[tokio::test]
+async fn build_kiro_payload_does_not_default_effort_for_gpt_family() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "gpt-5.6-sol",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "reasoning": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["none", "low", "medium", "high", "xhigh", "max"] }
+                    }
+                }
+            }
+        }
+    })];
+
+    let request = minimal_request_with_thinking(
+        "gpt-5.6-sol",
+        Some(crate::gateway::models::Thinking {
+            thinking_type: "adaptive".to_string(),
+            budget_tokens: 20000,
+        }),
+    );
+    let fields = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build")
+        .additional_model_request_fields;
+    assert!(
+        fields.is_none(),
+        "GPT family must not get a default effort, got: {fields:?}"
+    );
+}
+
 // effort 档位透传：上游模型清单（ListAvailableModels 的
 // additionalModelRequestFieldsSchema）是权威来源——档位按模型枚举 clamp，
 // 且 effort 字段位置（output_config / reasoning）由上游声明决定。
@@ -1051,7 +1162,8 @@ async fn build_kiro_payload_clamps_effort_to_upstream_declared_levels() {
     let fields = build(&client, "claude-sonnet-5.5", None, Some(&models))
         .await
         .expect("fields should exist");
-    assert!(fields.get("output_config").is_none());
+    // thinking 启用但客户端没给 effort → 补默认档位 high（保证思考意图送达后端）
+    assert_eq!(fields["output_config"]["effort"], "high");
     assert_eq!(fields["thinking"]["type"], "adaptive");
 }
 
