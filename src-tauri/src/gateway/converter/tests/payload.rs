@@ -3,6 +3,290 @@
 use super::*;
 
 #[tokio::test]
+async fn build_kiro_payload_maps_anthropic_document_block_to_kiro_documents() {
+    let doc_b64 = base64::engine::general_purpose::STANDARD.encode(b"%PDF-1.4 fake");
+    let request = NormalizedRequest {
+        model: "claude-sonnet-4-5-20250929".to_string(),
+        messages: vec![
+            NormalizedMessage {
+                role: "user".to_string(),
+                content: Some(json!([
+                    { "type": "text", "text": "分析这两份报告" },
+                    {
+                        "type": "document",
+                        "title": "Q3 报告",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": doc_b64
+                        }
+                    },
+                    {
+                        "type": "document",
+                        "title": "Q3 报告",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": doc_b64
+                        }
+                    }
+                ])),
+                tool_calls: None,
+                tool_call_id: None,
+                metadata: None,
+            },
+        ],
+        stream: false,
+        max_tokens: None,
+        temperature: None,
+        top_p: None,
+        stop: None,
+        tools: None,
+        tool_choice: None,
+        previous_response_id: None,
+        thinking: None,
+        effort: None,
+        include_usage: false,
+        tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
+    };
+
+    let payload = build_kiro_payload(
+        &Client::new(),
+        &request,
+        Some("arn:aws:codewhisperer:::profile/test".to_string()),
+        None,
+    )
+    .await
+    .expect("payload should build");
+
+    let current = payload
+        .conversation_state
+        .current_message
+        .user_input_message
+        .documents
+        .expect("currentMessage should carry documents");
+    // 同名去重：保留首个
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0].name, "Q3 报告");
+    assert_eq!(current[0].format, "pdf");
+    match &current[0].source {
+        crate::gateway::models::DocumentSource::Bytes { bytes } => {
+            assert_eq!(bytes, &doc_b64);
+        }
+        other => panic!("unexpected document source: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn build_kiro_payload_rejects_six_documents_with_official_error() {
+    let doc_b64 = base64::engine::general_purpose::STANDARD.encode(b"%PDF-1.4 fake");
+    let documents: Vec<Value> = (0..6)
+        .map(|i| {
+            json!({
+                "type": "document",
+                "title": format!("doc-{i}"),
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": doc_b64
+                }
+            })
+        })
+        .collect();
+
+    let request = NormalizedRequest {
+        model: "claude-sonnet-4-5-20250929".to_string(),
+        messages: vec![NormalizedMessage {
+            role: "user".to_string(),
+            content: Some(Value::Array(documents)),
+            tool_calls: None,
+            tool_call_id: None,
+            metadata: None,
+        }],
+        stream: false,
+        max_tokens: None,
+        temperature: None,
+        top_p: None,
+        stop: None,
+        tools: None,
+        tool_choice: None,
+        previous_response_id: None,
+        thinking: None,
+        effort: None,
+        include_usage: false,
+        tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
+    };
+
+    let error = build_kiro_payload(
+        &Client::new(),
+        &request,
+        Some("arn:aws:codewhisperer:::profile/test".to_string()),
+        None,
+    )
+    .await
+    .expect_err("six documents must be rejected");
+    assert!(
+        error.contains("Too many documents attached (6). Maximum is 5 per message."),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn build_kiro_payload_keeps_history_documents_and_skips_file_id_documents() {
+    let doc_b64 = base64::engine::general_purpose::STANDARD.encode(b"%PDF-1.4 fake");
+    let request = NormalizedRequest {
+        model: "claude-sonnet-4-5-20250929".to_string(),
+        messages: vec![
+            NormalizedMessage {
+                role: "user".to_string(),
+                content: Some(json!([
+                    { "type": "text", "text": "第一轮，附文档" },
+                    {
+                        "type": "document",
+                        "title": "history.pdf",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": doc_b64
+                        }
+                    }
+                ])),
+                tool_calls: None,
+                tool_call_id: None,
+                metadata: None,
+            },
+            NormalizedMessage {
+                role: "assistant".to_string(),
+                content: Some(json!("已阅读")),
+                tool_calls: None,
+                tool_call_id: None,
+                metadata: None,
+            },
+            NormalizedMessage {
+                role: "user".to_string(),
+                content: Some(json!([
+                    { "type": "text", "text": "继续" },
+                    {
+                        // file_id 形态：官方 DocumentSource 无此通道，应跳过
+                        "type": "file",
+                        "file": { "file_id": "file-abc123", "filename": "ref.pdf" }
+                    }
+                ])),
+                tool_calls: None,
+                tool_call_id: None,
+                metadata: None,
+            },
+        ],
+        stream: false,
+        max_tokens: None,
+        temperature: None,
+        top_p: None,
+        stop: None,
+        tools: None,
+        tool_choice: None,
+        previous_response_id: None,
+        thinking: None,
+        effort: None,
+        include_usage: false,
+        tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
+    };
+
+    let payload = build_kiro_payload(
+        &Client::new(),
+        &request,
+        Some("arn:aws:codewhisperer:::profile/test".to_string()),
+        None,
+    )
+    .await
+    .expect("payload should build");
+
+    let history = payload.conversation_state.history.expect("history should exist");
+    // 序列本就以 user 开头，无占位插入：[0] User(带文档) / [1] Assistant
+    assert_eq!(history.len(), 2);
+    match &history[0] {
+        HistoryItem::User { user_input_message } => {
+            let documents = user_input_message
+                .documents
+                .as_ref()
+                .expect("history user message should carry documents");
+            assert_eq!(documents.len(), 1);
+            assert_eq!(documents[0].name, "history.pdf");
+            assert_eq!(documents[0].format, "pdf");
+        }
+        other => panic!("unexpected history item: {other:?}"),
+    }
+    // file_id 形态跳过后 currentMessage 无文档
+    assert!(payload
+        .conversation_state
+        .current_message
+        .user_input_message
+        .documents
+        .is_none());
+}
+
+#[test]
+fn extract_documents_supports_openai_file_and_input_file_shapes() {
+    let doc_b64 = base64::engine::general_purpose::STANDARD.encode(b"%PDF-1.4 fake");
+    // Chat file 部件（file 对象内嵌）
+    let chat = json!([
+        { "type": "text", "text": "看下这个" },
+        {
+            "type": "file",
+            "file": {
+                "filename": "report.pdf",
+                "file_data": format!("data:application/pdf;base64,{doc_b64}")
+            }
+        }
+    ]);
+    let documents = extract_documents(Some(&chat));
+    assert_eq!(documents.len(), 1);
+    assert_eq!(documents[0].name, "report");
+    assert_eq!(documents[0].format, "pdf");
+    assert!(matches!(
+        documents[0].source,
+        crate::gateway::models::DocumentSource::Bytes { .. }
+    ));
+
+    // Responses input_file item（字段平铺，含 URL 编码文件名）
+    let responses = json!([
+        {
+            "type": "input_file",
+            "filename": "notes.txt",
+            "file_data": format!("data:text/plain;base64,{doc_b64}")
+        }
+    ]);
+    let documents = extract_documents(Some(&responses));
+    assert_eq!(documents.len(), 1);
+    assert_eq!(documents[0].name, "notes");
+    assert_eq!(documents[0].format, "txt");
+
+    // 未声明 mime 的 data URL：靠 filename 扩展名兜底
+    let bare = json!([
+        {
+            "type": "input_file",
+            "filename": "sheet.xlsx",
+            "file_data": format!("data:;base64,{doc_b64}")
+        }
+    ]);
+    let documents = extract_documents(Some(&bare));
+    assert_eq!(documents.len(), 1);
+    assert_eq!(documents[0].format, "xlsx");
+
+    // 未知扩展名/未知 mime：跳过而不是发出去被打回
+    let unknown = json!([
+        {
+            "type": "input_file",
+            "filename": "blob.zzz",
+            "file_data": format!("data:application/x-zzz;base64,{doc_b64}")
+        }
+    ]);
+    assert!(extract_documents(Some(&unknown)).is_empty());
+}
+
+#[tokio::test]
 async fn build_kiro_payload_moves_long_tool_docs_and_tool_results_into_context() {
     let request = NormalizedRequest {
         model: "claude-sonnet-4-5-20250929".to_string(),
