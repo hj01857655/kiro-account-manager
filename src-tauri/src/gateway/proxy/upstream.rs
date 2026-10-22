@@ -1426,6 +1426,10 @@ pub async fn proxy_handler(
 /// 服务端限流窗口上限（毫秒）：防病态值导致重试环长时间挂起
 const RATE_LIMIT_RETRY_AFTER_MAX_MS: u64 = 5 * 60 * 1000;
 
+/// 与 `add_kiro_upstream_headers` 的 `amz-sdk-request` 头同源：
+/// 头里声明的 max 必须等于真实尝试次数上界，否则自我声明失真（G-6）。
+const MAX_RETRIES: u32 = 5;
+
 pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
     upstream: &UpstreamCredentials,
     upstream_payload: &T,
@@ -1455,7 +1459,6 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
             .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
     }
 
-    const MAX_RETRIES: u32 = 5;
     /// 单次重试退避上限（毫秒）。
     ///
     /// 裸指数退避在最后一次尝试会到 16s，五次累计 31s；封顶后最坏约 19s，
@@ -1480,6 +1483,7 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
             true,
             true,
             include_profile_arn,
+            attempt,
         )
         .json(upstream_payload)
         .send()
@@ -1596,6 +1600,9 @@ pub fn add_kiro_upstream_headers(
     include_opt_out: bool,
     include_agent_mode: bool,
     include_profile_arn_header: bool,
+    // 当前尝试序号（1 起）：写进 `amz-sdk-request` 的 attempt，max 取模块级
+    // MAX_RETRIES，与实际重试上界同源（G-6）。非 generate 调用传 1。
+    sdk_attempt: u32,
 ) -> reqwest::RequestBuilder {
     let invocation_id = uuid::Uuid::new_v4().to_string();
     let x_amz_user_agent = build_kiro_x_amz_user_agent(&upstream.machine_id);
@@ -1608,7 +1615,10 @@ pub fn add_kiro_upstream_headers(
         .header(header::USER_AGENT, upstream.user_agent.clone())
         .header("x-amz-user-agent", x_amz_user_agent)
         .header("amz-sdk-invocation-id", invocation_id)
-        .header("amz-sdk-request", "attempt=1; max=3");
+        .header(
+            "amz-sdk-request",
+            format!("attempt={}; max={}", sdk_attempt.max(1), MAX_RETRIES),
+        );
 
     if include_opt_out && upstream.send_opt_out {
         builder = builder.header("x-amzn-codewhisperer-optout", "true");

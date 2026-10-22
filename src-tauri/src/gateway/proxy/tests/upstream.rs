@@ -57,6 +57,7 @@ fn add_kiro_upstream_headers_adds_generate_request_headers() {
         true,
         true,
         false,
+        1,
     )
     .build()
     .expect("request should build");
@@ -82,6 +83,14 @@ fn add_kiro_upstream_headers_adds_generate_request_headers() {
         .expect("x-amz-user-agent header");
     assert!(x_amz_user_agent.starts_with("aws-sdk-js/1.0.39 KiroIDE-"));
     assert!(x_amz_user_agent.ends_with("-machine-123"));
+    // G-6：amz-sdk-request 的 attempt/max 与实际重试上界同源（MAX_RETRIES=5）
+    assert_eq!(
+        request
+            .headers()
+            .get("amz-sdk-request")
+            .and_then(|value| value.to_str().ok()),
+        Some("attempt=1; max=5")
+    );
     assert_eq!(
         request
             .headers()
@@ -137,6 +146,7 @@ fn add_kiro_upstream_headers_adds_profile_arn_for_enterprise_generate() {
         true,
         true,
         include_profile_arn,
+        1,
     )
     .build()
     .expect("request should build");
@@ -175,6 +185,7 @@ fn add_kiro_upstream_headers_keeps_runtime_requests_minimal() {
         false,
         false,
         false,
+        1,
     )
     .build()
     .expect("request should build");
@@ -224,6 +235,7 @@ fn add_kiro_upstream_headers_adds_mcp_profile_arn_header() {
         false,
         false,
         true,
+        1,
     )
     .build()
     .expect("request should build");
@@ -263,6 +275,7 @@ fn add_kiro_upstream_headers_adds_redirect_for_internal_only_for_internal_provid
         true,
         true,
         false,
+        1,
     )
     .build()
     .expect("request should build");
@@ -302,6 +315,7 @@ fn add_kiro_upstream_headers_does_not_add_redirect_for_enterprise_or_builderid()
             true,
             true,
             false,
+            1,
         )
         .build()
         .expect("request should build");
