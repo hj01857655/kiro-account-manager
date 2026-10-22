@@ -415,11 +415,11 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
   const dialogContent = (
     <DialogRoot open={true} onOpenChange={(open) => !open && onClose()}>
       <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
         <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden bg-background rounded-2xl shadow-2xl z-10 animate-in zoom-in-95 duration-200 flex flex-col">
           {/* Sticky Header */}
-          <div className="sticky top-0 bg-background/95 backdrop-blur-sm z-20 border-b border-border">
+          <div className="sticky top-0 bg-background-sm z-20 border-b border-border">
             <DialogHeader icon={Folder} iconColor={accent.text} iconBg={accent.iconBadgeBg}>
               <DialogTitle>{t('editAccount.title')}</DialogTitle>
               <DialogDescription>{getAccountDisplayName(account)}</DialogDescription>
@@ -812,7 +812,7 @@ function EditAccountModal({ account, onClose, onSuccess }: EditAccountModalProps
         </div>
 
         {/* Sticky Footer */}
-        <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm p-4 border-t border-border flex justify-end gap-3 z-20">
+        <div className="sticky bottom-0 bg-background-sm p-4 border-t border-border flex justify-end gap-3 z-20">
           <Button variant="secondary" onClick={onClose}>
             {t('common.cancel')}
           </Button>

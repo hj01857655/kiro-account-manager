@@ -36,6 +36,9 @@ docs/
 # Python
 __pycache__/
 *.pyc
+# 本地探针原型（仅用于实测取证，不随仓库分发；
+# 其中 kiro_probe.py 的结论已整理进 src-tauri/src/gateway/converter/models.rs 注释）
+python-prototype/
 
 # Environment variables
 .env
@@ -52,6 +55,8 @@ src-tauri/clippy_warnings.txt
 .tmp/
 
 .breezell/
+.atomcode/
+.codegraph/
 
 vite.config.js.timestamp-*
 src-tauri/debug_responses/
@@ -60,7 +65,7 @@ src-tauri/debug_responses/
 MEMORY.md
 
 # Codegraph index (local tool artifact)
-.codegraph/
+
 
 # Rust target directories (including custom profiles)
 src-tauri/target-*

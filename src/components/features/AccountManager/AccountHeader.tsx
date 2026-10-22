@@ -145,7 +145,7 @@ function AccountHeader({
   const isBatchMode = selectedCount > 0
 
   return (
-    <div className="border-b border-border bg-card/30 backdrop-blur-sm px-5 py-3">
+    <div className="border-b border-border bg-card px-5 py-3">
       <div className="flex items-center justify-between gap-3">
         {/* 左侧：标题 / 选中提示 */}
         <div className="flex items-center gap-2.5 min-w-0">

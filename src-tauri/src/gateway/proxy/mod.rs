@@ -54,7 +54,6 @@ use super::{
         build_kiro_payload, extract_model_ids, get_available_models, normalize_anthropic_request,
         normalize_openai_chat_payload, normalize_openai_responses_request,
     },
-    effective_client_api_keys,
     eventstream::decode_message,
     models::{
         AnthropicContentBlock, AnthropicMessagesRequest, AnthropicMessagesResponse, AnthropicUsage,

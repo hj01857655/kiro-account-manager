@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { sessionApi } from '@/api/sessionApi'
 import { SessionSummary, IdeSession } from '@/types/session'
 import { Card } from '@/components/ui/card'
@@ -14,7 +14,9 @@ import {
   Download,
   MessageSquare,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  RefreshCw,
+  X
 } from 'lucide-react'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
@@ -37,6 +39,7 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
   const [workspaceSessions, setWorkspaceSessions] = useState<Map<string, SessionSummary[]>>(new Map())
   const [selectedSession, setSelectedSession] = useState<IdeSession | null>(null)
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedWorkspaceHashes, setSelectedWorkspaceHashes] = useState<Set<string>>(new Set())
 
@@ -72,6 +75,19 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
     } catch (error) {
       console.error('Failed to load sessions:', error)
       showError(t('sessions.loadSessionListFailed', { error }))
+    }
+  }
+
+  /// 刷新：工作区列表与已展开的会话都重拉。
+  /// 后端摘要按 (大小, 修改时间) 缓存，未变的文件不会重复解析，所以全量重拉代价很小。
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await loadWorkspaces()
+      const expanded = Array.from(expandedWorkspaces)
+      await Promise.all(expanded.map(loadSessionsForWorkspace))
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -302,11 +318,24 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
     }
   }
 
-  const filteredSessions = searchQuery
-    ? Array.from(workspaceSessions.values())
-      .flat()
-      .filter(session => session.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    : []
+  // 搜索匹配多个字段，与 magpie 的 shown() 一致：标题、路径、id、模型名。
+  // 标题命中优先，其余次之，避免「搜路径却把标题像的排前面」。
+  const filteredSessions = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase()
+    if (!needle) return []
+    const all = Array.from(workspaceSessions.values()).flat()
+    const titleHits: SessionSummary[] = []
+    const otherHits: SessionSummary[] = []
+    for (const session of all) {
+      if (session.title.toLowerCase().includes(needle)) titleHits.push(session)
+      else if (
+        session.workspaceDirectory.toLowerCase().includes(needle) ||
+        session.sessionId.toLowerCase().includes(needle)
+      )
+        otherHits.push(session)
+    }
+    return [...titleHits, ...otherHits]
+  }, [searchQuery, workspaceSessions])
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`
@@ -344,21 +373,33 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 overflow-hidden p-4 gap-4">
         {/* Left Sidebar - Workspaces with expandable sessions */}
-        <div className="w-80 shrink-0 overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-sm backdrop-blur-xl flex flex-col">
+        <div className="w-80 shrink-0 overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-sm flex flex-col">
           <div className="border-b border-border/70 bg-muted/20 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">{t('sessions.workspacesAndSessions')}</h2>
-              {selectedWorkspaceHashes.size > 0 && (
+              <div className="flex items-center gap-1">
                 <Button
-                  variant="destructive"
+                  variant="ghost"
                   size="sm"
-                  className="h-7 rounded-full px-3 text-[11px]"
-                  onClick={handleBatchDeleteWorkspaces}
+                  className="h-7 rounded-full px-2 text-[11px] hover:bg-primary/10 hover:text-primary"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  title={t('sessions.refresh')}
                 >
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  {t('sessions.deleteCount', { count: selectedWorkspaceHashes.size })}
+                  <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
                 </Button>
-              )}
+                {selectedWorkspaceHashes.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-7 rounded-full px-3 text-[11px]"
+                    onClick={handleBatchDeleteWorkspaces}
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    {t('sessions.deleteCount', { count: selectedWorkspaceHashes.size })}
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="flex items-center justify-between rounded-xl bg-background/70 px-3 py-2 text-[11px] text-muted-foreground ring-1 ring-border/50">
               <span>{t('sessions.workspaceCount', { count: workspaces.length })}</span>
@@ -380,8 +421,26 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
                 placeholder={t('sessions.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 rounded-xl border-border/70 bg-background/80 pl-8 text-xs shadow-inner focus-visible:ring-primary/30"
+                onKeyDown={(e) => {
+                  // Esc 清空搜索，回到工作区树（同 magpie）
+                  if (e.key === 'Escape' && searchQuery) {
+                    e.stopPropagation()
+                    setSearchQuery('')
+                  }
+                }}
+                className="h-9 rounded-xl border-border/70 bg-background/80 pl-8 pr-8 text-xs shadow-inner focus-visible:ring-primary/30"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                  aria-label={t('sessions.clearSearch')}
+                  title={t('sessions.clearSearch')}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -390,6 +449,9 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
               {/* 搜索模式：显示所有匹配的会话 */}
               {searchQuery && (
                 <div className="space-y-2">
+                  <div className="px-1 text-[11px] text-muted-foreground" role="status">
+                    {t('sessions.searchResultCount', { count: filteredSessions.length })}
+                  </div>
                   {filteredSessions.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground">
                       {t('sessions.noMatch')}
@@ -592,7 +654,7 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
         </div>
 
         {/* Right Panel - Session Detail */}
-        <div className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/70 bg-card/70 shadow-sm backdrop-blur-xl flex flex-col">
+        <div className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/70 bg-card/70 shadow-sm flex flex-col">
           {loading && selectedSession === null ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/80 px-5 py-4 shadow-sm">
@@ -738,21 +800,130 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
 }
 
 
-// ===== Tab Wrapper =====
+// ===== Source Switcher =====
 import { lazy, Suspense } from 'react'
-import { Terminal, MonitorSmartphone } from 'lucide-react'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { createPortal } from 'react-dom'
+import { Terminal, MonitorSmartphone, ChevronDown as ChevronDownIcon, Check } from 'lucide-react'
 
 const CliSessionManager = lazy(() => import('../CliSessionManager/index'))
 
+/// 会话来源。目前只有 Kiro IDE 与 Kiro CLI；以后新增来源（如网关记录的会话）
+/// 只需往这里加一项，下拉与页头都会自动跟上。
+type SessionSource = {
+  id: string
+  label: string
+  icon: typeof MonitorSmartphone
+}
+
+const SESSION_SOURCES: SessionSource[] = [
+  { id: 'ide', label: 'Kiro IDE', icon: MonitorSmartphone },
+  { id: 'cli', label: 'Kiro CLI', icon: Terminal },
+]
+
+/// 来源下拉：取代原先并列的两个 tab。
+/// 用 Portal 渲染到 body，避开父容器 overflow-hidden 的裁剪（同 FilterDropdown）。
+function SourcePicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const current = SESSION_SOURCES.find((s) => s.id === value) ?? SESSION_SOURCES[0]
+  const CurrentIcon = current.icon
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          setRect(e.currentTarget.getBoundingClientRect())
+          setOpen((prev) => !prev)
+        }}
+        className="glass-card inline-flex h-9 items-center gap-2 rounded-lg border border-border/70 px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+      >
+        <CurrentIcon size={13} className="text-primary" />
+        <span>{current.label}</span>
+        <ChevronDownIcon size={13} className={`text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && rect &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="menu"
+            className="fixed z-[9999] min-w-[168px] overflow-hidden rounded-xl border border-border glass-card shadow-xl"
+            style={{
+              top: `${rect.bottom + 6}px`,
+              left: `${rect.left}px`,
+              animation: 'slideDown 0.15s ease-out',
+            }}
+          >
+            <div className="p-1">
+              {SESSION_SOURCES.map((source) => {
+                const Icon = source.icon
+                const active = source.id === value
+                return (
+                  <button
+                    key={source.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    onClick={() => {
+                      onChange(source.id)
+                      setOpen(false)
+                    }}
+                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
+                      active ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted/60'
+                    }`}
+                  >
+                    <Icon size={13} />
+                    <span className="flex-1">{source.label}</span>
+                    {active && <Check size={12} />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
+  )
+}
+
 export default function SessionManager() {
   const { t } = useApp()
-  const [tab, setTab] = useState('ide')
+  const [source, setSource] = useState('ide')
   const [counts, setCounts] = useState<SessionCounts>({ workspaces: 0, loadedSessions: 0, selected: 0 })
   return (
-    <Tabs value={tab} onValueChange={setTab} className="flex h-full flex-col overflow-hidden bg-gradient-to-br from-background via-background to-muted/40">
-      {/* 页头放在 Tabs 外层：切到 Kiro CLI 标签时标题不再消失 */}
-      <div className="shrink-0 border-b border-border/70 bg-card/70 px-6 py-4 shadow-sm backdrop-blur-xl">
+    <div className="flex h-full flex-col overflow-hidden bg-gradient-to-br from-background via-background to-muted/40">
+      {/* 页头常驻：切换来源时标题与图标不消失 */}
+      <div className="shrink-0 border-b border-border/70 bg-card/70 px-6 py-4 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/70 shadow-lg shadow-primary/20 ring-1 ring-primary/25">
@@ -765,8 +936,8 @@ export default function SessionManager() {
             </div>
           </div>
 
-          {/* 统计口径来自 IDE 标签，切到 CLI 时不展示，避免误导 */}
-          {tab === 'ide' && (
+          {/* 统计口径来自 IDE 来源，切到 CLI 时不展示，避免误导 */}
+          {source === 'ide' && (
             <div className="hidden items-center gap-2 md:flex">
               <Badge variant="secondary" className="h-8 rounded-full px-3 font-normal">
                 {t('sessions.workspaceCount', { count: counts.workspaces })}
@@ -784,28 +955,26 @@ export default function SessionManager() {
         </div>
       </div>
 
-      {/* 标签栏与页头左对齐（此前贴在页面最左侧，比页头内容少 24px 缩进） */}
+      {/* 来源选择与页头左对齐 */}
       <div className="shrink-0 px-6 pt-3">
-        <TabsList className="glass-card flex h-9 w-fit justify-start rounded-lg border-none p-0.5 no-scrollbar">
-          <TabsTrigger value="ide" className="gap-1.5 px-3 h-8 shrink-0 text-xs font-medium data-[state=active]:shadow-sm">
-            <MonitorSmartphone size={13} />
-            Kiro IDE
-          </TabsTrigger>
-          <TabsTrigger value="cli" className="gap-1.5 px-3 h-8 shrink-0 text-xs font-medium data-[state=active]:shadow-sm">
-            <Terminal size={13} />
-            Kiro CLI
-          </TabsTrigger>
-        </TabsList>
+        <SourcePicker value={source} onChange={setSource} />
       </div>
 
-      <TabsContent value="ide" className="flex-1 min-h-0 mt-0">
-        <IdeSessionManager onCountsChange={setCounts} />
-      </TabsContent>
-      <TabsContent value="cli" className="flex-1 min-h-0 mt-0">
-        <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground text-sm">{t('sessions.loadingCli')}</div>}>
-          <CliSessionManager />
-        </Suspense>
-      </TabsContent>
-    </Tabs>
+      <div className="flex-1 min-h-0">
+        {source === 'ide' ? (
+          <IdeSessionManager onCountsChange={setCounts} />
+        ) : (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                {t('sessions.loadingCli')}
+              </div>
+            }
+          >
+            <CliSessionManager />
+          </Suspense>
+        )}
+      </div>
+    </div>
   )
 }

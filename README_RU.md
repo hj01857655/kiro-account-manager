@@ -56,8 +56,8 @@ Kiro Account Manager - это десктопное приложение на б�
 | 🪟 **Windows** | ARM64 | MSI установщик | [KiroAccountManager_1.9.2_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64_zh-CN.msi) |
 | 🍎 **macOS** | x64 / Intel | DMG образ | [KiroAccountManager_1.9.2_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_x64.dmg) |
 | 🍎 **macOS** | x64 / Intel | App архив | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_x64.app.tar.gz) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4) | DMG образ | [KiroAccountManager_1.9.2_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_aarch64.dmg) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4) | App архив | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_aarch64.app.tar.gz) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG образ | [KiroAccountManager_1.9.2_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_aarch64.dmg) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App архив | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_aarch64.app.tar.gz) |
 | 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.2_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.AppImage) |
 | 🐧 **Linux** | x86_64 | DEB пакет | [KiroAccountManager_1.9.2_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.deb) |
 | 🐧 **Linux** | x86_64 | RPM пакет | [KiroAccountManager-1.9.2-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager-1.9.2-1.x86_64.rpm) |
@@ -74,7 +74,7 @@ Kiro Account Manager - это десктопное приложение на б�
 
 **Инструкции по установке**:
 - **Windows**: дважды щёлкните файл `.msi` для установки
-- **macOS**: откройте `.dmg`, перетащите в Applications, разрешите в "Безопасность и конфиденциальность" при первом запуске
+- **macOS**: откройте `.dmg` и перетащите в Applications. Приложение не подписано сертификатом Apple, поэтому при первом запуске macOS может сообщить, что оно «повреждено» или «от неизвестного разработчика». Откройте **Системные настройки → Конфиденциальность и безопасность**, найдите соответствующее сообщение внизу и нажмите **«Открыть всё равно»**; либо выполните `xattr -cr /Applications/KiroAccountManager.app` и снова откройте приложение. Для Mac на Apple Silicon (серия M) используйте пакет `aarch64`, для Mac на Intel — `x64`"Безопасность и конфиденциальность" при первом запуске
 - **Linux AppImage**: запустите напрямую после `chmod +x`
 - **Linux DEB**: установите с помощью `sudo dpkg -i`
 - **Linux RPM**: установите с помощью `sudo rpm -i` или пакетного менеджера вашего дистрибутива
@@ -93,6 +93,7 @@ Kiro Account Manager - это десктопное приложение на б�
 - **Исправлено**: `getUsageLimits` больше не передаёт `profileArn` (у enterprise давало 400); Enterprise и обычные аккаунты на одном пути, region с приоритетом аккаунта и fallback `us-east-1` / `eu-central-1`
 - **Усилено**: защита от injection в имени ветки Skill, подтверждение elevation restart, восстановление после poison lock deep link OAuth
 - **Шлюз**: серии GPT-5.6 и Claude Sonnet 5; оценка OpenAI-токенов через tiktoken-rs (`o200k_base`); удалены устаревшие алиасы Claude 3
+- **Шлюз**: удалено управление API Key — ключ клиента фиксированный `kiro` (принимаются `Authorization: Bearer kiro` и `x-api-key: kiro`); старые поля ключей в конфигурации читаются только для совместимости
 - **Совместимость**: поддержка локального формата конфигурации Kiro IDE 1.0 — Hooks поддерживают новый формат `.json` (один файл может содержать несколько hook; поля изменены на `trigger` / `action`) и пользовательские глобальные hooks (`~/.kiro/hooks`); Custom Agents поддерживают новый JSON-формат (вместо Markdown front-matter). Старые файлы `.kiro.hook` и `.md` остаются читаемыми и редактируемыми
 - **Совместимость**: управление правами перенесено с устаревших Trusted Commands на модель возможностей `permissions.yaml` Kiro IDE 1.0 — добавлен глобальный редактор правил доступа (capability / effect / match / exclude / policies); бэкенд напрямую читает/пишет `~/.kiro/settings/permissions.yaml`; устаревшая конфигурация `kiroAgent.*` мигрируется однократно при первом чтении, весь мёртвый код Trusted Commands удалён
 
@@ -264,11 +265,20 @@ Kiro Account Manager - это десктопное приложение на б�
 - Совместим с Anthropic `/v1/messages`, OpenAI `/v1/responses`, `/v1/chat/completions`
 - Модели: Claude 4.x / Sonnet 5, серии GPT-5.6 (см. `/v1/models` шлюза и список в UI)
 - Оценка токенов OpenAI-совместимых запросов через tiktoken (`o200k_base`)
-- Интеллектуальное понижение модели, балансировка нагрузки нескольких аккаунтов, аутентификация API Key
+- Интеллектуальное понижение модели, балансировка нагрузки нескольких аккаунтов, аутентификация по фиксированному ключу (`kiro`)
 - Проброс исходного формата JSON для не-200 ответов
 - Проброс ответов об ошибках Anthropic 429
 - Оптимизация структуры тела ответа Responses
 - Упорядочивание результатов инструментов и улучшение отслеживания StreamInfo
+
+**Подключение клиентов (фиксированный ключ `kiro`)**: шлюз по умолчанию слушает `http://127.0.0.1:8765` (актуальный адрес см. на странице шлюза). Ключ клиента фиксированный — `kiro`, создание и управление ключами в приложении недоступно:
+
+```text
+Base URL: http://127.0.0.1:8765
+API Key:  kiro
+```
+
+Принимаются оба стиля заголовка: `Authorization: Bearer kiro` (стиль OpenAI) и `x-api-key: kiro` (стиль Anthropic). Быстрые конфигурации Claude Code / Codex, формируемые на странице шлюза, можно скопировать напрямую.
 
 ---
 

@@ -1,6 +1,7 @@
 //! 上游凭据解析：单账号 / 账号池取号、token 刷新、失败账号停用与用量阈值判断。
 
 use super::*;
+use crate::state::SharedAccountStore;
 
 #[derive(Debug, Clone)]
 pub struct UpstreamCredentials {
@@ -26,6 +27,16 @@ pub struct UpstreamCredentials {
     pub(super) http: Client,
 }
 
+/// 取账号状态共享副本的锁。
+///
+/// 与 `AppState.store` 是同一份 `Arc<Mutex<..>>`，因此这里读到的是
+/// Tauri 命令与后台任务正在用的那份，而不是重新读盘的独立快照。
+/// poison 时取 `into_inner()`：锁内数据可能不完整，但比整条请求失败更可用，
+/// 这与 `auto_switch.rs` 的处理一致。
+pub(crate) fn lock_shared_store(store: &SharedAccountStore) -> std::sync::MutexGuard<'_, AccountStore> {
+    store.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 pub fn ip_matches_allowlist(ip: IpAddr, allowlist: &[String]) -> bool {
     allowlist.iter().any(|entry| {
         let entry = entry.trim();
@@ -40,12 +51,22 @@ pub fn ip_matches_allowlist(ip: IpAddr, allowlist: &[String]) -> bool {
     })
 }
 
-pub fn verify_client_auth(headers: &HeaderMap, config: &GatewayConfig) -> Result<(), String> {
-    let expected_keys = effective_client_api_keys(config);
-    if expected_keys.is_empty() {
-        return Err("客户端 API Key 未配置".to_string());
+/// 校验客户端 Key。密钥固定为 `kiro`（见 `CLIENT_API_KEY`），
+/// `Authorization: Bearer kiro` 与 `x-api-key: kiro` 均可。
+pub fn verify_client_auth(
+    headers: &HeaderMap,
+    _config: &GatewayConfig,
+) -> Result<(), String> {
+    let presented = extract_presented_key(headers);
+    if presented.as_deref() == Some(crate::gateway::CLIENT_API_KEY) {
+        Ok(())
+    } else {
+        Err("客户端 API Key 无效".to_string())
     }
+}
 
+/// 从请求头取出客户端呈交的 Key 字面量（Bearer 或 x-api-key）。
+fn extract_presented_key(headers: &HeaderMap) -> Option<String> {
     let authorization = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
@@ -55,15 +76,23 @@ pub fn verify_client_auth(headers: &HeaderMap, config: &GatewayConfig) -> Result
         .filter(|value| !value.is_empty());
     let api_key = headers
         .get("x-api-key")
-        .and_then(|value| value.to_str().ok());
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
-    if expected_keys.iter().any(|expected| {
-        authorization == Some(expected.as_str()) || api_key == Some(expected.as_str())
-    }) {
-        Ok(())
-    } else {
-        Err("客户端 API Key 无效".to_string())
-    }
+    authorization.or(api_key).map(str::to_string)
+}
+
+/// 客户端发来的 User-Agent。
+///
+/// 与发给 Kiro 的上游 UA 是两回事：那个由 machineId 拼出，看不出客户端是谁。
+pub fn extract_client_user_agent(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 /// 从请求头读取可选的指定账号 ID（API Playground / 客户端调试用）
@@ -85,7 +114,7 @@ pub async fn resolve_upstream_credentials(
         "single" | "group" | "pool" => {
             resolve_managed_account_credentials(config, state, preferred_account_id).await
         }
-        "local" => Err("2API不再支持 local 模式，请改用 single/group/pool 账号池模式".to_string()),
+        "local" => Err("kiro2api 不再支持 local 模式，请改用 single/group/pool 账号池模式".to_string()),
         _ => Err("accountMode 必须是 single/group/pool".to_string()),
     }
 }
@@ -95,109 +124,117 @@ pub async fn resolve_managed_account_credentials(
     state: &RouterState,
     preferred_account_id: Option<&str>,
 ) -> Result<UpstreamCredentials, String> {
-    let mut store = AccountStore::new();
-    store.reload();
+    // 共享副本即唯一真相：不再 AccountStore::new() + reload()，
+    // 否则拿到的是与 Tauri 命令互不知情的独立快照，后写覆盖前写。
+    //
+    // 注意：下面取出的 `accounts` 是克隆出来的独立 Vec，因此整段读完就必须放锁。
+    // `std::sync::MutexGuard` 不能跨 await（本函数后续要 await 选号与刷新 token），
+    // 否则整个请求路径会被串行化甚至死锁。
+    let mut accounts = {
+        let mut store = lock_shared_store(&state.store);
 
-    // 自愈机制：检查是否所有账号都因 "TooManyFailures" 被禁用
-    let all_disabled_by_failures = match config.account_mode.as_str() {
-        "single" => store
-            .accounts
-            .iter()
-            .filter(|account| config.account_id.as_deref() == Some(account.id.as_str()))
-            .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures")),
-        "group" => {
-            let group_accounts: Vec<_> = store
+        // 自愈机制：检查是否所有账号都因 "TooManyFailures" 被禁用
+        let all_disabled_by_failures = match config.account_mode.as_str() {
+            "single" => store
                 .accounts
                 .iter()
-                .filter(|account| config.group_id.as_deref() == account.group_id.as_deref())
-                .collect();
-
-            !group_accounts.is_empty()
-                && group_accounts
+                .filter(|account| config.account_id.as_deref() == Some(account.id.as_str()))
+                .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures")),
+            "group" => {
+                let group_accounts: Vec<_> = store
+                    .accounts
                     .iter()
-                    .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures"))
-        }
-        "pool" => {
-            let pool_accounts: Vec<_> = store
-                .accounts
-                .iter()
-                .filter(|account| config.pool_account_ids.contains(&account.id))
-                .collect();
+                    .filter(|account| config.group_id.as_deref() == account.group_id.as_deref())
+                    .collect();
 
-            !pool_accounts.is_empty()
-                && pool_accounts
-                    .iter()
-                    .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures"))
-        }
-        _ => false,
-    };
-
-    if all_disabled_by_failures {
-        for account in store.accounts.iter_mut() {
-            if account.disabled_reason.as_deref() == Some("TooManyFailures") {
-                account.failure_count = 0;
-                account.status = "active".to_string();
-                account.disabled_reason = None;
+                !group_accounts.is_empty()
+                    && group_accounts
+                        .iter()
+                        .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures"))
             }
-        }
-        let _ = store.save_to_file();
-    }
+            "pool" => {
+                let pool_accounts: Vec<_> = store
+                    .accounts
+                    .iter()
+                    .filter(|account| config.pool_account_ids.contains(&account.id))
+                    .collect();
 
-    let mut accounts = match config.account_mode.as_str() {
-        "single" => store
-            .accounts
-            .iter()
-            .filter(|account| config.account_id.as_deref() == Some(account.id.as_str()))
-            .cloned()
-            .collect::<Vec<_>>(),
-        "group" => store
-            .accounts
-            .iter()
-            .filter(|account| {
-                config.group_id.as_deref() == account.group_id.as_deref()
-                    && account.is_available()
-                    && account.enabled
-            })
-            .cloned()
-            .collect::<Vec<_>>(),
-        "pool" => store
-            .accounts
-            .iter()
-            .filter(|account| {
-                config.pool_account_ids.contains(&account.id)
-                    && account.is_available()
-                    && account.enabled
-            })
-            .cloned()
-            .collect::<Vec<_>>(),
-        _ => Vec::new(),
+                !pool_accounts.is_empty()
+                    && pool_accounts
+                        .iter()
+                        .all(|account| account.disabled_reason.as_deref() == Some("TooManyFailures"))
+            }
+            _ => false,
+        };
+
+        if all_disabled_by_failures {
+            for account in store.accounts.iter_mut() {
+                if account.disabled_reason.as_deref() == Some("TooManyFailures") {
+                    account.failure_count = 0;
+                    account.status = "active".to_string();
+                    account.disabled_reason = None;
+                }
+            }
+            let _ = store.save_to_file();
+        }
+
+        // 取出的 list 是克隆出来的独立 Vec，块结束即放锁。
+        match config.account_mode.as_str() {
+            "single" => store
+                .accounts
+                .iter()
+                .filter(|account| config.account_id.as_deref() == Some(account.id.as_str()))
+                .cloned()
+                .collect::<Vec<_>>(),
+            "group" => store
+                .accounts
+                .iter()
+                .filter(|account| {
+                    config.group_id.as_deref() == account.group_id.as_deref()
+                        && account.is_available()
+                        && account.enabled
+                })
+                .cloned()
+                .collect::<Vec<_>>(),
+            "pool" => store
+                .accounts
+                .iter()
+                .filter(|account| {
+                    config.pool_account_ids.contains(&account.id)
+                        && account.is_available()
+                        && account.enabled
+                })
+                .cloned()
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        }
     };
 
     // x-account-id：强制使用指定账号，且必须在当前路由可用集合内
     if let Some(preferred) = preferred_account_id {
         accounts.retain(|account| account.id == preferred);
         if accounts.is_empty() {
-            return Err(format!(
-                "__400__指定账号 {} 不在当前2API路由可用账号中，请检查账号模式/分组/账号池配置",
-                preferred
-            ));
+            return Err(GatewayError::PreferredAccountUnavailable {
+                account_id: preferred.to_string(),
+            }
+            .to_string());
         }
         log::info!("[网关] 使用指定账号: {}", preferred);
     }
 
     if accounts.is_empty() {
-        return Err("__402__未找到符合2API配置的可用账号".to_string());
+        return Err(GatewayError::NoAvailableAccount.to_string());
     }
 
     // 使用 LoadBalancer 选择账号
     let selected_account = state.load_balancer.select_account(&accounts).await;
 
     let Some(account) = selected_account else {
-        return Err("__402__LoadBalancer 未能选择可用账号".to_string());
+        return Err(GatewayError::BalancerNoSelection.to_string());
     };
 
-    // 增加连接计数
-    state.load_balancer.increment_connections(&account.id).await;
+    // 连接计数不在这里加减：这里是取凭据，函数返回即结束，
+    // 计数覆盖不到请求周期。由 proxy_handler 持 ConnectionGuard 全程持有。
     let request_start = Instant::now();
 
     // 检查 token 是否真正过期（不再提前刷新，避免和定时器/IDE 冲突导致 429）
@@ -211,8 +248,6 @@ pub async fn resolve_managed_account_credentials(
     if !need_refresh {
         if let Some(access_token) = &account.access_token {
             if !access_token.is_empty() {
-                // token 未过期，不需要 refresh，释放连接计数
-                state.load_balancer.decrement_connections(&account.id).await;
                 let ctx = crate::commands::common::resolve_kiro_call_context(
                     &account,
                     &state.config.region,
@@ -221,9 +256,8 @@ pub async fn resolve_managed_account_credentials(
                 let http = match build_streaming_http_client_for_account(&account) {
                     Ok(http) => http,
                     Err(error) => {
-                        state.load_balancer.decrement_connections(&account.id).await;
                         return Err(format!(
-                            "创建账号 {} 的2API HTTP 客户端失败: {}",
+                            "创建账号 {} 的 kiro2api HTTP 客户端失败: {}",
                             account.label,
                             sanitize_error(&error)
                         ));
@@ -243,7 +277,7 @@ pub async fn resolve_managed_account_credentials(
                     send_opt_out: should_send_codewhisperer_optout(),
                     http,
                 };
-                return ensure_enterprise_profile_arn(&account, creds).await;
+                return ensure_enterprise_profile_arn(&state.store, &account, creds).await;
             }
         }
     }
@@ -267,6 +301,7 @@ pub async fn resolve_managed_account_credentials(
             let should_increment_failure = is_banned || is_auth_error;
 
             persist_account_refresh(
+                &state.store,
                 &account,
                 &refresh,
                 usage_data.clone(),
@@ -275,11 +310,8 @@ pub async fn resolve_managed_account_credentials(
                 should_increment_failure,
             );
             if let Some(ref arn) = resolved_profile_arn {
-                persist_account_profile_arn(&account.id, arn);
+                persist_account_profile_arn(&state.store, &account.id, arn);
             }
-
-            // 减少连接计数
-            state.load_balancer.decrement_connections(&account.id).await;
 
             if is_banned || is_auth_error {
                 // 记录失败
@@ -291,14 +323,14 @@ pub async fn resolve_managed_account_credentials(
                 if usage_exceeds_threshold(usage_data, config.threshold) {
                     // 配额超阈值，直接禁用账号
                     state.load_balancer.record_failure(&account.id).await;
-                    disable_account_by_id(&account.id, "配额已满");
+                    disable_account_by_id(&state.store, &account.id, "配额已满");
                     return Err(format!("账号 {} 配额已满，已自动禁用", account.label));
                 } else {
                     // 配额已恢复，检查是否需要自动启用账号
                     // 仅当账号因配额满被自动禁用时才自动启用
                     if !account.enabled && account.disabled_reason.as_deref() == Some("配额已满")
                     {
-                        enable_account_by_id(&account.id);
+                        enable_account_by_id(&state.store, &account.id);
                     }
                 }
             }
@@ -315,11 +347,9 @@ pub async fn resolve_managed_account_credentials(
                 account_for_creds.profile_arn = Some(arn);
             }
             let creds = build_upstream_credentials_from_refresh(config, &account_for_creds, refresh)?;
-            ensure_enterprise_profile_arn(&account_for_creds, creds).await
+            ensure_enterprise_profile_arn(&state.store, &account_for_creds, creds).await
         }
         Err(error) => {
-            // 减少连接计数
-            state.load_balancer.decrement_connections(&account.id).await;
             // 记录失败
             state.load_balancer.record_failure(&account.id).await;
 
@@ -337,15 +367,15 @@ pub async fn force_refresh_upstream_credentials(
     state: &RouterState,
     upstream: &UpstreamCredentials,
 ) -> Result<UpstreamCredentials, String> {
-    let mut store = AccountStore::new();
-    store.reload();
-
-    let account = store
-        .accounts
-        .iter()
-        .find(|candidate| candidate.id == upstream.account_id)
-        .cloned()
-        .ok_or_else(|| format!("账号 {} 不存在，无法刷新 Token", upstream.source_label))?;
+    let account = {
+        let store = lock_shared_store(&state.store);
+        store
+            .accounts
+            .iter()
+            .find(|candidate| candidate.id == upstream.account_id)
+            .cloned()
+    }
+    .ok_or_else(|| format!("账号 {} 不存在，无法刷新 Token", upstream.source_label))?;
 
     let refresh = refresh_token_by_provider_with_account_proxy(&account)
         .await
@@ -371,6 +401,7 @@ pub async fn force_refresh_upstream_credentials(
     }
 
     persist_account_refresh(
+        &state.store,
         &account,
         &refresh,
         usage_data.clone(),
@@ -379,7 +410,7 @@ pub async fn force_refresh_upstream_credentials(
         is_banned || is_auth_error,
     );
     if let Some(ref arn) = resolved_profile_arn {
-        persist_account_profile_arn(&account.id, arn);
+        persist_account_profile_arn(&state.store, &account.id, arn);
     }
 
     if is_banned || is_auth_error {
@@ -390,7 +421,7 @@ pub async fn force_refresh_upstream_credentials(
     if let Some(usage_data) = &usage_data {
         if usage_exceeds_threshold(usage_data, config.threshold) {
             state.load_balancer.record_failure(&account.id).await;
-            disable_account_by_id(&account.id, "配额已满");
+            disable_account_by_id(&state.store, &account.id, "配额已满");
             return Err(format!("账号 {} 配额已满，已自动禁用", account.label));
         }
     }
@@ -400,7 +431,7 @@ pub async fn force_refresh_upstream_credentials(
         account_for_creds.profile_arn = Some(arn);
     }
     let creds = build_upstream_credentials_from_refresh(config, &account_for_creds, refresh)?;
-    ensure_enterprise_profile_arn(&account_for_creds, creds).await
+    ensure_enterprise_profile_arn(&state.store, &account_for_creds, creds).await
 }
 
 pub fn build_upstream_credentials_from_refresh(
@@ -422,7 +453,7 @@ pub fn build_upstream_credentials_from_refresh(
 
     let http = build_streaming_http_client_for_account(account).map_err(|error| {
         format!(
-            "创建账号 {} 的2API HTTP 客户端失败: {}",
+            "创建账号 {} 的 kiro2api HTTP 客户端失败: {}",
             account.label,
             sanitize_error(&error)
         )
@@ -445,6 +476,7 @@ pub fn build_upstream_credentials_from_refresh(
 }
 /// Enterprise 上游调用必须有真实 profileArn：账号已存优先，否则 ListAvailableProfiles 发现并落库。
 async fn ensure_enterprise_profile_arn(
+    store: &SharedAccountStore,
     account: &Account,
     mut creds: UpstreamCredentials,
 ) -> Result<UpstreamCredentials, String> {
@@ -474,7 +506,7 @@ async fn ensure_enterprise_profile_arn(
             )
         })?;
 
-    persist_account_profile_arn(&account.id, &arn);
+    persist_account_profile_arn(store, &account.id, &arn);
     log::info!(
         "[网关] Enterprise 账号 {} 解析到 profileArn: {}",
         account.label,
@@ -485,8 +517,8 @@ async fn ensure_enterprise_profile_arn(
     Ok(creds)
 }
 
-fn persist_account_profile_arn(account_id: &str, profile_arn: &str) {
-    let mut store = AccountStore::new();
+fn persist_account_profile_arn(store: &SharedAccountStore, account_id: &str, profile_arn: &str) {
+    let mut store = lock_shared_store(store);
     if let Some(account) = store.accounts.iter_mut().find(|a| a.id == account_id) {
         let empty = account
             .profile_arn
@@ -522,8 +554,8 @@ pub fn format_managed_upstream_source(config: &GatewayConfig, account: &Account)
 }
 
 /// 禁用指定账号（配额满时自动调用）
-pub fn disable_account_by_id(account_id: &str, reason: &str) {
-    let mut store = AccountStore::new();
+pub fn disable_account_by_id(store: &SharedAccountStore, account_id: &str, reason: &str) {
+    let mut store = lock_shared_store(store);
     if let Some(account) = store.accounts.iter_mut().find(|a| a.id == account_id) {
         account.enabled = false;
         account.disabled_reason = Some(reason.to_string());
@@ -533,8 +565,8 @@ pub fn disable_account_by_id(account_id: &str, reason: &str) {
 }
 
 /// 启用指定账号（配额恢复时自动调用）
-pub fn enable_account_by_id(account_id: &str) {
-    let mut store = AccountStore::new();
+pub fn enable_account_by_id(store: &SharedAccountStore, account_id: &str) {
+    let mut store = lock_shared_store(store);
     if let Some(account) = store.accounts.iter_mut().find(|a| a.id == account_id) {
         account.enabled = true;
         account.disabled_reason = None;
@@ -544,6 +576,7 @@ pub fn enable_account_by_id(account_id: &str) {
 }
 
 pub fn persist_account_refresh(
+    store: &SharedAccountStore,
     account: &Account,
     refresh: &RefreshResult,
     usage_data: Option<Value>,
@@ -551,7 +584,7 @@ pub fn persist_account_refresh(
     is_auth_error: bool,
     should_increment_failure: bool,
 ) {
-    let mut store = AccountStore::new();
+    let mut store = lock_shared_store(store);
     if let Some(target) = store
         .accounts
         .iter_mut()

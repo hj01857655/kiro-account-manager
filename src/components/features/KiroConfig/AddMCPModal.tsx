@@ -219,7 +219,7 @@ function AddMCPModal({ onClose, onSuccess, projectDir, readOnly }: any) {
     : serverNames.join(', ')
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div 
         className={`relative overflow-hidden glass-card border border-border rounded-lg shadow-2xl w-[560px] max-w-full max-h-[85vh] flex flex-col`}
         onClick={e => e.stopPropagation()}

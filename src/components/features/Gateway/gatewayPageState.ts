@@ -11,14 +11,12 @@ import {
   stopGateway as stopGatewayApi
 } from '../../../api/gatewayApi'
 import { getGroups } from '../../../api/groupTag'
-import { getEffectiveClientApiKey, parseAllowedIps, parseClientApiKeys } from './gatewayPageUtils'
+import { parseAllowedIps } from './gatewayPageUtils'
 
 export interface GatewayConfig {
   enabled: boolean;
   host: string;
   port: number;
-  apiKey: string;
-  clientApiKeysText: string;
   region: string;
   accountMode: string;
   accountId: string | null;
@@ -29,7 +27,6 @@ export interface GatewayConfig {
   localOnly: boolean;
   allowedIpsText: string;
   logLevel: string;
-  modelMappings: ModelMappingRule[];
   filterClaudeCode: boolean;
   filterStripBoundaries: boolean;
   filterEnvNoise: boolean;
@@ -38,16 +35,6 @@ export interface GatewayConfig {
   responseCacheEnabled: boolean;
   responseCacheTtl: number;
   webSearchEnabled: boolean;
-}
-
-export interface ModelMappingRule {
-  id: string;
-  name: string;
-  enabled: boolean;
-  ruleType: string;
-  sourceModel: string;
-  targetModels: string[];
-  weights: number[];
 }
 
 export interface PromptFilterRule {
@@ -68,12 +55,24 @@ export interface GatewayStatus {
   runtimeConfig: GatewayConfig | null;
 }
 
+/// 后端 `get_gateway_request_stats` 的聚合结果（LogStore 快照，无时间窗口）。
+/// 状态条只用其中的请求数与错误数两个绝对数：成功率是错误的同义重复，
+/// 平均耗时在流式请求上是「写日志那一刻的耗时」的均值，不是用户等待时长，
+/// 两个都不上状态条。其余绝对数在日志弹窗已有同一份，不重复展示。
+export interface GatewayOverviewStats {
+  total: number;
+  success: number;
+  error: number;
+  avgDurationMs: number;
+  requestsWithCache: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+}
+
 export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   enabled: false,
   host: '127.0.0.1',
   port: 8765,
-  apiKey: '',
-  clientApiKeysText: '',
   region: 'us-east-1',
   accountMode: 'single',
   accountId: null,
@@ -84,7 +83,6 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   localOnly: true,
   allowedIpsText: '',
   logLevel: 'debug',
-  modelMappings: [],
   filterClaudeCode: false,
   filterStripBoundaries: false,
   filterEnvNoise: false,
@@ -108,8 +106,6 @@ export const buildGatewayConfigSnapshot = (config: GatewayConfig) => JSON.string
   enabled: !!config.enabled,
   host: config.host || '',
   port: Number(config.port) || 0,
-  apiKey: getEffectiveClientApiKey(config.clientApiKeysText || config.apiKey),
-  clientApiKeysText: config.clientApiKeysText || config.apiKey || '',
   region: config.region || 'us-east-1',
   accountMode: config.accountMode || 'single',
   accountId: config.accountId || null,
@@ -120,7 +116,6 @@ export const buildGatewayConfigSnapshot = (config: GatewayConfig) => JSON.string
   localOnly: !!config.localOnly,
   allowedIpsText: config.allowedIpsText || '',
   logLevel: config.logLevel || 'debug',
-  modelMappings: config.modelMappings || [],
   filterClaudeCode: !!config.filterClaudeCode,
   filterStripBoundaries: !!config.filterStripBoundaries,
   filterEnvNoise: !!config.filterEnvNoise,
@@ -130,8 +125,6 @@ export const buildGatewayConfigSnapshot = (config: GatewayConfig) => JSON.string
 export const buildGatewayRuntimeSnapshot = (config: GatewayConfig) => JSON.stringify({
   host: config.host || '',
   port: Number(config.port) || 0,
-  apiKey: getEffectiveClientApiKey(config.clientApiKeysText || config.apiKey),
-  clientApiKeysText: config.clientApiKeysText || config.apiKey || '',
   region: config.region || 'us-east-1',
   accountMode: config.accountMode || 'single',
   accountId: config.accountId || null,
@@ -142,7 +135,6 @@ export const buildGatewayRuntimeSnapshot = (config: GatewayConfig) => JSON.strin
   localOnly: !!config.localOnly,
   allowedIpsText: config.allowedIpsText || '',
   logLevel: config.logLevel || 'debug',
-  modelMappings: config.modelMappings || [],
   filterClaudeCode: !!config.filterClaudeCode,
   filterStripBoundaries: !!config.filterStripBoundaries,
   filterEnvNoise: !!config.filterEnvNoise,
@@ -150,15 +142,6 @@ export const buildGatewayRuntimeSnapshot = (config: GatewayConfig) => JSON.strin
 })
 
 export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
-  ...(() => {
-    const clientApiKeys = Array.isArray(gatewayConfig?.clientApiKeys)
-      ? parseClientApiKeys(gatewayConfig.clientApiKeys.join('\n'))
-      : parseClientApiKeys(gatewayConfig?.accessToken || '')
-    const primaryApiKey = clientApiKeys[0] || ''
-    return {
-      apiKey: primaryApiKey,
-      clientApiKeysText: clientApiKeys.join('\n')}
-  })(),
   enabled: gatewayConfig?.enabled ?? false,
   host: gatewayConfig?.host || '127.0.0.1',
   port: gatewayConfig?.port || 8765,
@@ -176,7 +159,6 @@ export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
     ? gatewayConfig.allowedIps.join('\n')
     : '',
   logLevel: gatewayConfig?.logLevel || 'debug',
-  modelMappings: Array.isArray(gatewayConfig?.modelMappings) ? gatewayConfig.modelMappings : [],
   filterClaudeCode: gatewayConfig?.filterClaudeCode ?? false,
   filterStripBoundaries: gatewayConfig?.filterStripBoundaries ?? false,
   filterEnvNoise: gatewayConfig?.filterEnvNoise ?? false,
@@ -197,12 +179,6 @@ export const buildGatewayStatusState = (gatewayStatus: any, gatewayConfig: any, 
 })
 
 export const buildGatewayPayload = (config: GatewayConfig) => ({
-  ...(() => {
-    const clientApiKeys = parseClientApiKeys(config.clientApiKeysText || config.apiKey)
-    return {
-      accessToken: clientApiKeys[0] || null,
-      clientApiKeys}
-  })(),
   enabled: !!config.enabled,
   host: config.host,
   port: Number(config.port),
@@ -216,7 +192,6 @@ export const buildGatewayPayload = (config: GatewayConfig) => ({
   localOnly: !!config.localOnly,
   allowedIps: parseAllowedIps(config.allowedIpsText),
   logLevel: config.logLevel,
-  modelMappings: config.modelMappings || [],
   filterClaudeCode: !!config.filterClaudeCode,
   filterStripBoundaries: !!config.filterStripBoundaries,
   filterEnvNoise: !!config.filterEnvNoise,

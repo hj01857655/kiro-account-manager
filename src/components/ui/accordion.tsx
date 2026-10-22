@@ -1,6 +1,6 @@
 import * as React from "react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import { ChevronRightIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -55,17 +55,20 @@ function AccordionTrigger({
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={cn(
-          "group/accordion-trigger relative flex flex-1 items-start justify-between rounded-lg border border-transparent py-2.5 text-left text-sm font-medium transition-all outline-none hover:underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:after:border-ring disabled:pointer-events-none disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground",
+          "group/accordion-trigger relative flex flex-1 items-start justify-between gap-2 rounded-lg border border-transparent py-2.5 text-left text-sm font-medium transition-all outline-none hover:underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
           className
         )}
         {...props}>
+        {/* 折叠态用朝右的箭头（▶），展开后旋转 90° 变成朝下（▼）。
+            这是折叠列表的通用约定（magpie 的 Agents 行也一样：Details ▶）。
+
+            旋转写在 index.css 里而不是用 Tailwind 变体：实测
+            `group-data-[state=open]/accordion-trigger:rotate-90` 生成的
+            transform 仍是 none，命名组 + data 变体的组合在这里没命中。 */}
+        <ChevronRightIcon
+          data-slot="accordion-trigger-icon"
+          className="pointer-events-none mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200" />
         {children}
-        <ChevronDownIcon
-          data-slot="accordion-trigger-icon"
-          className="pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden" />
-        <ChevronUpIcon
-          data-slot="accordion-trigger-icon"
-          className="pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline" />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   );

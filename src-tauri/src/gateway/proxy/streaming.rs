@@ -41,9 +41,14 @@ pub fn stream_proxy_response(
     // 客户端的 stop 序列：Kiro 上游无对应字段，由网关在响应侧截断。
     stop_sequences: Option<Vec<String>>,
     log_context: RequestLogContext<'static>,
+    // 连接位守卫移进本函数的流式任务：guard 必须活到流结束，
+    // 否则 Claude Code 的主路径（流式）的连接计数仍覆盖不到请求周期。
+    connection_guard: crate::gateway::load_balancer::ConnectionGuard,
 ) -> Response {
     let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(2048);
     tokio::spawn(async move {
+        // guard 在本任务结束时 Drop，覆盖整个流式生命周期
+        let _connection_guard = connection_guard;
         // 辅助函数：还原工具名称（sanitized -> original）
         let restore_tool_name = |sanitized: &str| -> String {
             tool_name_map
@@ -220,22 +225,40 @@ function_call: None,
                                             output_tokens: output,
                                             cache_read_input_tokens,
                                             cache_creation_input_tokens,
+                                            stop_reason,
+                                            refusal,
                                         } => {
                                             log::info!(
-                                                "[Stream] ✅ Received Usage event: input={}, output={}, cache_read={:?}, cache_write={:?}",
+                                                "[Stream] ✅ Received Usage event: input={}, output={}, cache_read={:?}, cache_write={:?}, stop_reason={:?}",
                                                 input,
                                                 output,
                                                 cache_read_input_tokens,
-                                                cache_creation_input_tokens
+                                                cache_creation_input_tokens,
+                                                stop_reason
                                             );
-                                            input_tokens = input;
-                                            output_tokens = output;
-                                            aggregated.input_tokens = input;
-                                            aggregated.output_tokens = output;
-                                            aggregated.cache_read_input_tokens =
-                                                cache_read_input_tokens;
-                                            aggregated.cache_creation_input_tokens =
-                                                cache_creation_input_tokens;
+                                            // 纯终止帧（四个 token 字段全空）不得清空已累计 usage；
+                                            // 旧格式帧可能只带 cache tokens，仍要收下
+                                            let has_token_info = input > 0
+                                                || output > 0
+                                                || cache_read_input_tokens.is_some()
+                                                || cache_creation_input_tokens.is_some();
+                                            if has_token_info {
+                                                input_tokens = input;
+                                                output_tokens = output;
+                                                aggregated.input_tokens = input;
+                                                aggregated.output_tokens = output;
+                                                aggregated.cache_read_input_tokens =
+                                                    cache_read_input_tokens;
+                                                aggregated.cache_creation_input_tokens =
+                                                    cache_creation_input_tokens;
+                                            }
+                                            // G-8：上游终止语义透传到聚合态，供出站三格式共用
+                                            if stop_reason.is_some() {
+                                                aggregated.stop_reason = stop_reason;
+                                            }
+                                            if refusal.is_some() {
+                                                aggregated.refusal = refusal;
+                                            }
                                         }
                                         KiroEvent::ContextUsage { percentage } => {
                                             aggregated.context_usage_percentage = Some(percentage);
@@ -1095,16 +1118,29 @@ function_call: None,
                     usage["cache_creation_input_tokens"] = json!(cache_creation);
                 }
 
+                // G-8/G-8b：stop_sequence 命中 > 上游 stopReason 映射 > 启发式
+                let upstream_stop = aggregated
+                    .stop_reason
+                    .as_deref()
+                    .map(stream::map_stop_reason_to_anthropic);
+                let final_stop_reason = if st.stopped_by_sequence {
+                    "stop_sequence"
+                } else if let Some(mapped) = upstream_stop {
+                    // 上游说 end_turn 但流里已出工具块：tool_use 优先
+                    if mapped == "end_turn" && st.saw_tool_calls {
+                        "tool_use"
+                    } else {
+                        mapped
+                    }
+                } else if st.saw_tool_calls {
+                    "tool_use"
+                } else {
+                    "end_turn"
+                };
                 let finish = json!({
                     "type": "message_delta",
                     "delta": {
-                        "stop_reason": if st.stopped_by_sequence {
-                            "stop_sequence"
-                        } else if st.saw_tool_calls {
-                            "tool_use"
-                        } else {
-                            "end_turn"
-                        },
+                        "stop_reason": final_stop_reason,
                         "stop_sequence": if st.stopped_by_sequence {
                             json!(st.stop_matcher.matched())
                         } else {
@@ -1170,7 +1206,27 @@ function_call: None,
             }
             ResponseFormat::OpenAI => {
                 // OpenAI: finish 帧只带 finish_reason；include_usage 时再发空 choices + usage
-                let finish_reason = if st.saw_tool_calls { "tool_calls" } else { "stop" };
+                // G-8：上游 stopReason 映射优先，启发式仅在不存时兑底
+                let finish_reason = match aggregated
+                    .stop_reason
+                    .as_deref()
+                    .map(stream::map_stop_reason_to_openai_finish)
+                {
+                    Some(mapped) => {
+                        if mapped == "stop" && st.saw_tool_calls {
+                            "tool_calls"
+                        } else {
+                            mapped
+                        }
+                    }
+                    None => {
+                        if st.saw_tool_calls {
+                            "tool_calls"
+                        } else {
+                            "stop"
+                        }
+                    }
+                };
                 let finish_chunk = stream::build_openai_chunk(
                     &completion_id,
                     created_at,

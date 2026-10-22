@@ -2,18 +2,35 @@ use crate::models::cli_session::{
     CliSession, CliSessionMeta, CliSessionMessage, CliSessionSummary,
 };
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::fs;
 use std::io::BufRead;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::SystemTime;
+
+/// 会话摘要缓存：按 (大小, 修改时间) 判断文件未变就复用。
+/// CLI 会话统计消息数要把 .jsonl 逐行读一遍，不缓存则每次刷新列表都重读。
+struct CachedSummary {
+    json_len: u64,
+    json_modified: Option<SystemTime>,
+    jsonl_len: u64,
+    jsonl_modified: Option<SystemTime>,
+    summary: CliSessionSummary,
+}
 
 pub struct CliSessionStorage {
     base_path: PathBuf,
+    summaries: Mutex<HashMap<PathBuf, CachedSummary>>,
 }
 
 impl CliSessionStorage {
     pub fn new() -> Result<Self> {
         let base_path = Self::get_storage_path()?;
-        Ok(Self { base_path })
+        Ok(Self {
+            base_path,
+            summaries: Mutex::new(HashMap::new()),
+        })
     }
 
     fn get_storage_path() -> Result<PathBuf> {
@@ -72,15 +89,36 @@ impl CliSessionStorage {
 
     /// 解析 session 摘要
     fn parse_session_summary(&self, json_path: &PathBuf) -> Result<CliSessionSummary> {
+        let json_meta = fs::metadata(json_path)?;
+        let json_len = json_meta.len();
+        let json_modified = json_meta.modified().ok();
+
+        let jsonl_path = json_path.with_extension("jsonl");
+        let jsonl_meta = fs::metadata(&jsonl_path).ok();
+        let jsonl_len = jsonl_meta.as_ref().map(|m| m.len()).unwrap_or(0);
+        let jsonl_modified = jsonl_meta.as_ref().and_then(|m| m.modified().ok());
+
+        // 两个文件都未变则复用上次结果
+        if let Ok(cache) = self.summaries.lock() {
+            if let Some(cached) = cache.get(json_path) {
+                if cached.json_len == json_len
+                    && cached.json_modified == json_modified
+                    && cached.jsonl_len == jsonl_len
+                    && cached.jsonl_modified == jsonl_modified
+                {
+                    return Ok(cached.summary.clone());
+                }
+            }
+        }
+
         let content = fs::read_to_string(json_path)
             .context("Failed to read session JSON")?;
         let meta: CliSessionMeta =
             serde_json::from_str(&content).context("Failed to parse session JSON")?;
 
-        let file_size = fs::metadata(json_path)?.len();
+        let file_size = json_len;
 
         // 统计 .jsonl 消息数
-        let jsonl_path = json_path.with_extension("jsonl");
         let message_count = if jsonl_path.exists() {
             let file = fs::File::open(&jsonl_path)?;
             std::io::BufReader::new(file)
@@ -124,7 +162,7 @@ impl CliSessionStorage {
             .title
             .unwrap_or_else(|| meta.cwd.split(['/', '\\']).last().unwrap_or("untitled").to_string());
 
-        Ok(CliSessionSummary {
+        let summary = CliSessionSummary {
             session_id: meta.session_id,
             title,
             cwd: meta.cwd,
@@ -136,7 +174,22 @@ impl CliSessionStorage {
             created_at: meta.created_at,
             updated_at: meta.updated_at,
             file_size,
-        })
+        };
+
+        if let Ok(mut cache) = self.summaries.lock() {
+            cache.insert(
+                json_path.clone(),
+                CachedSummary {
+                    json_len,
+                    json_modified,
+                    jsonl_len,
+                    jsonl_modified,
+                    summary: summary.clone(),
+                },
+            );
+        }
+
+        Ok(summary)
     }
 
     /// 加载完整 session（包含消息）
@@ -212,6 +265,9 @@ impl CliSessionStorage {
             if path.exists() {
                 fs::remove_file(&path)?;
             }
+        }
+        if let Ok(mut cache) = self.summaries.lock() {
+            cache.remove(&self.base_path.join(format!("{session_id}.json")));
         }
         Ok(())
     }

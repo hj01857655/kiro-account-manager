@@ -108,12 +108,21 @@ fn gateway_runtime_test_state() -> RouterState {
             response_cache::CacheConfig::default(),
             None,
         ))),
+        store: test_shared_store(),
     }
+}
+
+/// 测试用的账号状态共享副本。
+///
+/// 与 `AppState.store` 同一类型；测试中用它替换真实的账号文件，
+/// 避免 `spawn_runtime` 触碰开发机上的真实账号数据。
+fn test_shared_store() -> crate::state::SharedAccountStore {
+    Arc::new(Mutex::new(crate::core::account::AccountStore::new()))
 }
 
 fn auth_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
-    headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer sk-test"));
+    headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer kiro"));
     headers
 }
 
@@ -133,6 +142,7 @@ fn test_router_state() -> RouterState {
             response_cache::CacheConfig::default(),
             None,
         ))),
+        store: test_shared_store(),
     }
 }
 

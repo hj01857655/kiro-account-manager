@@ -101,13 +101,33 @@ pub fn get_accounts(state: State<AppState>) -> Vec<Account> {
     }
 }
 
+/// 账号删除后同步清理网关配置里指向该账号的池 id。
+///
+/// 删除账号不会更新网关配置，`pool_account_ids` 会残留已删除账号的 id：
+/// 账号全删光之后界面仍显示「账号池 N 个账号」，运行期却一个账号都匹配不到。
+/// 清理失败不阻塞删除本身——账号已经不在库里，配置残留只影响网关启动，
+/// 由 `ensure_config_valid` 在下次启动时报给用户。
+fn prune_gateway_pool_after_delete(store: &crate::core::account::AccountStore) {
+    let existing_ids: Vec<String> =
+        store.accounts.iter().map(|account| account.id.clone()).collect();
+    if let Err(err) = crate::gateway::prune_deleted_pool_accounts(&existing_ids) {
+        eprintln!("[account_cmd] 清理网关账号池失败: {err}");
+    }
+}
+
 #[tauri::command]
 pub fn delete_account(state: State<AppState>, id: &str) -> bool {
     match lock_store(&state.store, "store") {
-        Ok(mut store) => store.delete(id).unwrap_or_else(|err| {
-            eprintln!("[account_cmd] {err}");
-            false
-        }),
+        Ok(mut store) => {
+            let deleted = store.delete(id).unwrap_or_else(|err| {
+                eprintln!("[account_cmd] {err}");
+                false
+            });
+            if deleted {
+                prune_gateway_pool_after_delete(&store);
+            }
+            deleted
+        }
         Err(err) => {
             eprintln!("[account_cmd] {err}");
             false
@@ -118,10 +138,16 @@ pub fn delete_account(state: State<AppState>, id: &str) -> bool {
 #[tauri::command]
 pub fn delete_accounts(state: State<AppState>, ids: Vec<String>) -> usize {
     match lock_store(&state.store, "store") {
-        Ok(mut store) => store.delete_many(&ids).unwrap_or_else(|err| {
-            eprintln!("[account_cmd] {err}");
-            0
-        }),
+        Ok(mut store) => {
+            let removed = store.delete_many(&ids).unwrap_or_else(|err| {
+                eprintln!("[account_cmd] {err}");
+                0
+            });
+            if removed > 0 {
+                prune_gateway_pool_after_delete(&store);
+            }
+            removed
+        }
         Err(err) => {
             eprintln!("[account_cmd] {err}");
             0

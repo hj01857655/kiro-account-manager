@@ -10,7 +10,7 @@ function RefreshProgressModal({ refreshProgress }) {
   if (!refreshProgress || refreshProgress.total === 0) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div 
         className={`glass-card rounded-2xl w-[400px] shadow-2xl overflow-hidden`}
         style={{ animation: 'modalBounceIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}

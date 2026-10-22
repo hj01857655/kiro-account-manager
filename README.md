@@ -66,8 +66,8 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 | 🪟 **Windows** | ARM64 | MSI 安装包 | [KiroAccountManager_1.9.2_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64_zh-CN.msi) |
 | 🍎 **macOS** | x64 / Intel | DMG 镜像 | [KiroAccountManager_1.9.2_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_x64.dmg) |
 | 🍎 **macOS** | x64 / Intel | App 压缩包 | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_x64.app.tar.gz) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4) | DMG 镜像 | [KiroAccountManager_1.9.2_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_aarch64.dmg) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4) | App 压缩包 | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_aarch64.app.tar.gz) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG 镜像 | [KiroAccountManager_1.9.2_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_aarch64.dmg) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App 压缩包 | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_aarch64.app.tar.gz) |
 | 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.2_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.AppImage) |
 | 🐧 **Linux** | x86_64 | DEB 包 | [KiroAccountManager_1.9.2_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.deb) |
 | 🐧 **Linux** | x86_64 | RPM 包 | [KiroAccountManager-1.9.2-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager-1.9.2-1.x86_64.rpm) |
@@ -86,7 +86,7 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 - **Windows**:
   - `.msi`：双击安装，默认当前用户安装，**不需要管理员权限**（推荐）
   - `_portable.zip`：解压后直接运行目录内的 `kiro-account-manager.exe`
-- **macOS**: 打开 `.dmg`，拖动到 Applications，首次运行在「安全性与隐私」中允许
+- **macOS**: 打开 `.dmg`，拖动到 Applications。应用未做 Apple 签名，首次打开若提示「已损坏」或「来自身份不明的开发者」，请打开 **系统设置 → 隐私与安全性**，在底部找到对应提示后点「仍要打开」；也可执行 `xattr -cr /Applications/KiroAccountManager.app` 后重新打开。Apple Silicon（M 系列）与 Intel 机型分别使用 `aarch64` 与 `x64` 包，请按芯片选择
 - **Linux AppImage**: `chmod +x` 后直接运行
 - **Linux DEB**: `sudo dpkg -i` 安装
 - **Linux RPM**: `sudo rpm -i` 安装，或使用发行版对应包管理器安装
@@ -105,6 +105,7 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 - **修复**: `getUsageLimits` 不再携带 `profileArn`（企业号带了会 400）；Enterprise 查配额与普通账号统一路径，region 优先账号自身再回退 `us-east-1` / `eu-central-1`
 - **加固**: Skill 分支名注入防护、提权重启确认、OAuth deep link 锁中毒恢复
 - **网关**: 增加 GPT-5.6 系列与 Claude Sonnet 5；OpenAI token 估算改用 tiktoken-rs（`o200k_base`）；移除已下线的 Claude 3 别名映射
+- **网关**: 移除 API Key 管理功能 — 客户端密钥固定为 `kiro`（`Authorization: Bearer kiro` 与 `x-api-key: kiro` 均可），历史配置中的 Key 字段仅做兼容读取
 - **适配**: 跟进 Kiro IDE 1.0 的本地配置格式 — Hooks 支持新的 `.json` 格式（单文件可含多个 hook，字段改为 `trigger` / `action`）并支持用户级全局 hooks（`~/.kiro/hooks`），Custom Agents 支持新的 JSON 格式（替代 Markdown front-matter）；旧格式的 `.kiro.hook` 与 `.md` 文件仍可识别与编辑
 - **适配**: 权限管理从旧版 Trusted Commands 迁移到 Kiro IDE 1.0 的 `permissions.yaml` 能力模型 — 新增全局权限规则编辑器（capability / effect / match / exclude / policies），后端直接读写 `~/.kiro/settings/permissions.yaml`；首次读取时兜底迁移旧 `kiroAgent.*` 配置，并移除所有旧 Trusted Commands 死代码
 
@@ -348,11 +349,20 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 - 兼容 Anthropic `/v1/messages`、OpenAI `/v1/responses`、`/v1/chat/completions`
 - 模型含 Claude 4.x / Sonnet 5、GPT-5.6 等（以网关 `/v1/models` 与前端列表为准）
 - OpenAI 兼容请求 token 估算使用 tiktoken（`o200k_base`）
-- 模型智能降级、多账号负载均衡、API Key 鉴权
+- 模型智能降级、多账号负载均衡、固定密钥鉴权（`kiro`）
 - 非 200 响应透传原始 JSON 格式
 - Anthropic 429 错误响应透传
 - Responses 接口返回内容更完整
 - 多工具调用结果顺序更稳定
+
+**客户端接入（固定密钥 `kiro`）**：网关默认监听 `http://127.0.0.1:8765`（实际地址以网关页展示为准）。客户端密钥固定为 `kiro`，无需也无法在应用内创建或管理 Key：
+
+```text
+Base URL: http://127.0.0.1:8765
+API Key:  kiro
+```
+
+两种鉴权头均可：`Authorization: Bearer kiro`（OpenAI 风格）与 `x-api-key: kiro`（Anthropic 风格）。Claude Code / Codex 可直接复制网关页生成的快速配置。
 
 ---
 

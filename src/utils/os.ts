@@ -9,24 +9,43 @@
 //   - @supports (-webkit-touch-callout: none) 在 WKWebView 与 WebKitGTK
 //     上都命中，会把没有交通灯的 Linux 也当成 macOS。
 //
-// UA 在 Tauri 各平台均为系统默认值：tauri-runtime-wry 只在配置了 userAgent
-// 时才调用 with_user_agent（crates/tauri-runtime-wry/src/lib.rs 的
-// `if let Some(user_agent) = webview_attributes.user_agent` 分支），
-// 否则沿用平台默认 UA，macOS 即 WKWebView 的 "Macintosh; ... Mac OS X"。
+// 平台值取自官方插件 tauri-plugin-os 的 platform()，即 Rust 侧
+// std::env::consts::OS——编译期常量，不嗅探 UA 字符串，也不依赖任何
+// 平台特征巧合。它是同步的：值经 js_init_script 在页面脚本之前注入到
+// window.__TAURI_OS_PLUGIN_INTERNALS__，所以 render 前调用即可拿到，
+// 首帧不会出现无避让的布局。
 //
-// 依赖：src-tauri/tauri.conf.json 必须保持不覆盖 userAgent。一旦在
-// app.windows[].userAgent 或 tauri.macos.conf.json 等平台覆盖配置里设了自定义
-// UA，macOS 识别会静默失效——症状只是侧栏避让消失，不报错，很难排查。
-// 改该配置前先确认 UA 仍含 Macintosh。
+// 浏览器里跑 dev server（无 Tauri 运行时）时 platform() 会抛错，
+// 此时退回 UA 判定，仅用于本地开发；生产打包后一律走插件路径。
 //
-// 探测是同步的，必须在 render 前调用，保证首帧就带对标记。
+// 探测失败（含 UA 也认不出）时写 unknown：CSS 侧只有 [data-os='macos']
+// 留白，unknown 与 windows/linux 同等对待，不会误留白。
+
+import { platform as tauriPlatform } from '@tauri-apps/plugin-os'
 
 export type OsName = 'macos' | 'windows' | 'linux' | 'unknown'
 
-// 按 UA 判定平台。顺序有意义：macOS UA 形如
-// "Macintosh; Intel Mac OS X 10_15_7"，Windows 形如 "Windows NT 10.0; Win64; x64"，
-// Linux 形如 "X11; Linux x86_64"，三者互不重叠，但 macOS 必须优先判，
-// 因为桌面模式下的 iPad UA 也含 Macintosh（本项目不面向移动端，无影响）。
+// plugin-os 的 Platform 取值见 node_modules/@tauri-apps/plugin-os：
+// 'linux' | 'macos' | 'ios' | 'freebsd' | ... | 'windows'。
+// 只映射本项目部署的三端，其余一律 unknown——CSS 对 unknown 的处理
+// 与 linux 相同（无避让 + 细滚动条），对未支持的平台是安全的默认。
+function fromTauriPlatform(p: string): OsName {
+  switch (p) {
+    case 'macos':
+      return 'macos'
+    case 'windows':
+      return 'windows'
+    case 'linux':
+      return 'linux'
+    default:
+      return 'unknown'
+  }
+}
+
+// 浏览器开发兜底：仅当 platform() 不可用（非 Tauri 环境）时才走这里。
+// 顺序有意义：macOS UA 形如 "Macintosh; Intel Mac OS X 10_15_7"，
+// Windows 形如 "Windows NT 10.0; Win64; x64"，
+// Linux 形如 "X11; Linux x86_64"，三者互不重叠，但 macOS 必须优先判。
 export function detectOsFromUa(ua: string): OsName {
   if (!ua) return 'unknown'
   if (/Macintosh|Mac OS X/i.test(ua)) return 'macos'
@@ -35,11 +54,20 @@ export function detectOsFromUa(ua: string): OsName {
   return 'unknown'
 }
 
+// 依次尝试官方插件、UA；插件不可用（浏览器开发）或抛错时退回 UA。
+function detectOs(doc: Document): OsName {
+  try {
+    return fromTauriPlatform(tauriPlatform())
+  } catch {
+    // platform() 读取 window.__TAURI_OS_PLUGIN_INTERNALS__，非 Tauri 环境为 undefined
+  }
+  return detectOsFromUa(doc.defaultView?.navigator?.userAgent ?? '')
+}
+
 // 把平台写到 documentElement.dataset.os。CSS 侧只认 [data-os='macos']，
 // 探测失败时不会误留白：unknown 与 windows/linux 同等对待。
 export function applyOsAttribute(doc: Document = document): OsName {
-  const ua = doc.defaultView?.navigator?.userAgent ?? ''
-  const os = detectOsFromUa(ua)
+  const os = detectOs(doc)
   doc.documentElement.dataset.os = os
   return os
 }

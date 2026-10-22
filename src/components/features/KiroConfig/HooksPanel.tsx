@@ -382,7 +382,7 @@ function CreateHookModal({ onCreate, onClose, colors, t, accent, accentGradientB
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className={`glass-card rounded-2xl w-full max-w-[420px] shadow-2xl border border-border overflow-hidden`} onClick={(e) => e.stopPropagation()}>
         <div className={`flex items-center justify-between px-5 py-4 ${colors.dialogHeader}`}>
           <div className="flex items-center gap-3">

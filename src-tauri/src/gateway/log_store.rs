@@ -180,6 +180,42 @@ impl LogStore {
         stats.sort_by(|a, b| b.count.cmp(&a.count));
         stats
     }
+
+    /// 按客户端 UA 分组统计。
+    ///
+    /// 回答的是「谁在用这个网关」。密钥固定为 `kiro` 后 Key 不再是区分性维度，
+    /// 只按 UA 产品名分组；表里的「客户端」列即 UA。
+    pub async fn get_client_stats(&self) -> Vec<ClientStat> {
+        let inner = self.inner.read().await;
+
+        let mut map: std::collections::HashMap<Option<String>, ClientStat> =
+            std::collections::HashMap::new();
+
+        for log in &inner.logs {
+            let product = log.client_user_agent.as_deref().and_then(ua_product);
+            let stat = map.entry(product.clone()).or_insert(ClientStat {
+                product,
+                count: 0,
+                success: 0,
+                error: 0,
+                total_input_tokens: 0,
+                total_output_tokens: 0,
+            });
+
+            stat.count += 1;
+            if log.status_code < 400 {
+                stat.success += 1;
+            } else {
+                stat.error += 1;
+            }
+            stat.total_input_tokens += log.input_tokens.unwrap_or(0);
+            stat.total_output_tokens += log.output_tokens.unwrap_or(0);
+        }
+
+        let mut stats: Vec<ClientStat> = map.into_values().collect();
+        stats.sort_by(|a, b| b.count.cmp(&a.count));
+        stats
+    }
 }
 
 impl Default for LogStore {
@@ -226,6 +262,33 @@ pub struct EndpointStat {
     pub error: usize,
 }
 
+/// 一个客户端工具的用量。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientStat {
+    /// UA 首段的产品名，如 `claude-cli`、`cursor-agent`；无 UA 时为 None
+    pub product: Option<String>,
+    pub count: usize,
+    pub success: usize,
+    pub error: usize,
+    pub total_input_tokens: i32,
+    pub total_output_tokens: i32,
+}
+
+/// UA 首段的产品名：`claude-cli/2.1.0 (external, cli)` → `claude-cli`。
+///
+/// 只取首段是故意的：版本号会让同一个客户端每次升级就多出一行，
+/// 而括号里的平台信息对「谁在用」这个问题没有信息量。
+fn ua_product(ua: &str) -> Option<String> {
+    let first = ua.split('/').next()?.split_whitespace().next()?;
+    let name = first.trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_ascii_lowercase())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,6 +300,7 @@ mod tests {
             request_index: index,
             endpoint: "messages".to_string(),
             client_ip: "127.0.0.1".to_string(),
+            client_user_agent: None,
             model: Some(model.to_string()),
             stream: false,
             upstream_source: Some("test".to_string()),
@@ -382,6 +446,53 @@ mod tests {
         assert_eq!(model_stats[1].model, "claude-opus-4");
         assert_eq!(model_stats[1].count, 1);
         assert_eq!(model_stats[1].error, 1);
+    }
+
+    #[tokio::test]
+    async fn test_log_store_client_stats_group_by_ua() {
+        let store = LogStore::new(100);
+
+        // 同一个工具的两个版本号：必须归为一行，否则「谁在用」会按版本号碎片化
+        let mut a = create_test_log(1, "success", "claude-sonnet-4.5");
+        a.client_user_agent = Some("claude-cli/2.1.0 (external, cli)".to_string());
+
+        // 同一个工具的不同版本号：应归为同一行（只取 UA 首段）
+        let mut b = create_test_log(2, "success", "claude-sonnet-4.5");
+        b.client_user_agent = Some("claude-cli/2.2.3".to_string());
+
+        let mut c = create_test_log(3, "error", "claude-sonnet-4.5");
+        c.client_user_agent = Some("curl/8.4.0".to_string());
+
+        // 没有 UA 的脚本：product 为 None，不能和任何有 UA 的请求混在一起
+        let mut d = create_test_log(4, "success", "claude-sonnet-4.5");
+        d.client_user_agent = None;
+
+        store.add(a).await;
+        store.add(b).await;
+        store.add(c).await;
+        store.add(d).await;
+
+        let stats = store.get_client_stats().await;
+        assert_eq!(stats.len(), 3, "claude-cli / curl / 无UA");
+
+        let cli = stats
+            .iter()
+            .find(|s| s.product.as_deref() == Some("claude-cli"))
+            .expect("claude-cli should be grouped");
+        assert_eq!(cli.count, 2, "两个版本号归为同一行");
+        assert_eq!(cli.error, 0);
+
+        let curl = stats
+            .iter()
+            .find(|s| s.product.as_deref() == Some("curl"))
+            .expect("curl should be its own row");
+        assert_eq!(curl.error, 1);
+
+        let no_ua = stats
+            .iter()
+            .find(|s| s.product.is_none())
+            .expect("request without UA should be grouped");
+        assert_eq!(no_ua.count, 1);
     }
 
     #[tokio::test]

@@ -56,8 +56,8 @@ Kiro Account Manager is a desktop application based on **Tauri 2.x** for central
 | 🪟 **Windows** | ARM64 | MSI Installer | [KiroAccountManager_1.9.2_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64_zh-CN.msi) |
 | 🍎 **macOS** | x64 / Intel | DMG Image | [KiroAccountManager_1.9.2_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_x64.dmg) |
 | 🍎 **macOS** | x64 / Intel | App Archive | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_x64.app.tar.gz) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4) | DMG Image | [KiroAccountManager_1.9.2_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_aarch64.dmg) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4) | App Archive | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_aarch64.app.tar.gz) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG Image | [KiroAccountManager_1.9.2_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_aarch64.dmg) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App Archive | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_aarch64.app.tar.gz) |
 | 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.2_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.AppImage) |
 | 🐧 **Linux** | x86_64 | DEB Package | [KiroAccountManager_1.9.2_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.deb) |
 | 🐧 **Linux** | x86_64 | RPM Package | [KiroAccountManager-1.9.2-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager-1.9.2-1.x86_64.rpm) |
@@ -74,7 +74,7 @@ Kiro Account Manager is a desktop application based on **Tauri 2.x** for central
 
 **Installation Instructions**:
 - **Windows**: Double-click `.msi` file to install
-- **macOS**: Open `.dmg`, drag to Applications, allow in "Security & Privacy" on first run
+- **macOS**: Open the `.dmg` and drag to Applications. The app is not signed with an Apple certificate, so on first launch macOS may report it as "damaged" or "from an unidentified developer". Open **System Settings → Privacy & Security**, find the prompt near the bottom and click **Open Anyway**; alternatively run `xattr -cr /Applications/KiroAccountManager.app` and relaunch. Apple Silicon (M-series) and Intel Macs use the `aarch64` and `x64` packages respectively—pick the one matching your chip
 - **Linux AppImage**: Run directly after `chmod +x`
 - **Linux DEB**: Install with `sudo dpkg -i`
 - **Linux RPM**: Install with `sudo rpm -i` or the package manager for your distribution
@@ -93,6 +93,7 @@ Entries are grouped by the actual GitHub Release publish windows.
 - **Fix**: `getUsageLimits` no longer sends `profileArn` (enterprise 400); Enterprise usage uses the same path as other accounts with region preference + `us-east-1` / `eu-central-1` fallback
 - **Harden**: Skill branch-name injection guard, elevation restart confirmation, OAuth deep-link lock poison recovery
 - **Gateway**: GPT-5.6 series and Claude Sonnet 5; OpenAI token estimates via tiktoken-rs (`o200k_base`); removed retired Claude 3 alias mapping
+- **Gateway**: Removed API Key management — the client key is fixed to `kiro` (both `Authorization: Bearer kiro` and `x-api-key: kiro` are accepted); legacy key fields in existing configs are read for compatibility only
 - **Compat**: Follow Kiro IDE 1.0 local config format — Hooks support the new `.json` format (one file may hold multiple hooks; fields changed to `trigger` / `action`) plus user-level global hooks (`~/.kiro/hooks`); Custom Agents support the new JSON format (replacing Markdown front-matter). Legacy `.kiro.hook` and `.md` files remain readable and editable
 - **Compat**: Permission management migrated from the legacy Trusted Commands to Kiro IDE 1.0's `permissions.yaml` capability model — added a global permission rule editor (capability / effect / match / exclude / policies); the backend reads/writes `~/.kiro/settings/permissions.yaml` directly; legacy `kiroAgent.*` config is migrated as a one-time fallback on first read, and all legacy Trusted Commands dead code was removed
 
@@ -275,11 +276,20 @@ Built-in OpenAI-compatible gateway, supports direct integration with third-party
 - Compatible with Anthropic `/v1/messages`, OpenAI `/v1/responses`, `/v1/chat/completions`
 - Models include Claude 4.x / Sonnet 5, GPT-5.6 series (see gateway `/v1/models` and UI list)
 - OpenAI-compatible token estimation via tiktoken (`o200k_base`)
-- Intelligent model degradation, multi-account load balancing, API Key authentication
+- Intelligent model degradation, multi-account load balancing, fixed-key authentication (`kiro`)
 - Passthrough original JSON format for non-200 responses
 - Anthropic 429 error response passthrough
 - Responses format response body structure optimization
 - Tool result ordering and StreamInfo tracking enhancement
+
+**Client access (fixed key `kiro`)**: the gateway listens on `http://127.0.0.1:8765` by default (see the gateway page for the actual address). The client key is fixed to `kiro` — keys can no longer be created or managed in the app:
+
+```text
+Base URL: http://127.0.0.1:8765
+API Key:  kiro
+```
+
+Both header styles are accepted: `Authorization: Bearer kiro` (OpenAI-style) and `x-api-key: kiro` (Anthropic-style). Claude Code / Codex quick configs generated on the gateway page can be copied directly.
 
 ---
 

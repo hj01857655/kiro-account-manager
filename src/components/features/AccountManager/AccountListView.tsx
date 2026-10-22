@@ -282,7 +282,7 @@ const ListRow = memo(function ListRow({
       </div>
 
       {/* 操作按钮（hover 时绝对定位浮起，避免占用列宽） */}
-      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-card/95 backdrop-blur-sm rounded-md shadow-sm border border-border px-1 py-1">
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-card rounded-md shadow-sm border border-border px-1 py-1">
         {isCurrent ? (
           <button
             onClick={(e) => { e.stopPropagation(); onLogout(account) }}

@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense, useMemo } from 'react'
+import { useState, useEffect, useRef, Suspense, useMemo } from 'react'
 import { showMainWindow } from './api/systemApi'
 import { getCurrentUser, logout as apiLogout } from './api/accountApi'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
@@ -30,6 +30,25 @@ function PageLoading() {
   )
 }
 
+// 路由 chunk 就绪信号。
+//
+// 挂在 Suspense 边界内部：chunk 传输期间 Suspense 只渲染 fallback，本组件连带被
+// 替换掉；chunk 一到位它才挂载。所以 onReady 的调用时机就是「真正内容可读」的时机，
+// 启动卡据此撤除、窗口据此点亮。
+//
+// 不能用 fallback 的 onMount 反过来推：fallback 挂载只说明 chunk 未到，而「卸载」
+// 无法用 props 观测；更不能假设 fallback 一定出现过——chunk 命中缓存时 React 仍会
+// 至少 suspend 一个微任务，但依赖这个假设会让逻辑随缓存状态漂移。
+function RouteReady({ onReady }: { onReady: () => void }) {
+  const reported = useRef(false)
+  useEffect(() => {
+    if (reported.current) return
+    reported.current = true
+    onReady()
+  }, [onReady])
+  return null
+}
+
 function App() {
   const [user, setUser] = useState<any>(null)
   const [activeMenu, setActiveMenu] = useState<string>(() => {
@@ -38,6 +57,8 @@ function App() {
   const [mountedRouteIds, setMountedRouteIds] = useState<string[]>(() =>
     getMountedRouteIds([], localStorage.getItem('activeMenu') || 'home')
   )
+  // 启动卡是否已撤由 splashDismissedRef 记录（见下方），不需要 state：
+  // 它不参与渲染，用 ref 避免路由切换时重复 invoke。
   const { t } = useApp()
   const { settings: appSettings, loading: settingsLoading } = useAppSettings()
   const { showError, showInfo } = useDialog()
@@ -53,16 +74,30 @@ function App() {
     setMountedRouteIds(prev => getMountedRouteIds(prev, activeMenu))
   }, [activeMenu])
 
+  // 启动卡盖住「窗口隐藏 → 首屏可读」这段。窗口在 tauri.conf.json 里是 visible: false，
+  // 由这里在首屏就绪时调 show_main_window 点亮；若窗口提前可见，用户看到的是 WebView
+  // 尚未绘制时的默认白底——所以这里必须是「内容就绪」而不是固定帧数。
+  //
+  // 「内容就绪」的判据是路由 chunk 挂载：路由是 lazy() 的，React 首帧只渲染出
+  // Sidebar + Suspense fallback，chunk 还在传输，那时撤卡等于亮骨架屏。
+  // 判据取自 Suspense fallback（PageLoading）是否已让位，不是 mountedRouteIds——
+  // 后者在首帧就非空，只代表 React 决定挂这个路由，不代表 chunk 已到位。
+  const [routeContentMounted, setRouteContentMounted] = useState(false)
+  const splashDismissedRef = useRef(false)
   useEffect(() => {
+    if (splashDismissedRef.current) return
+    if (!routeContentMounted) return
+    // 再等一帧，让 chunk 挂载后的那一帧完成排版，避免露出半渲染界面
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        splashDismissedRef.current = true
         dismissBootSplash()
         showMainWindow().catch((e) => {
           console.error('Failed to show main window:', e)
         })
       })
     })
-  }, [])
+  }, [routeContentMounted])
 
   useEffect(() => {
     checkAuth()
@@ -175,6 +210,7 @@ function App() {
             <div className="h-full w-full">
               <Suspense fallback={<PageLoading />}>
                 {renderContent()}
+                <RouteReady onReady={() => setRouteContentMounted(true)} />
               </Suspense>
             </div>
           </main>

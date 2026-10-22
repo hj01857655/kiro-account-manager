@@ -1,19 +1,48 @@
 use crate::models::ide_session::{IdeSession, SessionSummary};
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 // 安全限制
 const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50MB
 
+/// 会话文件的解析结果缓存。
+///
+/// 会话文件随对话不断变长（实测单文件最大 18MB，整个目录 100MB），而列表只需要
+/// 标题与消息数。按 (文件大小, 修改时间) 判断文件是否未变，未变则复用上次解析结果，
+/// 避免每次刷新列表都反序列化整份 history。
+struct CachedSummary {
+    file_len: u64,
+    modified: Option<SystemTime>,
+    summary: SessionSummary,
+}
+
 pub struct SessionStorage {
     base_path: PathBuf,
+    summaries: Mutex<HashMap<PathBuf, CachedSummary>>,
 }
 
 impl SessionStorage {
     pub fn new() -> Result<Self> {
         let base_path = Self::get_storage_path()?;
-        Ok(Self { base_path })
+        Ok(Self {
+            base_path,
+            summaries: Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn invalidate(&self, path: Option<&PathBuf>) {
+        if let Ok(mut cache) = self.summaries.lock() {
+            match path {
+                Some(path) => {
+                    cache.remove(path);
+                }
+                None => cache.clear(),
+            }
+        }
     }
 
     /// 验证路径组件是否安全（防止路径遍历）
@@ -162,6 +191,18 @@ impl SessionStorage {
             return Err(anyhow::anyhow!("File too large: {} bytes", metadata.len()));
         }
 
+        let file_len = metadata.len();
+        let modified = metadata.modified().ok();
+
+        // 文件未变则复用上次解析结果：列表刷新不再反序列化整份 history
+        if let Ok(cache) = self.summaries.lock() {
+            if let Some(cached) = cache.get(path) {
+                if cached.file_len == file_len && cached.modified == modified {
+                    return Ok(cached.summary.clone());
+                }
+            }
+        }
+
         let content =
             fs::read_to_string(path).context(format!("Failed to read file {:?}", path))?;
 
@@ -177,7 +218,7 @@ impl SessionStorage {
             })
             .context(format!("Failed to parse JSON from {:?}", path))?;
 
-        Ok(SessionSummary {
+        let summary = SessionSummary {
             session_id: session.session_id,
             title: session.title,
             session_type: session.session_type,
@@ -195,7 +236,20 @@ impl SessionStorage {
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs() as i64),
-        })
+        };
+
+        if let Ok(mut cache) = self.summaries.lock() {
+            cache.insert(
+                path.clone(),
+                CachedSummary {
+                    file_len,
+                    modified,
+                    summary: summary.clone(),
+                },
+            );
+        }
+
+        Ok(summary)
     }
 
     /// 加载完整 session
@@ -255,6 +309,7 @@ impl SessionStorage {
             .join(format!("{}.json", session_id));
 
         fs::remove_file(&path).context(format!("Failed to delete session: {}", session_id))?;
+        self.invalidate(Some(&path));
 
         Ok(())
     }
@@ -272,6 +327,8 @@ impl SessionStorage {
         if workspace_path.exists() {
             fs::remove_dir_all(&workspace_path)
                 .context(format!("Failed to delete workspace: {}", workspace_hash))?;
+            // 整个工作区没了，缓存里的路径全部作废
+            self.invalidate(None);
         }
 
         Ok(())

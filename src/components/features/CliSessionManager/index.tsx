@@ -13,6 +13,8 @@ import {
   Download,
   MessageSquare,
   Terminal,
+  RefreshCw,
+  X,
   Cpu,
   Clock,
   Coins,
@@ -48,15 +50,22 @@ export default function CliSessionManager() {
     }
   }
 
+  // 搜索匹配多个字段（标题 / 工作目录 / 会话 id / 模型名），标题命中排前。
   const filteredSessions = useMemo(() => {
-    if (!searchQuery.trim()) return sessions
-    const q = searchQuery.toLowerCase()
-    return sessions.filter(
-      s =>
-        s.title.toLowerCase().includes(q) ||
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return sessions
+    const titleHits: CliSessionSummary[] = []
+    const otherHits: CliSessionSummary[] = []
+    for (const s of sessions) {
+      if (s.title.toLowerCase().includes(q)) titleHits.push(s)
+      else if (
         s.cwd.toLowerCase().includes(q) ||
-        s.sessionId.includes(q)
-    )
+        s.sessionId.toLowerCase().includes(q) ||
+        (s.modelName || '').toLowerCase().includes(q)
+      )
+        otherHits.push(s)
+    }
+    return [...titleHits, ...otherHits]
   }, [sessions, searchQuery])
 
   const handleSelectSession = async (summary: CliSessionSummary) => {
@@ -132,16 +141,43 @@ export default function CliSessionManager() {
           <Input
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Escape' && searchQuery) {
+                e.stopPropagation()
+                setSearchQuery('')
+              }
+            }}
             placeholder={t('cliSessions.searchPlaceholder')}
-            className="h-8 pl-8 text-xs"
+            className="h-8 pl-8 pr-8 text-xs"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              aria-label={t('sessions.clearSearch')}
+              title={t('sessions.clearSearch')}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* 统计 */}
         <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
           <Terminal size={12} />
           <span>{t('cliSessions.count', { count: filteredSessions.length })}</span>
-          {loading && <Loader2 size={12} className="animate-spin ml-auto" />}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-6 rounded-full px-2 text-[11px] hover:bg-primary/10 hover:text-primary"
+            onClick={loadSessions}
+            disabled={loading}
+            title={t('sessions.refresh')}
+          >
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          </Button>
+          {loading && <Loader2 size={12} className="animate-spin" />}
         </div>
 
         {/* 列表 */}

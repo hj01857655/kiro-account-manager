@@ -3,7 +3,6 @@
 use super::*;
 
 /// 负载均衡器
-#[derive(Debug)]
 pub struct LoadBalancer {
     /// 负载均衡策略
     strategy: LoadBalancerStrategy,
@@ -16,16 +15,56 @@ pub struct LoadBalancer {
     health_check_interval: Duration,
     /// 速率限制的账号（临时屏蔽）
     rate_limited_accounts: Arc<RwLock<HashMap<String, Instant>>>,
+    /// 账号状态的唯一共享副本（= `AppState.store`）。
+    ///
+    /// 封禁等持久化必须落到这一份，否则与 Tauri 命令各写各的快照、互相覆盖。
+    store: crate::state::SharedAccountStore,
+}
+
+/// 连接位守卫：持有期间该账号的 `active_connections` 保持 +1，
+/// Drop 时归零。用于把连接计数覆盖到整个请求周期。
+pub struct ConnectionGuard {
+    balancer: Arc<LoadBalancer>,
+    account_id: String,
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        // Drop 不能 await，因此这里用 try_write 尽力而为：
+        // 拿不到写锁时计数会偏高一格，但账号不会被永久卡死
+        // （`select_least_connections` 只读瞬时值，下次请求会自然回落）。
+        if let Ok(mut health_map) = self.balancer.health_map.try_write() {
+            if let Some(health) = health_map.get_mut(&self.account_id) {
+                health.decrement_connections();
+            }
+        }
+    }
 }
 
 impl LoadBalancer {
+    /// 仅供测试使用：自建一份独立账号副本。
+    ///
+    /// 生产路径必须用 `with_store` 注入 `AppState.store`，否则又会回到
+    /// 各写各的快照、互相覆盖的老问题。
+    #[allow(dead_code)]
     pub fn new(strategy: LoadBalancerStrategy) -> Self {
+        Self::with_store(strategy, std::sync::Arc::new(std::sync::Mutex::new(
+            crate::core::account::AccountStore::new(),
+        )))
+    }
+
+    /// 注入共享账号副本；gateway 运行时用这个，保证与管理器同一份状态。
+    pub fn with_store(
+        strategy: LoadBalancerStrategy,
+        store: crate::state::SharedAccountStore,
+    ) -> Self {
         Self {
             strategy,
             current_index: Arc::new(RwLock::new(0)),
             health_map: Arc::new(RwLock::new(HashMap::new())),
             health_check_interval: Duration::from_secs(30),
             rate_limited_accounts: Arc::new(RwLock::new(HashMap::new())),
+            store,
         }
     }
 
@@ -107,6 +146,7 @@ impl LoadBalancer {
                 if let Some(health) = health_map.get_mut(&acc.id) {
                     health.is_healthy = true;
                     health.recent_failures = 0;
+                    health.consecutive_failures = 0;
                 }
             }
         }
@@ -203,11 +243,29 @@ impl LoadBalancer {
             .increment_connections();
     }
 
-    /// 减少账号的活跃连接数
+    /// 减少账号的活跃连接数。
+    ///
+    /// 常规路径应使用 [`LoadBalancer::acquire_connection`] 返回的 guard，
+    /// 由 Drop 自动归零；这个手动版本只在确知不会中途返回时使用。
+    #[allow(dead_code)]
     pub async fn decrement_connections(&self, account_id: &str) {
         let mut health_map = self.health_map.write().await;
         if let Some(health) = health_map.get_mut(account_id) {
             health.decrement_connections();
+        }
+    }
+
+    /// 为一次请求占住一个连接位，返回 RAII guard。
+    ///
+    /// 连接计数必须覆盖**整个请求周期**才有意义：原先加/减都挤在取凭据那一段，
+    /// 请求还没发出去计数就归零，`LeastConnections` 因此永远看到 0。
+    /// guard 在 Drop 时归零，panic、提前 return、连接中断都能收尾，
+    /// 不会把账号永久卡在「有连接」状态。
+    pub async fn acquire_connection(self: &Arc<Self>, account_id: &str) -> ConnectionGuard {
+        self.increment_connections(account_id).await;
+        ConnectionGuard {
+            balancer: Arc::clone(self),
+            account_id: account_id.to_string(),
         }
     }
 
@@ -253,12 +311,14 @@ impl LoadBalancer {
         let mut health_map = self.health_map.write().await;
         if let Some(health) = health_map.get_mut(account_id) {
             health.is_healthy = false;
-            health.recent_failures = 999; // 设置高失败次数
+            // 封禁是账号级结论，不是「失败很多次」的累积结果；
+            // 原实现塞 recent_failures = 999 会让成功率统计永久为 0
+            health.consecutive_failures = usize::MAX;
         }
         drop(health_map); // 释放锁
 
         // 持久化到数据库
-        if let Err(e) = Self::persist_banned_status(account_id).await {
+        if let Err(e) = self.persist_banned_status(account_id).await {
             log::error!(
                 "[LoadBalancer] 持久化账号 {} 的封禁状态失败: {}",
                 account_id,
@@ -268,11 +328,13 @@ impl LoadBalancer {
     }
 
     /// 持久化封禁状态到数据库
-    async fn persist_banned_status(account_id: &str) -> Result<(), String> {
-        use crate::core::account::AccountStore;
+    async fn persist_banned_status(&self, account_id: &str) -> Result<(), String> {
         use crate::commands::common::update_account_status;
 
-        let mut store = AccountStore::new();
+        let mut store = self
+            .store
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // 查找并更新账号
         let mut found = false;
@@ -344,6 +406,7 @@ impl LoadBalancer {
             health.is_healthy = true;
             health.recent_failures = 0;
             health.recent_successes = 0;
+            health.consecutive_failures = 0;
         }
     }
 

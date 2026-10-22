@@ -37,7 +37,7 @@ function WelcomeModal() {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className={`glass-card rounded-2xl w-[760px] max-w-full shadow-2xl border border-border relative overflow-hidden flex flex-col`}>
         {/* 背景装饰 */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
@@ -228,7 +228,7 @@ function WelcomeModal() {
       {/* 图片预览弹窗 */}
       {previewImg && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4"
           onClick={() => setPreviewImg(null)}
         >
           <div className="relative" onClick={(e) => e.stopPropagation()}>

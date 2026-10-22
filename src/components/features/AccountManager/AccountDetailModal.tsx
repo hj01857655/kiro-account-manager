@@ -260,7 +260,7 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
         {/* 顶部渐变背景 */}
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-br from-blue-500/5 via-purple-500/3 to-transparent pointer-events-none rounded-t-2xl" />
 
-        <div className={`sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-6 py-4 rounded-t-2xl`}>
+        <div className={`sticky top-0 z-20 bg-background border-b border-border px-6 py-4 rounded-t-2xl`}>
           <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">账号详情</div>
           <div className="flex items-start gap-3">
             {/* 头像图标 */}

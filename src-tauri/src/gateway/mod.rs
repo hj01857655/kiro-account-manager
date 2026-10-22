@@ -1,5 +1,6 @@
 mod compress;
-pub(crate) mod converter;
+pub mod field_support;
+mod converter;
 mod eventstream;
 pub(crate) mod load_balancer;
 pub mod log_store;
@@ -16,13 +17,13 @@ mod token_estimator;
 
 use axum::{
     extract::{ConnectInfo, State},
-    http::{HeaderMap, Method},
+    http::{header, HeaderMap, HeaderName, HeaderValue, Method},
     response::{Json, Response},
     routing::{get, post},
     Router,
 };
 use reqwest::Client;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -79,10 +80,17 @@ pub struct GatewayConfig {
     pub host: String,
     #[serde(default = "default_port")]
     pub port: u16,
+    /// 客户端鉴权密钥：固定为 `kiro`，不再可配（见 `CLIENT_API_KEY`）。
+    ///
+    /// 以下三个历史字段仅做兼容读取，认证一律走常量：
+    /// - `access_token` / `client_api_keys` / `client_keys` 是多 Key 时代的
+    ///   存储与文本镜像（`name:key`、`#disabled#` 编码），已整体废弃。
     #[serde(default)]
     pub access_token: Option<String>,
     #[serde(default)]
     pub client_api_keys: Vec<String>,
+    #[serde(default)]
+    pub client_keys: Vec<serde_json::Value>,
     #[serde(default = "default_region")]
     pub region: String,
     #[serde(default = "default_account_mode")]
@@ -103,8 +111,6 @@ pub struct GatewayConfig {
     pub allowed_ips: Vec<String>,
     #[serde(default = "default_log_level")]
     pub log_level: String,
-    #[serde(default)]
-    pub model_mappings: Vec<ModelMappingRule>,
     /// 系统提示过滤：检测 Claude Code 系统提示并替换为精简版
     #[serde(default)]
     pub filter_claude_code: bool,
@@ -154,77 +160,8 @@ pub struct PromptFilterRule {
     pub replace: String,
 }
 
-/// 模型映射规则
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelMappingRule {
-    pub id: String,
-    pub name: String,
-    #[serde(default = "default_true_val")]
-    pub enabled: bool,
-    /// replace | alias | loadbalance
-    #[serde(default = "default_mapping_type")]
-    pub rule_type: String,
-    pub source_model: String,
-    pub target_models: Vec<String>,
-    #[serde(default)]
-    pub weights: Vec<u32>,
-}
-
 fn default_true_val() -> bool {
     true
-}
-fn default_mapping_type() -> String {
-    "replace".to_string()
-}
-
-/// 根据模型映射规则解析实际模型名
-pub fn resolve_model_mapping(config: &GatewayConfig, requested_model: &str) -> String {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    static ROUND_ROBIN: AtomicUsize = AtomicUsize::new(0);
-
-    for rule in &config.model_mappings {
-        if !rule.enabled {
-            continue;
-        }
-        if rule.source_model != requested_model {
-            continue;
-        }
-        if rule.target_models.is_empty() {
-            continue;
-        }
-
-        match rule.rule_type.as_str() {
-            "replace" | "alias" => {
-                return rule.target_models[0].clone();
-            }
-            "loadbalance" => {
-                if rule.weights.is_empty() || rule.weights.len() != rule.target_models.len() {
-                    // 无权重或权重数量不匹配，简单轮询
-                    let idx =
-                        ROUND_ROBIN.fetch_add(1, Ordering::Relaxed) % rule.target_models.len();
-                    return rule.target_models[idx].clone();
-                }
-                // 加权轮询
-                let total_weight: u32 = rule.weights.iter().sum();
-                if total_weight == 0 {
-                    return rule.target_models[0].clone();
-                }
-                let tick = ROUND_ROBIN.fetch_add(1, Ordering::Relaxed) as u32 % total_weight;
-                let mut cumulative = 0u32;
-                for (i, &w) in rule.weights.iter().enumerate() {
-                    cumulative += w;
-                    if tick < cumulative {
-                        return rule.target_models[i].clone();
-                    }
-                }
-                return rule.target_models[0].clone();
-            }
-            _ => {}
-        }
-    }
-
-    requested_model.to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -248,6 +185,9 @@ pub struct GatewayRequestLogEntry {
     pub request_index: u64,
     pub endpoint: String,
     pub client_ip: String,
+    /// 客户端发来的 User-Agent
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_user_agent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     pub stream: bool,
@@ -334,7 +274,6 @@ pub struct GatewayRequestStats {
     pub avg_duration_ms: u64,
 }
 
-#[derive(Debug)]
 pub struct GatewayRuntime {
     pub config: GatewayConfig,
     pub request_count: Arc<AtomicU64>,
@@ -373,6 +312,11 @@ struct RouterState {
     load_balancer: Arc<load_balancer::LoadBalancer>,
     log_store: Arc<log_store::LogStore>,
     response_cache: Arc<AsyncMutex<response_cache::ResponseCache>>,
+    /// 账号状态的唯一共享副本（= `AppState.store`）。
+    ///
+    /// gateway 不得自行 `AccountStore::new()`：那会得到与 Tauri 命令
+    /// 互不知情的独立快照，后写覆盖前写，静默丢失 token 与失败计数。
+    store: crate::state::SharedAccountStore,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -452,6 +396,7 @@ impl Default for GatewayConfig {
             port: default_port(),
             access_token: None,
             client_api_keys: Vec::new(),
+            client_keys: Vec::new(),
             region: default_region(),
             account_mode: default_account_mode(),
             account_id: None,
@@ -462,7 +407,6 @@ impl Default for GatewayConfig {
             local_only: default_local_only(),
             allowed_ips: Vec::new(),
             log_level: default_log_level(),
-            model_mappings: Vec::new(),
             filter_claude_code: false,
             filter_strip_boundaries: false,
             filter_env_noise: false,
@@ -474,35 +418,12 @@ impl Default for GatewayConfig {
         }
     }
 }
-pub(crate) fn effective_client_api_keys(config: &GatewayConfig) -> Vec<String> {
-    let mut keys = Vec::new();
-
-    if let Some(key) = config
-        .access_token
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .filter(|value| !value.starts_with("#disabled#"))
-    // 过滤禁用的 Key
-    {
-        keys.push(key.to_string());
-    }
-
-    for key in config
-        .client_api_keys
-        .iter()
-        .map(|item| item.trim())
-        .filter(|item| !item.is_empty())
-        .filter(|item| !item.starts_with("#disabled#"))
-    // 过滤禁用的 Key
-    {
-        if !keys.iter().any(|existing| existing == key) {
-            keys.push(key.to_string());
-        }
-    }
-
-    keys
-}
+/// 客户端鉴权密钥：固定为 `kiro`。
+///
+/// 多 Key 管理（生成 / 命名 / 启停 / 配额 / RPM）已整体移除。保留固定密钥
+/// 是为了维持「客户端必须携带鉴权头」的协议形状，也是为了和把鉴权头当
+/// 透传字段的客户端保持兼容。
+pub const CLIENT_API_KEY: &str = "kiro";
 
 impl GatewayStatus {
     pub fn stopped(config: &GatewayConfig) -> Self {
@@ -556,7 +477,7 @@ fn ensure_config_valid(config: &GatewayConfig) -> Result<(), String> {
         }
         "single" | "group" | "pool" => {}
         "local" => {
-            return Err("2API不再支持 local 模式，请改用 single/group/pool 账号池模式".to_string());
+            return Err("kiro2api 不再支持 local 模式，请改用 single/group/pool 账号池模式".to_string());
         }
         _ => return Err("accountMode 必须是 single/group/pool".to_string()),
     }
@@ -565,9 +486,6 @@ fn ensure_config_valid(config: &GatewayConfig) -> Result<(), String> {
         "debug" | "info" | "warn" | "error"
     ) {
         return Err("logLevel 必须是 debug/info/warn/error".to_string());
-    }
-    if effective_client_api_keys(config).is_empty() {
-        return Err("必须配置客户端 API Key".to_string());
     }
     if !config.local_only && config.allowed_ips.is_empty() {
         return Err("允许远程访问时必须至少配置一个白名单来源 IP".to_string());
@@ -589,17 +507,19 @@ fn is_valid_allowlist_entry(entry: &str) -> bool {
 fn normalize_config(config: &GatewayConfig) -> GatewayConfig {
     let mut normalized = config.clone();
     normalized.host = normalized.host.trim().to_string();
-    normalized.access_token = normalized
-        .access_token
-        .as_ref()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+    // 端口不再可配：固定 8765，Base URL 因此恒定，客户端只需配一次。
+    // 旧配置里存的其它端口在这里被覆盖，无需用户手工改配置文件。
+    // 字段本身保留，是为了不破坏已有配置文件的兼容读取。
+    normalized.port = default_port();
+    // 客户端密钥固定为 kiro，不再从配置读取。历史字段在归一化时清空，
+    // 避免旧配置里的多 Key 数据继续以“真相”的姿态存在于配置文件中。
+    normalized.access_token = None;
+    normalized.client_api_keys = Vec::new();
+    normalized.client_keys = Vec::new();
     normalized.region = normalized.region.trim().to_string();
     normalized.account_mode = normalized.account_mode.trim().to_string();
     normalized.strategy = normalized.strategy.trim().to_string();
     normalized.log_level = normalized.log_level.trim().to_ascii_lowercase();
-    normalized.client_api_keys = effective_client_api_keys(&normalized);
-    normalized.access_token = normalized.client_api_keys.first().cloned();
     normalized.allowed_ips = normalized
         .allowed_ips
         .iter()
@@ -650,12 +570,31 @@ fn append_gateway_request_log_to_path(
 /// 整个 logs 目录合计约 372MB，只能靠用户手动清理。
 const RAW_LOG_MAX_BYTES: u64 = 32 * 1024 * 1024;
 
-/// 收敛网关日志目录体积：把超过 [`RAW_LOG_MAX_BYTES`] 的 `*.log` 轮转为 `*.log.1`，
+/// 结构化请求日志（JSONL）的体积上限。
+///
+/// 它比 `*.log` 更容易涨爆：`request_body` / `response_body` 原样入库、
+/// 没有截断，Claude Code 一个请求就能写进几百 KB。轮转为 `.jsonl.1`，
+/// 备份扩展名不是 `jsonl`，不会反复轮转。
+const REQUEST_LOG_MAX_BYTES: u64 = 32 * 1024 * 1024;
+
+/// 受管日志扩展名对应的体积上限；返回 `None` 表示该文件不纳入轮转。
+///
+/// 独立成函数是为了可测：轮转本身要动真实日志目录，而这套「管哪些、不管哪些」
+/// 的规则必须能被锁住——`.jsonl` 曾被漏掉，正是因为它扩展名不是 `log`。
+fn managed_log_cap(extension: &str) -> Option<u64> {
+    match extension {
+        "log" => Some(RAW_LOG_MAX_BYTES),
+        "jsonl" => Some(REQUEST_LOG_MAX_BYTES),
+        _ => None,
+    }
+}
+
+/// 收敛网关日志目录体积：把超过上限的 `*.log` / `*.jsonl` 轮转为 `<name>.1`，
 /// 让后续追加从头开始。旧备份会被覆盖，故每个文件最多约占 2×上限。
 ///
 /// - 由 `proxy_handler` 按固定请求间隔低频调用，不在热路径上每次执行。
 /// - 轮转失败（文件被占用等）静默忽略，下次再试；不会影响正常请求。
-/// - `*.log.1` 备份本身因扩展名不是 `log` 会被跳过，不会反复轮转。
+/// - 备份扩展名（`log.1` / `jsonl.1`）不在受管集合内，不会反复轮转。
 pub fn enforce_raw_log_caps() {
     let log_dir = crate::core::paths::app_data_dir_or_default().join(LOGS_DIR);
     let Ok(entries) = std::fs::read_dir(&log_dir) else {
@@ -663,16 +602,19 @@ pub fn enforce_raw_log_caps() {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("log") {
+        let Some(extension) = path.extension().and_then(|ext| ext.to_str()) else {
             continue;
-        }
+        };
+        let Some(cap) = managed_log_cap(extension) else {
+            continue;
+        };
         let Ok(meta) = entry.metadata() else {
             continue;
         };
-        if !meta.is_file() || meta.len() <= RAW_LOG_MAX_BYTES {
+        if !meta.is_file() || meta.len() <= cap {
             continue;
         }
-        let backup = path.with_extension("log.1");
+        let backup = path.with_extension(format!("{extension}.1"));
         let _ = std::fs::remove_file(&backup);
         let _ = std::fs::rename(&path, &backup);
     }
@@ -749,6 +691,51 @@ pub fn load_gateway_config() -> Result<GatewayConfig, String> {
 
 pub fn get_gateway_config() -> Result<GatewayConfig, String> {
     load_gateway_config()
+}
+
+/// 就地丢弃 `pool_account_ids` 里指向已删除账号的 id。
+///
+/// 与 `prune_deleted_pool_accounts` 同一个目的：那一个是删除账号后回写文件，
+/// 这一个在启动前就地校正内存里的配置。删账号时的清理可能失败（磁盘只读、
+/// 配置被占用），悬空 id 会在启动这一刻被拦住，而不是带病把网关拉起来。
+fn prune_deleted_pool_accounts_in_place(config: &mut GatewayConfig, store: &crate::state::SharedAccountStore) {
+    if config.pool_account_ids.is_empty() {
+        return;
+    }
+    let existing_ids: Vec<String> = {
+        // 与 proxy/auth.rs 的 lock_shared_store 同一约定：poison 时仍取 into_inner，
+        // 不因为一次 panic 就让启动路径整体失败
+        let guard = store.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.accounts.iter().map(|account| account.id.clone()).collect()
+    };
+    config.pool_account_ids.retain(|id| existing_ids.iter().any(|existing| existing == id));
+}
+
+/// 丢弃 `pool_account_ids` 里指向已删除账号的 id。
+///
+/// 删除账号不会通知网关配置，池里的 id 会永久残留：账号全删光之后，
+/// 「pool 模式」仍带着 N 个失效 id 通过 `ensure_config_valid`，运行期却一个
+/// 账号都匹配不到（`proxy/auth.rs` 与 `proxy/upstream.rs` 都按 id 过滤），
+/// 请求全部失败。删除账号是唯一会制造这种悬空引用的动作，故在此收敛。
+pub fn prune_deleted_pool_accounts(existing_ids: &[String]) -> Result<(), String> {
+    let mut config = load_gateway_config()?;
+    if config.pool_account_ids.is_empty() {
+        return Ok(());
+    }
+    let before = config.pool_account_ids.len();
+    config
+        .pool_account_ids
+        .retain(|id| existing_ids.iter().any(|existing| existing == id));
+    if config.pool_account_ids.len() == before {
+        return Ok(());
+    }
+    // 池被清空时 pool 模式会变成非法配置。这里仍照实写盘，不走 save_gateway_config：
+    // 那会让 ensure_config_valid 把这次清理整个挡掉，悬空 id 继续留在文件里。
+    // 合法性由下次启动时暴露给用户，而不是拿一份看似有效的配置去启动网关。
+    let path = config_path()?;
+    let content = serde_json::to_string_pretty(&normalize_config(&config))
+        .map_err(|e| format!("序列化配置失败: {e}"))?;
+    fs::write(path, content).map_err(|e| format!("写入配置失败: {e}"))
 }
 
 pub fn save_gateway_config(config: &GatewayConfig) -> Result<(), String> {
@@ -873,6 +860,25 @@ pub async fn get_gateway_endpoint_stats(
     Ok(Vec::new())
 }
 
+pub async fn get_gateway_client_stats(
+    state: &tauri::State<'_, crate::state::AppState>,
+) -> Result<Vec<log_store::ClientStat>, String> {
+    let log_store_opt = {
+        let guard = state
+            .gateway
+            .lock()
+            .map_err(|_| "获取 gateway 状态失败".to_string())?;
+
+        guard.as_ref().map(|rt| rt.log_store.clone())
+    };
+
+    if let Some(log_store) = log_store_opt {
+        return Ok(log_store.get_client_stats().await);
+    }
+
+    Ok(Vec::new())
+}
+
 fn get_gateway_request_stats_from_path(path: &Path) -> Result<GatewayRequestStats, String> {
     if !path.exists() {
         return Ok(GatewayRequestStats {
@@ -989,7 +995,12 @@ pub async fn start_gateway(
     state: &tauri::State<'_, crate::state::AppState>,
     config: GatewayConfig,
 ) -> Result<GatewayStatus, String> {
-    let config = normalize_config(&config);
+    let mut config = normalize_config(&config);
+    // 启动前丢掉指向已删除账号的池 id。留着它们 pool 模式照样通过
+    // ensure_config_valid，运行期却一个账号都匹配不到（proxy/auth.rs 与
+    // proxy/upstream.rs 都按 id 过滤），请求全部失败且界面看不出原因。
+    // 清空后 pool 模式变成非法配置，这里的校验会把这个状态明确报出来。
+    prune_deleted_pool_accounts_in_place(&mut config, &state.store);
     ensure_config_valid(&config)?;
 
     let existing = {
@@ -1004,7 +1015,7 @@ pub async fn start_gateway(
         stop_runtime(&mut rt).await;
     }
 
-    let runtime = spawn_runtime(config.clone()).await?;
+    let runtime = spawn_runtime(config.clone(), state.store.clone()).await?;
     let status = GatewayStatus {
         running: true,
         host: config.host.clone(),
@@ -1074,11 +1085,57 @@ pub async fn get_gateway_status(
     }
 }
 
+/// 判断一个 Origin 是否为「本机来源」。
+///
+/// 匹配两类：
+/// 1. 浏览器开发/调试来源：`http://localhost[:port]`、`http://127.0.0.1[:port]`、`http://[::1][:port]`；
+/// 2. Tauri WebView 自身的来源：`tauri://localhost`（Linux/macOS）、
+///    `http://tauri.localhost` / `https://tauri.localhost`（Windows）。
+///    打包后的应用页就是这个来源，漏掉它则应用内的「协议实测」等
+///    浏览器 fetch 调用会被 CORS 拦死，开发模式却看不出问题。
+///
+/// 前缀后必须是端口分隔符或结束——否则 `http://localhost.evil.com` 会被
+/// `starts_with("http://localhost")` 误放行。
+fn is_local_origin(origin: &str) -> bool {
+    // Tauri WebView：scheme 与主机名固定，没有端口概念，整串精确匹配。
+    // 不把 tauri:// 做成前缀匹配，避免 `tauri://localhost.evil.com` 蒙对。
+    if matches!(
+        origin,
+        "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost"
+    ) {
+        return true;
+    }
+    for prefix in ["http://localhost", "http://127.0.0.1", "http://[::1]"] {
+        if let Some(rest) = origin.strip_prefix(prefix) {
+            return rest.is_empty() || rest.starts_with(':');
+        }
+    }
+    false
+}
+
 fn router(state: RouterState) -> Router {
+    // CORS 收敛：不再 `allow_origin(Any)`。
+    //
+    // 原来的全开意味着同机上任意网页都能用 JS 读走 /health、/v1/models
+    // （本机边界挡得住远程，挡不住本机浏览器）。现在统一只放行本机来源：
+    // local_only 与远程模式同等对待——浏览器 Origin 不在 IP 白名单语义内，
+    // 要为别人开放得另行处理，不在这层开口子。
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
+            origin.to_str().is_ok_and(is_local_origin)
+        }))
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers(Any);
+        // x-account-id 与 anthropic-version 是三个入口真实会用到的请求头：
+        // 前者让调用方强制指定账号（proxy/auth.rs 读它），后者是 Anthropic
+        // 协议的版本声明。它们不在放行列表里时，浏览器预检会先失败，
+        // 请求根本到不了 handler——所以必须显式列出。
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            HeaderName::from_static("x-api-key"),
+            HeaderName::from_static("x-account-id"),
+            HeaderName::from_static("anthropic-version"),
+        ]);
 
     Router::new()
         .route("/health", get(health_handler))
@@ -1095,7 +1152,10 @@ fn router(state: RouterState) -> Router {
         .with_state(state)
 }
 
-async fn spawn_runtime(config: GatewayConfig) -> Result<GatewayRuntime, String> {
+async fn spawn_runtime(
+    config: GatewayConfig,
+    store: crate::state::SharedAccountStore,
+) -> Result<GatewayRuntime, String> {
     ensure_config_valid(&config)?;
 
     let request_count = Arc::new(AtomicU64::new(0));
@@ -1107,7 +1167,10 @@ async fn spawn_runtime(config: GatewayConfig) -> Result<GatewayRuntime, String> 
 
     // 初始化负载均衡器
     let strategy = load_balancer::LoadBalancerStrategy::from_str(&config.strategy);
-    let load_balancer = Arc::new(load_balancer::LoadBalancer::new(strategy));
+    let load_balancer = Arc::new(load_balancer::LoadBalancer::with_store(
+        strategy,
+        store.clone(),
+    ));
 
     // 初始化内存日志存储（保存最近 10000 条日志）
     let log_store = Arc::new(log_store::LogStore::new(10000));
@@ -1147,7 +1210,12 @@ async fn spawn_runtime(config: GatewayConfig) -> Result<GatewayRuntime, String> 
         load_balancer: load_balancer.clone(),
         log_store: log_store.clone(),
         response_cache: response_cache.clone(),
+        store,
     };
+
+    // 会话缓存独立清理周期：不能只在插入时清，否则闲置期间内存不释放。
+    // 必须在 router(state) 移动 state 之前取出 Arc。
+    let session_cleanup_store = state.responses_sessions.clone();
 
     let app = router(state);
     let addr = build_bind_addr(&config.host, config.port)?;
@@ -1171,6 +1239,9 @@ async fn spawn_runtime(config: GatewayConfig) -> Result<GatewayRuntime, String> 
             log::error!("网关服务器错误: {e}");
         }
     });
+
+    // 会话缓存独立清理周期：不能只在插入时清，否则闲置期间内存不释放
+    crate::gateway::proxy::spawn_responses_session_cleanup(session_cleanup_store);
 
     Ok(GatewayRuntime {
         config,

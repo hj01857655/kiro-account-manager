@@ -86,6 +86,12 @@
 
   /* 桥接变量 */
   --app-primary-solid: var(--primary);
+  /* hover 档：用 color-mix 从 primary 推出来，避免再维护一个硬编码色值；
+     深色主题下同样适用（primary 变了它跟着变）。 */
+  --app-primary-solid-hover: color-mix(in srgb, var(--primary) 88%, #000);
+  /* 弹窗正文的内边距档位：与 DialogBody 默认 px-6 py-4 同量级，
+     供 AnnouncementModal 这类需要内联覆盖的弹窗使用。 */
+  --app-space-md: 1rem;
   --app-primary-rgb: 59 130 246;
   --surface-rgb: 255 255 255;
   --surface-contrast-rgb: 248 250 252;
@@ -153,15 +159,27 @@
   --accent: rgb(var(--primary-rgb) / 0.12) !important;
   --glass-border: rgba(255, 255, 255, 0.08) !important;
   --bg-glow-opacity: 0.12;
+
+  /* 背景渐变（body 的 background-image 由这三个变量驱动）。
+     此前暗色主题未覆盖这组变量，导致左上角被亮色渐变（#e2e8f0/#f1f5f9/#fff）
+     刷成近白色，玻璃卡片压在上面折射出灰浊色。此处给出暗色默认值，
+     各主题可在下方 SPECIFIC THEME DEFINITIONS 中按调性微调。 */
+  --bg-gradient-1: #1e293b;
+  --bg-gradient-1-rgb: 30 41 59;
+  --bg-gradient-2: #0f172a;
+  --bg-gradient-2-rgb: 15 23 42;
+  --bg-gradient-3: #02040a;
+  --bg-gradient-3-rgb: 2 4 10;
 }
 
 /* ============================================================
    SPECIFIC THEME DEFINITIONS
    ============================================================ */
-[data-theme='dark'] { --background: #09090b; --background-rgb: 9 9 11; --surface-rgb: 13 14 24; --surface-contrast-rgb: 2 4 10; --primary: #3b82f6; --primary-rgb: 59 130 246; --bg-color: #09090b; }
-[data-theme='dark-one'] { --background: #1b1e23; --background-rgb: 27 30 35; --surface-rgb: 33 37 43; --surface-contrast-rgb: 45 52 60; --primary: #61afef; --primary-rgb: 97 175 239; --bg-color: #1b1e23; }
-[data-theme='tech'] { --background: #020617; --background-rgb: 2 6 23; --surface-rgb: 15 23 42; --surface-contrast-rgb: 2 6 23; --primary: #06b6d4; --primary-rgb: 6 182 212; --bg-color: #020617; }
-[data-theme='midnight'] { --background: #000000; --background-rgb: 0 0 0; --surface-rgb: 10 10 15; --surface-contrast-rgb: 0 0 0; --primary: #fbbf24; --primary-rgb: 251 191 36; --bg-color: #000000; }
+/* 暗色主题各自的背景渐变：按主题调性微调（1=左上、2=右上、3=底部） */
+[data-theme='dark'] { --background: #09090b; --background-rgb: 9 9 11; --surface-rgb: 13 14 24; --surface-contrast-rgb: 2 4 10; --primary: #3b82f6; --primary-rgb: 59 130 246; --bg-color: #09090b; --bg-gradient-1: #111a2e; --bg-gradient-1-rgb: 17 26 46; --bg-gradient-2: #0d1322; --bg-gradient-2-rgb: 13 19 34; --bg-gradient-3: #070a12; --bg-gradient-3-rgb: 7 10 18; }
+[data-theme='dark-one'] { --background: #1b1e23; --background-rgb: 27 30 35; --surface-rgb: 33 37 43; --surface-contrast-rgb: 45 52 60; --primary: #61afef; --primary-rgb: 97 175 239; --bg-color: #1b1e23; --bg-gradient-1: #252a31; --bg-gradient-1-rgb: 37 42 49; --bg-gradient-2: #1f242a; --bg-gradient-2-rgb: 31 36 42; --bg-gradient-3: #171a1f; --bg-gradient-3-rgb: 23 26 31; }
+[data-theme='tech'] { --background: #020617; --background-rgb: 2 6 23; --surface-rgb: 15 23 42; --surface-contrast-rgb: 2 6 23; --primary: #06b6d4; --primary-rgb: 6 182 212; --bg-color: #020617; --bg-gradient-1: #0b2540; --bg-gradient-1-rgb: 11 37 64; --bg-gradient-2: #071a30; --bg-gradient-2-rgb: 7 26 48; --bg-gradient-3: #030b18; --bg-gradient-3-rgb: 3 11 24; }
+[data-theme='midnight'] { --background: #000000; --background-rgb: 0 0 0; --surface-rgb: 10 10 15; --surface-contrast-rgb: 0 0 0; --primary: #fbbf24; --primary-rgb: 251 191 36; --bg-color: #000000; --bg-gradient-1: #14100a; --bg-gradient-1-rgb: 20 16 10; --bg-gradient-2: #0b0a08; --bg-gradient-2-rgb: 11 10 8; --bg-gradient-3: #040404; --bg-gradient-3-rgb: 4 4 4; }
 
 [data-theme='purple'] { --background: #f5f3ff; --primary: #7c3aed; --primary-rgb: 124 58 237; --bg-color: #f5f3ff; }
 [data-theme='green'] { --background: #f0fdf4; --primary: #059669; --primary-rgb: 5 150 105; --bg-color: #f0fdf4; }
@@ -174,22 +192,20 @@
 [data-theme='sakura'] { --background: #fff5f7; --primary: #db2777; --primary-rgb: 219 39 119; --bg-color: #fff5f7; }
 
 /* ============================================================
-   GLASSMORPHISM CORE
+   SURFACE CORE（实色卡片，不再使用毛玻璃）
    ============================================================ */
 .glass-card {
-  background: rgb(var(--surface-rgb) / var(--glass-opacity));
-  backdrop-filter: blur(var(--glass-blur));
+  background: rgb(var(--surface-rgb));
   border: 1px solid var(--border);
   border-radius: 1rem;
   transition: all 0.3s ease;
 }
 .glass-card:hover {
   border-color: rgb(var(--primary-rgb) / 0.3);
-  background: rgb(var(--surface-rgb) / calc(var(--glass-opacity) + 0.05));
+  background: rgb(var(--surface-rgb));
 }
 .glass-sidebar {
-  background: rgb(var(--surface-contrast-rgb) / 0.85);
-  backdrop-filter: blur(var(--glass-blur));
+  background: rgb(var(--surface-contrast-rgb));
   border-right: 1px solid var(--border);
 }
 .glass-main {
@@ -225,7 +241,7 @@
 .info-badge { background: rgb(59 130 246 / 0.1); color: rgb(59 130 246); }
 
   /* --- 侧边栏语义化类名 --- */
-  .sidebar-card { background: rgb(var(--surface-rgb) / 0.1); backdrop-filter: blur(8px); }
+  .sidebar-card { background: rgb(var(--surface-rgb) / 0.1); }
   .sidebar-foreground { color: var(--foreground); }
   .sidebar-muted { color: var(--muted-foreground); opacity: 0.7; }
   .sidebar-active { background: var(--primary); color: white; }

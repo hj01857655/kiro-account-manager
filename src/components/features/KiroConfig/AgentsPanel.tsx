@@ -583,7 +583,7 @@ function CreateAgentModal({ onCreate, onClose, accent, surface, accentGradientBu
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
         className={`glass-card rounded-2xl w-full max-w-[460px] shadow-2xl border border-border overflow-hidden`}
         onClick={e => e.stopPropagation()}

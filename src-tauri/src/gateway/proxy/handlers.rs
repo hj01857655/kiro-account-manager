@@ -78,6 +78,8 @@ pub async fn generate_local_response(
         request_body_hint: None,
         model_hint: None,
         is_stream: None,
+        client_user_agent: None,
+        request_id: String::new(),
     };
 
     if state.config.local_only && !client_addr.ip().is_loopback() {
@@ -99,7 +101,7 @@ pub async fn generate_local_response(
         && !state.config.allowed_ips.is_empty()
         && !ip_matches_allowlist(client_addr.ip(), &state.config.allowed_ips)
     {
-        let message = format!("访问地址 {} 不在2API白名单中", client_addr.ip());
+        let message = format!("访问地址 {} 不在 kiro2api 白名单中", client_addr.ip());
         return gateway_error_with_log(
             &state,
             ResponseFormat::Responses,
@@ -167,6 +169,15 @@ pub async fn models_handler(
     client_addr: SocketAddr,
     headers: HeaderMap,
 ) -> Response {
+    // 鉴权由 generate_local_response 统一处理（含 IP 白名单与客户端 Key），
+    // 此处不重复——这四个本地端点共用同一条检查路径。
+    //
+    // 模型列表直接返回静态全量表，不按账号过滤。
+    // 社区同类项目（kirocc / OmniRoute / LiteLLM / 9router）一律如此：
+    // `/v1/models` 没有「当前用哪个账号」的上下文，且选中不可用的模型时
+    // 上游会明确报错，比「列表里没有」更好排查。
+    // 账号权限差异是 token scope 问题（AWS 登录 vs Kiro OAuth），
+    // 过滤列表治不了这个病，反而会让「我的 opus 呢」更难查。
     generate_local_response(
         state,
         client_addr,

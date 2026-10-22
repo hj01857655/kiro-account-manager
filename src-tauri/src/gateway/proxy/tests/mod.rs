@@ -15,7 +15,6 @@ mod handlers;
 fn proxy_test_state() -> RouterState {
     RouterState {
         config: GatewayConfig {
-            access_token: Some("sk-test".to_string()),
             account_mode: "single".to_string(),
             account_id: Some("test-account".to_string()),
             ..GatewayConfig::default()
@@ -34,6 +33,9 @@ fn proxy_test_state() -> RouterState {
                 crate::gateway::response_cache::CacheConfig::default(),
                 None,
             ),
+        )),
+        store: Arc::new(std::sync::Mutex::new(
+            crate::core::account::AccountStore::new(),
         )),
     }
 }

@@ -84,7 +84,7 @@ function UpdateDialog({ updateInfo, update, onClose }) {
         {/* 顶部横幅 */}
         <div className="bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-5 relative">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur">
+            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
               <Sparkles size={28} className="text-white" />
             </div>
             <div className="flex flex-col gap-0.5">

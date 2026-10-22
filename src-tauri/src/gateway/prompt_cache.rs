@@ -1,5 +1,5 @@
 //! Prompt Cache 模拟器
-//! 在2API侧追踪 cache_control 断点，模拟 Anthropic 的 prompt caching 行为
+//! 在 kiro2api 侧追踪 cache_control 断点，模拟 Anthropic 的 prompt caching 行为
 //! 让 Claude Code 的 cache_control 字段产生实际效果的 usage 统计
 
 use sha2::{Digest, Sha256};

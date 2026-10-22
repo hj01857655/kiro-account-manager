@@ -7,7 +7,12 @@ import { AppSettingsProvider } from './contexts/AppSettingsContext'
 import { I18nProvider } from './i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { THEME_KEYS } from './lib/themeRegistry'
+import { scheduleBootSplashFallback } from './utils/bootSplash'
 import { applyOsAttribute } from './utils/os'
+
+// 撤卡兜底：React 若始终没挂载，启动卡会永久盖住窗口。必须在 render 之前注册，
+// 这样渲染抛错时也能撤。不能放进 index.html 的内联 script——生产 CSP 会拦掉。
+scheduleBootSplashFallback()
 
 // 平台标记：给 <html> 打 data-os，供 CSS 区分 macOS 交通灯避让与滚动条样式。
 // 同样必须早于 render——晚一步会在 macOS 上闪一帧无避让的布局。

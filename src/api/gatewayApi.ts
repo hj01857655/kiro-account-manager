@@ -50,6 +50,11 @@ export function getGatewayEndpointStats<T = any[]>() {
   return invoke<T>('get_gateway_endpoint_stats')
 }
 
+/** 按客户端 UA 产品名分组的用量（Key 固定为 kiro 后不再有 Key 维度），回答「谁在用这个网关」 */
+export function getGatewayClientStats<T = any[]>() {
+  return invoke<T>('get_gateway_client_stats')
+}
+
 export function getCacheStats<T = any>() {
   return invoke<T>('get_cache_stats')
 }
@@ -104,21 +109,11 @@ export function getAvailableModels() {
   return invoke<string[]>('get_available_models')
 }
 
-/** 按当前 2API 配置模拟负载均衡选号（不发起真实上游请求） */
+/** 按当前 kiro2api 配置模拟负载均衡选号（不发起真实上游请求） */
 export function testRouteConfig(config: any) {
   return invoke<{
     matched_accounts: string[]
     selected_account: string | null
     error: string | null
   }>('test_route_config', { config })
-}
-
-// 为选中的客户端写入反代配置
-export function configureProxyClients(args: {
-  clients: string[]
-  host: string
-  port: number
-  apiKey: string
-}) {
-  return invoke<any[]>('configure_proxy_clients', args)
 }

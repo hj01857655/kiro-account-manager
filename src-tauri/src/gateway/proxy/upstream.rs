@@ -2,6 +2,42 @@
 
 use super::*;
 
+/// 按协议跑字段消费判定，命中 `Rejected` 就返回 (字段名, 客户端可见原因)。
+///
+/// 顶层字段与嵌套路径都查：Responses 的 `text.format` 是两层结构，
+/// 只在顶层扫会漏掉它。
+pub fn reject_unsupported_fields(
+    format: ResponseFormat,
+    payload: &Value,
+) -> Option<(String, String)> {
+    let protocol = match format {
+        ResponseFormat::Anthropic => crate::gateway::field_support::Protocol::AnthropicMessages,
+        ResponseFormat::OpenAI => {
+            crate::gateway::field_support::Protocol::OpenAIChatCompletions
+        }
+        ResponseFormat::Responses => {
+            crate::gateway::field_support::Protocol::OpenAIResponses
+        }
+    };
+
+    if let Some(hit) = crate::gateway::field_support::find_rejected_field(protocol, payload) {
+        return Some(hit);
+    }
+
+    // 嵌套路径：目前只有 Responses 的 text.format
+    if protocol == crate::gateway::field_support::Protocol::OpenAIResponses {
+        if let Some(hit) = crate::gateway::field_support::find_rejected_path(
+            protocol,
+            payload,
+            &["text", "format"],
+        ) {
+            return Some(hit);
+        }
+    }
+
+    None
+}
+
 pub async fn proxy_handler(
     state: RouterState,
     client_addr: SocketAddr,
@@ -12,6 +48,8 @@ pub async fn proxy_handler(
     let request_index = state
         .request_count
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    // 一次请求一个 id：JSONL 与各 *.log dump 共用，排障时能把它们对上
+    let request_id = uuid::Uuid::new_v4().to_string();
 
     // 低频收敛日志体积：每 256 个请求扫一次日志目录，避免每次请求都做磁盘扫描。
     // index 为 0 时也会执行，可顺带处理启动前就已超限的历史文件（如已涨到 221MB 的 kiro-request.log）。
@@ -30,9 +68,10 @@ pub async fn proxy_handler(
         let _ = std::fs::create_dir_all(&log_dir);
         let body_end = safe_truncate(&raw_request_body, 50000);
         let entry = format!(
-            "[{}] kind=client_request idx={} endpoint={} bytes={} truncated={} body={}\n",
+            "[{}] kind=client_request idx={} request_id={} endpoint={} bytes={} truncated={} body={}\n",
             chrono::Local::now().format("%H:%M:%S"),
             request_index,
+            request_id,
             endpoint,
             raw_request_body.len(),
             body_end < raw_request_body.len(),
@@ -45,7 +84,40 @@ pub async fn proxy_handler(
             .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
     }
 
+    // 认证提前到日志上下文构造之前：拒绝时无需写入 Key 归因信息。
     let model_hint = extract_model_from_payload(&raw_request_body);
+    if let Err(message) = verify_client_auth(&headers, &state.config) {
+        let sanitized = sanitize_error(&message);
+        return gateway_error_with_log(
+            &state,
+            format,
+            &RequestLogContext {
+                request_index,
+                endpoint,
+                client_addr,
+                request: None,
+                upstream: None,
+                upstream_source_hint: None,
+                region_hint: None,
+                started_at,
+                request_body: Some(raw_request_body.as_str()),
+                request_body_hint: None,
+                model_hint: model_hint.clone(),
+                is_stream: None,
+                client_user_agent: None,
+                request_id: request_id.clone(),
+            },
+            GatewayErrorDetails {
+                status: StatusCode::UNAUTHORIZED,
+                error_type: "authentication_error",
+                message: &sanitized,
+                response_body: None,
+            },
+        )
+        .await;
+    }
+    let client_user_agent = extract_client_user_agent(&headers);
+
     let base_log_context = RequestLogContext {
         request_index,
         endpoint,
@@ -59,6 +131,8 @@ pub async fn proxy_handler(
         request_body_hint: None,
         model_hint,
         is_stream: None,
+        client_user_agent,
+        request_id: request_id.clone(),
     };
 
     if state.config.local_only && !client_addr.ip().is_loopback() {
@@ -80,7 +154,7 @@ pub async fn proxy_handler(
         && !state.config.allowed_ips.is_empty()
         && !ip_matches_allowlist(client_addr.ip(), &state.config.allowed_ips)
     {
-        let message = format!("访问地址 {} 不在2API白名单中", client_addr.ip());
+        let message = format!("访问地址 {} 不在 kiro2api 白名单中", client_addr.ip());
         return gateway_error_with_log(
             &state,
             format,
@@ -95,16 +169,20 @@ pub async fn proxy_handler(
         .await;
     }
 
-    if let Err(message) = verify_client_auth(&headers, &state.config) {
-        let sanitized = sanitize_error(&message);
+    // 字段消费判定：明确不支持的字段返回 400，而不是静默丢弃。
+    // 放在 normalize 之前——被拒的字段根本不该进入后续流程。
+    // reason 文案已自带字段名（判定表逐条写死），此处只把字段名落进日志，
+    // 便于事后统计「客户端最常踩哪个字段」。
+    if let Some((field, reason)) = reject_unsupported_fields(format, &payload) {
+        log::info!("[网关] 拒绝不支持的字段: {} ({})", field, reason);
         return gateway_error_with_log(
             &state,
             format,
             &base_log_context,
             GatewayErrorDetails {
-                status: StatusCode::UNAUTHORIZED,
-                error_type: "authentication_error",
-                message: &sanitized,
+                status: StatusCode::BAD_REQUEST,
+                error_type: "invalid_request_error",
+                message: &reason,
                 response_body: None,
             },
         )
@@ -117,7 +195,7 @@ pub async fn proxy_handler(
         log::info!("[网关] 请求指定账号: {}", account_id);
     }
 
-    let mut request = match normalize_request(format, &payload) {
+    let request = match normalize_request(format, &payload) {
         Ok(request) => request,
         Err(message) => {
             let sanitized = sanitize_error(&message);
@@ -136,17 +214,10 @@ pub async fn proxy_handler(
         }
     };
 
-    // 模型映射：根据规则替换请求的模型名（仅 OpenAI 协议）
-    let original_model = request.model.clone();
-    if matches!(format, ResponseFormat::OpenAI | ResponseFormat::Responses) {
-        request.model = crate::gateway::resolve_model_mapping(&state.config, &request.model);
-        if request.model != original_model {
-            log::info!("[模型映射] {} → {} (OpenAI 协议)", original_model, request.model);
-        }
-    } else {
-        // Anthropic Messages 协议客户端直接传 Claude 模型名，不做映射
-        log::debug!("[模型映射] 跳过 Anthropic Messages 协议 (model={})", request.model);
-    }
+    // 模型名不在这里改写：客户端要么点名 Kiro 原生模型（含 GPT-5.6 系列），
+    // 要么由 converter::get_internal_model_id 归一化并在不认识时兜底。
+    // 历史上有过一层用户可配的「模型映射」规则，因源模型清单是编造的
+    // （gpt-5.5/5.4/5.3 等上游并不存在）且与 Anthropic 协议路径不一致，已移除。
 
     // 添加详细的请求日志（参考 Kiro-account-manager 的日志设计）
     let messages_count = request.messages.len();
@@ -320,28 +391,19 @@ pub async fn proxy_handler(
                     }
                 }
             } else {
-                // 检查是否是配额不足 / 参数错误（以 __402__ / __400__ 为前缀标记）
-                let (status, error_type, display_message) = if message.starts_with("__402__") {
-                    (
-                        StatusCode::PAYMENT_REQUIRED,
-                        "insufficient_quota",
-                        message.strip_prefix("__402__").unwrap_or(&message),
-                    )
-                } else if message.starts_with("__400__") {
-                    (
-                        StatusCode::BAD_REQUEST,
-                        "invalid_request_error",
-                        message.strip_prefix("__400__").unwrap_or(&message),
-                    )
-                } else {
-                    (
+                // 结构化错误：按类型取状态码与 error_type，不再解析字符串前缀。
+                // 解析失败（历史遗留的裸字符串）时退回 401，与迁移前行为一致。
+                let (status, error_type, display_message) = match classify_gateway_error(&message) {
+                    Some(err) => (err.status(), err.error_type(), err.message()),
+                    None => (
                         StatusCode::UNAUTHORIZED,
                         "authentication_error",
-                        message.as_str(),
-                    )
+                        message.clone(),
+                    ),
                 };
+                let display_message = display_message.as_str();
 
-                let sanitized = sanitize_error(display_message);
+                let sanitized = sanitize_error(&display_message);
                 return gateway_error_with_log(
                     &state,
                     format,
@@ -386,7 +448,7 @@ pub async fn proxy_handler(
         ..request_log_context.clone()
     };
 
-    // 获取账号可用模型列表（用于模型降级）
+    // 获取账号可用模型列表（用于模型降级与 effort 档位判定）
     let available_models = match get_available_models_for_upstream(&upstream).await {
         Ok(models) => {
             log::debug!(
@@ -543,9 +605,8 @@ pub async fn proxy_handler(
     let available_account_count = if preferred_account_id_ref.is_some() {
         1
     } else {
-        let mut store = AccountStore::new();
-        store.reload();
-
+        // 只读：match 直接产出计数值，guard 在本块结束时释放，不跨后续 await。
+        let store = auth::lock_shared_store(&state.store);
         match state.config.account_mode.as_str() {
             "single" => store
                 .accounts
@@ -705,7 +766,7 @@ pub async fn proxy_handler(
                         sanitized
                     );
                     // 如果是账号不可用，继续尝试
-                    if message.contains("未找到符合2API配置的可用账号") {
+                    if message.contains("未找到符合 kiro2api 配置的可用账号") {
                         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                         continue;
                     }
@@ -736,6 +797,7 @@ pub async fn proxy_handler(
             &current_upstream,
             &payload_value,
             upstream_payload_log_context.request_index as usize,
+            &upstream_payload_log_context.request_id,
         )
         .await
         {
@@ -826,6 +888,40 @@ pub async fn proxy_handler(
                     continue;
                 }
 
+                // 403 + 封禁：对话接口的 403 是唯一可靠判据——
+                // ListAvailableModels / getUsageLimits 的 403 是偶发的，同一次刷新可能漏判。
+                // error_type 由 map_upstream_error 统一判定（errors.rs:29-32、:68-70），
+                // 这里不再自行解析 body，避免两处判据漂移。
+                if status == StatusCode::FORBIDDEN && error_type == "account_banned_error" {
+                    let account_id = extract_account_id_from_upstream(&current_upstream);
+                    log::warn!(
+                        "[Gateway] 账号 {} 返回封禁 403，标记为 banned 并切换账号 (尝试: {}/{})",
+                        current_upstream.source_label,
+                        account_attempt,
+                        available_account_count
+                    );
+
+                    {
+                        let mut store = auth::lock_shared_store(&state.store);
+                        if let Some(account) =
+                            store.accounts.iter_mut().find(|a| a.id == account_id)
+                        {
+                            // 幂等：已 banned 的账号不重复写盘，避免每次重试都落一次
+                            if account.status != "banned" {
+                                update_account_status(account, true, false); // is_banned = true
+                                if let Err(e) = store.try_save_to_file() {
+                                    log::error!("[Gateway] 保存账号封禁状态失败: {}", e);
+                                }
+                            }
+                        }
+                    }
+
+                    state.load_balancer.record_failure(&account_id).await;
+
+                    // 封禁是账号级结论，不进重试轮：直接切号
+                    continue;
+                }
+
                 // 检查是否是 402 配额不足错误
                 if status == StatusCode::PAYMENT_REQUIRED {
                     let account_id = extract_account_id_from_upstream(&current_upstream);
@@ -899,11 +995,16 @@ pub async fn proxy_handler(
                     );
 
                     // 更新账号状态为 invalid
-                    let mut store = crate::core::account::AccountStore::new();
-                    if let Some(account) = store.accounts.iter_mut().find(|a| a.id == account_id) {
-                        update_account_status(account, false, true); // is_auth_error = true
-                        if let Err(e) = store.try_save_to_file() {
-                            log::error!("[Gateway] 保存账号状态失败: {}", e);
+                    // 401 是账号级问题，落到共享副本上，避免与 Tauri 命令互相覆盖。
+                    {
+                        let mut store = auth::lock_shared_store(&state.store);
+                        if let Some(account) =
+                            store.accounts.iter_mut().find(|a| a.id == account_id)
+                        {
+                            update_account_status(account, false, true); // is_auth_error = true
+                            if let Err(e) = store.try_save_to_file() {
+                                log::error!("[Gateway] 保存账号状态失败: {}", e);
+                            }
                         }
                     }
 
@@ -950,6 +1051,19 @@ pub async fn proxy_handler(
         }
     };
 
+    // 连接计数从这里才开始覆盖真实请求周期。
+    //
+    // 流式路径把 guard 移进 stream_proxy_response 的流式任务，保证活到流结束；
+    // 非流式路径由本函数持有到返回。两条路径都覆盖 panic / 提前 return / 断连。
+    //
+    // 硬约束：**首字节已发出后绝不换号重发**。此处所有换号 / 重试都发生在
+    // `break` 拿到 upstream_resp 之前，而流式响应直到 break 之后才开始写客户端，
+    // 因此约束由循环结构天然保证。改动这个 loop 前先确认这一点。
+    let connection_guard = state
+        .load_balancer
+        .acquire_connection(&successful_upstream.account_id)
+        .await;
+
     if request.stream {
         // 流式开始时不记录日志，等流式结束后再记录完整的 tokens
         // 将 log_context 转换为 'static 生命周期
@@ -973,6 +1087,8 @@ pub async fn proxy_handler(
                 .map(str::to_string),
             model_hint: upstream_payload_log_context.model_hint.clone(),
             is_stream: Some(true),
+            client_user_agent: upstream_payload_log_context.client_user_agent.clone(),
+            request_id: upstream_payload_log_context.request_id.clone(),
         };
 
         return stream_proxy_response(
@@ -988,6 +1104,7 @@ pub async fn proxy_handler(
             request.include_usage,
             request.stop.clone(),
             static_log_context,
+            connection_guard,
         );
     }
 
@@ -1313,6 +1430,7 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
     upstream: &UpstreamCredentials,
     upstream_payload: &T,
     request_index: usize,
+    request_id: &str,
 ) -> Result<reqwest::Response, UpstreamRequestError> {
     let upstream_url = build_generate_assistant_response_url(&upstream.region);
 
@@ -1322,9 +1440,10 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
         let _ = std::fs::create_dir_all(&log_dir);
         let body_end = safe_truncate(&payload_json, 50000);
         let entry = format!(
-            "[{}] kind=kiro_request idx={} upstream=generateAssistantResponse bytes={} truncated={} body={}\n",
+            "[{}] kind=kiro_request idx={} request_id={} upstream=generateAssistantResponse bytes={} truncated={} body={}\n",
             chrono::Local::now().format("%H:%M:%S"),
             request_index,
+            request_id,
             payload_json.len(),
             body_end < payload_json.len(),
             &payload_json[..body_end]
@@ -1337,6 +1456,11 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
     }
 
     const MAX_RETRIES: u32 = 5;
+    /// 单次重试退避上限（毫秒）。
+    ///
+    /// 裸指数退避在最后一次尝试会到 16s，五次累计 31s；封顶后最坏约 19s，
+    /// 仍然给上游留出恢复窗口，但不至于让客户端先超时。
+    const MAX_RETRY_BACKOFF_MS: u64 = 4_000;
     let mut attempt = 0;
 
     loop {
@@ -1441,11 +1565,13 @@ pub async fn call_generate_assistant_response<T: serde::Serialize + ?Sized>(
             return Err(UpstreamRequestError::new(mapped_status, error_type, message, Some(body)));
         }
 
-        // 5xx 服务器错误才重试
+        // 5xx 服务器错误才重试；4xx（402/429/401/403）全部上交外层换号或刷 token
         let should_retry = attempt < MAX_RETRIES && mapped_status.is_server_error();
 
         if should_retry {
-            let backoff_ms = 1000 * 2u64.pow(attempt - 1);
+            // 指数退避但封顶：attempt=5 时裸算是 16s，累计 31s 已能让客户端超时，
+            // 再往上加只会把「上游抖动」放大成「用户以为网关挂了」
+            let backoff_ms = (1000 * 2u64.pow(attempt - 1)).min(MAX_RETRY_BACKOFF_MS);
             log::warn!(
                 "上游请求失败 (状态: {}, 类型: {}, 尝试: {}/{}), {}ms 后重试",
                 mapped_status,

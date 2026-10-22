@@ -4,179 +4,140 @@ import { readFile } from 'node:fs/promises'
 import {
   buildClientSamples,
   buildGatewayBaseUrl,
+  buildGatewayClientRecipes,
   buildGatewayConnectHost,
   buildGatewayIntegrationSummary,
   buildGatewaySecuritySummary,
-  countEffectiveClientApiKeys,
+  CLIENT_API_KEY,
   createGatewayFieldErrors,
   formatGatewayAccountOptionLabel,
-  getEffectiveClientApiKey,
-  parseClientApiKeys} from './gatewayPageUtils.js'
+} from './gatewayPageUtils.js'
 
-test('gateway page does not expose the standalone account health dialog', async () => {
-  const source = await readFile(new URL('./index.tsx', import.meta.url), 'utf8')
+/** 测试用翻译 stub：原样返回 key，插值变量以 JSON 追加，便于断言走了哪条文案。 */
+const t = (key: string, vars?: Record<string, any>) =>
+  vars ? `${key} ${JSON.stringify(vars)}` : key
 
-  assert.equal(source.includes('AccountHealthDialog'), false)
-  assert.equal(source.includes('showAccountHealth'), false)
-  assert.equal(source.includes('账号健康'), false)
-})
+const loadLocale = async (locale: string): Promise<Record<string, string>> =>
+  JSON.parse(await readFile(new URL('../../../../locales/' + locale + '.json', import.meta.url), 'utf-8'))
 
-test('formatGatewayAccountOptionLabel shows email with quota and status', () => {
-  const label = formatGatewayAccountOptionLabel({
-    email: 'foo@example.com',
-    userId: 'user-id-foo',
-    id: 'abc',
-    status: 'active',
-    usageData: { usageBreakdownList: [{ usageLimit: 100, currentUsage: 30 }] }
-  })
-  assert.equal(label, 'foo@example.com 剩余 70/100')
-})
+test('locale keys referenced by gateway page exist in all three languages', async () => {
+  for (const locale of ['zh-CN', 'en', 'ru']) {
+    const messages = await loadLocale(locale)
 
-test('formatGatewayAccountOptionLabel shows banned status', () => {
-  const label = formatGatewayAccountOptionLabel({
-    email: 'test@example.com',
-    userId: 'user-id',
-    id: 'def',
-    status: 'banned',
-    usageData: { usageBreakdownList: [{ usageLimit: 100, currentUsage: 95 }] }
-  })
-  // banned 账号是 unavailable 状态，getQuota/getUsed 返回 0
-  assert.strictEqual(label, 'test@example.com 剩余 0/0 [banned]')
-})
-
-test('formatGatewayAccountOptionLabel falls back to userId when email is missing', () => {
-  assert.equal(
-    formatGatewayAccountOptionLabel({
-      userId: 'builder-user-1',
-      id: '0d24370c-1111-2222-3333-444455556666',
-      usageData: { usageBreakdownList: [{ usageLimit: 50, currentUsage: 10 }] }
-    }),
-    'builder-user-1 剩余 40/50'
-  )
-
-  assert.equal(
-    formatGatewayAccountOptionLabel({
-      id: '0d24370c-1111-2222-3333-444455556666',
-      usageData: { usageBreakdownList: [{ usageLimit: 0, currentUsage: 0 }] }
-    }),
-    '未知账号 剩余 0/0'
-  )
+    for (const key of [
+      'gateway.tabOverview',
+      'gateway.tabRequestLogs',
+      'gateway.tabSettings',
+      'gatewaySummary.security.keysFixed',
+      'gatewayLogs.colClientTool',
+    ]) {
+      assert.equal(typeof messages[key], 'string', locale + ' 缺少 ' + key)
+    }
+  }
 })
 
 test('createGatewayFieldErrors rejects unsupported host values', () => {
   const errors = createGatewayFieldErrors({
     host: 'bad host',
     port: 8765,
-    apiKey: 'sk-test',
     region: 'us-east-1',
     accountMode: 'single',
     accountId: 'account-1',
-    groupId: null,
-    allowedIpsText: ''})
+    localOnly: true,
+    allowedIpsText: ''
+  }, t)
 
-  assert.equal(errors.host, '监听地址必须是 localhost、IPv4 或 IPv6 地址')
+  assert.equal(errors.host, 'gatewaySummary.field.hostInvalid')
 })
 
 test('createGatewayFieldErrors requires allowlist when remote access is enabled', () => {
   const errors = createGatewayFieldErrors({
     host: '0.0.0.0',
     port: 8765,
-    apiKey: 'sk-test',
     region: 'us-east-1',
     accountMode: 'single',
     accountId: 'account-1',
-    groupId: null,
     localOnly: false,
-    allowedIpsText: ''})
+    allowedIpsText: ' \n '
+  }, t)
 
-  assert.equal(errors.allowedIpsText, '允许远程访问时必须至少配置一个白名单来源 IP')
+  assert.equal(errors.allowedIpsText, 'gatewaySummary.field.allowlistRequired')
 })
 
-test('buildGatewayConnectHost maps wildcard binds to a usable client host', () => {
-  assert.equal(buildGatewayConnectHost('0.0.0.0', true), '127.0.0.1')
-  assert.equal(buildGatewayConnectHost('0.0.0.0', false), 'localhost')
-  assert.equal(buildGatewayConnectHost('::', false), 'localhost')
-})
-
-test('buildGatewayBaseUrl brackets ipv6 addresses for clients', () => {
-  assert.equal(buildGatewayBaseUrl('::1', 8765, true), 'http://[::1]:8765')
-  assert.equal(buildGatewayBaseUrl('0.0.0.0', 8765, false), 'http://localhost:8765')
-})
-
-test('buildClientSamples redacts full api key in integration snippets', () => {
-  const samples = buildClientSamples('http://127.0.0.1:8765', 'sk-super-secret-value')
-
-  assert.ok(samples.anthropic.env.includes('ANTHROPIC_API_KEY=sk-'))
-  assert.ok(samples.openai.env.includes('OPENAI_API_KEY=sk-'))
-  assert.ok(samples.openai.curl.includes('Authorization: Bearer sk-'))
-  assert.equal(samples.anthropic.env.includes('sk-super-secret-value'), false)
-  assert.equal(samples.openai.env.includes('sk-super-secret-value'), false)
-  assert.equal(samples.openai.curl.includes('sk-super-secret-value'), false)
-})
-
-test('buildGatewayIntegrationSummary does not expose full bearer token', () => {
-  const summary = buildGatewayIntegrationSummary({
-    baseUrl: 'http://127.0.0.1:8765',
-    clientApiKeysText: 'sk-super-secret-value\nsk-secondary-value',
-    logDir: 'C:/tmp/logs',
-    errorHistory: []})
-
-  assert.ok(summary.authLabel.startsWith('Bearer sk-'))
-  assert.equal(summary.authLabel.includes('sk-super-secret-value'), false)
-  assert.equal(summary.authLabel.includes('共 2 个 Key'), true)
-})
-
-test('parseClientApiKeys trims, deduplicates and drops blank lines', () => {
-  assert.deepEqual(
-    parseClientApiKeys(' sk-primary \n\nsk-secondary\nsk-primary \n , sk-third '),
-    ['sk-primary', 'sk-secondary', 'sk-third']
-  )
-})
-
-// 保真解析：hydrate 往返不能丢掉禁用标记，否则用户在 ApiKeysDialog
-// 里关掉的 key 会被永久删除
-test('parseClientApiKeys keeps disabled entries and name prefixes', () => {
-  assert.deepEqual(
-    parseClientApiKeys('#disabled#Key 1:sk-off\nsk-on'),
-    ['#disabled#Key 1:sk-off', 'sk-on']
-  )
-})
-
-// 与后端 effective_client_api_keys 对齐：跳过禁用项、剥离 name 前缀
-test('getEffectiveClientApiKey skips disabled and strips name prefix', () => {
-  assert.equal(getEffectiveClientApiKey('#disabled#Key 1:sk-off\nKey 2:sk-on'), 'sk-on')
-  assert.equal(getEffectiveClientApiKey('sk-plain'), 'sk-plain')
-  assert.equal(getEffectiveClientApiKey('#disabled#only:sk-x'), '')
-})
-
-test('countEffectiveClientApiKeys counts only enabled keys', () => {
-  assert.equal(countEffectiveClientApiKeys('#disabled#a:sk-1\nb:sk-2'), 1)
-  assert.equal(countEffectiveClientApiKeys(''), 0)
-})
-
-test('createGatewayFieldErrors requires at least one client api key', () => {
+test('createGatewayFieldErrors reports no client key error: key is fixed', () => {
+  // 密钥固定为 kiro 后不再需要用户配置，空配置也不该报 keyRequired
   const errors = createGatewayFieldErrors({
     host: '127.0.0.1',
     port: 8765,
-    clientApiKeysText: ' \n ',
     region: 'us-east-1',
     accountMode: 'single',
     accountId: 'account-1',
-    groupId: null,
     localOnly: true,
-    allowedIpsText: ''})
+    allowedIpsText: ''
+  }, t)
 
-  assert.equal(errors.clientApiKeysText, '必须至少填写一个客户端 API Key')
+  assert.equal(errors.clientApiKeysText, undefined)
 })
 
-test('buildGatewaySecuritySummary reports multi-key state', () => {
+test('buildClientSamples exposes the fixed kiro key for both display and copy', () => {
+  const samples = buildClientSamples('http://127.0.0.1:8765')
+
+  // 密钥固定且非秘密：展示与复制同一个值
+  assert.ok(samples.anthropic.env.includes('ANTHROPIC_API_KEY=' + CLIENT_API_KEY))
+  assert.ok(samples.openai.env.includes('OPENAI_API_KEY=' + CLIENT_API_KEY))
+  assert.ok(samples.copy.anthropic.includes('ANTHROPIC_API_KEY=' + CLIENT_API_KEY))
+  assert.ok(samples.copy.openai.includes('OPENAI_BASE_URL=http://127.0.0.1:8765/v1'))
+
+  const recipes = buildGatewayClientRecipes({
+    baseUrl: 'http://127.0.0.1:8765',
+    samples,
+    t
+  })
+
+  assert.equal(recipes.length, 3)
+  for (const recipe of recipes) {
+    assert.equal(recipe.key, CLIENT_API_KEY)
+    assert.equal(recipe.keyMasked, CLIENT_API_KEY)
+  }
+  assert.equal(recipes[0].baseUrl, 'http://127.0.0.1:8765')
+  assert.equal(recipes[1].baseUrl, 'http://127.0.0.1:8765/v1')
+  assert.equal(recipes[1].copySample, samples.copy.openai)
+  assert.equal(recipes[2].copySample, samples.copy.openai)
+})
+
+test('buildGatewaySecuritySummary reports the fixed key state', () => {
   const summary = buildGatewaySecuritySummary({
     config: {
-      clientApiKeysText: 'sk-primary\nsk-secondary',
       localOnly: false,
       allowedIpsText: '10.0.0.0/24',
-      logLevel: 'info'}})
+      logLevel: 'info'
+    },
+    t
+  })
 
   assert.equal(summary.allowedIpsCount, 1)
-  assert.equal(summary.apiKeyState, '已配置 2 个客户端 Key')
+  assert.equal(summary.apiKeyState, 'gatewaySummary.security.keysFixed')
+})
+
+test('buildGatewayIntegrationSummary labels auth with the fixed key', () => {
+  const summary = buildGatewayIntegrationSummary({
+    baseUrl: 'http://127.0.0.1:8765',
+    logDir: 'C:/tmp/logs',
+    errorHistory: [],
+    t
+  })
+
+  assert.equal(summary.authLabel, 'Bearer ' + CLIENT_API_KEY)
+})
+
+test('formatGatewayAccountOptionLabel falls back to unknown account', () => {
+  const label = formatGatewayAccountOptionLabel({}, t)
+  assert.ok(label.includes('gatewaySummary.unknownAccount'))
+  assert.ok(label.includes('gatewaySummary.account.remaining'))
+})
+
+test('buildGatewayBaseUrl formats plain and bracketed hosts', () => {
+  assert.equal(buildGatewayConnectHost('0.0.0.0', false), 'localhost')
+  assert.equal(buildGatewayBaseUrl('::1', 8765, true), 'http://[::1]:8765')
+  assert.equal(buildGatewayBaseUrl('0.0.0.0', 8765, false), 'http://localhost:8765')
 })

@@ -33,13 +33,16 @@ mod tests {
         health.record_success(100);
         assert!(health.health_score() >= 90);
 
-        // 记录失败（有成功记录时不会标记为不健康，但分数会下降）
+        // 记录失败（连续失败 3 次即标记不健康，与曾经是否成功无关）
         health.record_failure();
         health.record_failure();
         health.record_failure();
-        // 有 1 次成功 + 3 次失败 = 25% 成功率，仍然 is_healthy（因为有成功记录）
-        assert!(health.is_healthy);
+        assert!(!health.is_healthy);
         assert!(health.health_score() < 50);
+
+        // 一次成功即中断连续失败，恢复健康
+        health.record_success(100);
+        assert!(health.is_healthy);
 
         // 全新账号，纯失败场景
         let mut health2 = AccountHealth::new("test2".to_string());
@@ -48,6 +51,73 @@ mod tests {
         health2.record_failure();
         assert!(!health2.is_healthy);
         assert_eq!(health2.health_score(), 0);
+    }
+
+    #[test]
+    fn consecutive_failures_reset_on_success() {
+        let mut health = AccountHealth::new("acc".to_string());
+
+        // 差一次到阈值，仍健康
+        health.record_failure();
+        health.record_failure();
+        assert!(health.is_healthy);
+        assert_eq!(health.consecutive_failures, 2);
+
+        // 成功把连续计数清零：之后要从头再攒 3 次
+        health.record_success(50);
+        assert_eq!(health.consecutive_failures, 0);
+
+        health.record_failure();
+        health.record_failure();
+        assert!(health.is_healthy, "成功后的两次失败不该触发不健康");
+        health.record_failure();
+        assert!(!health.is_healthy, "连续第三次失败应标记不健康");
+    }
+
+    #[test]
+    fn window_truncates_instead_of_decaying_forever() {
+        let mut health = AccountHealth::new("acc".to_string());
+
+        // 灌满远超窗口的成功，再灌失败
+        for _ in 0..500 {
+            health.record_success(10);
+        }
+        for _ in 0..5 {
+            health.record_failure();
+        }
+
+        // 真截断：总量不超过窗口，且早期记录被丢弃
+        assert!(
+            health.recent_successes + health.recent_failures <= AccountHealth::WINDOW_SIZE,
+            "window should be truncated, got {} + {}",
+            health.recent_successes,
+            health.recent_failures
+        );
+        // 成功率不被 500 次前的历史稀释
+        assert!(health.health_score() < 100);
+    }
+
+    #[test]
+    fn connection_guard_releases_on_drop() {
+        let lb = std::sync::Arc::new(LoadBalancer::new(LoadBalancerStrategy::RoundRobin));
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("runtime should build");
+
+        rt.block_on(async {
+            let guard = lb.acquire_connection("acc-1").await;
+            assert_eq!(
+                lb.get_all_health().await.get("acc-1").map(|h| h.active_connections),
+                Some(1),
+                "guard 持有期间计数应为 1"
+            );
+            drop(guard);
+            assert_eq!(
+                lb.get_all_health().await.get("acc-1").map(|h| h.active_connections),
+                Some(0),
+                "guard Drop 后计数应归零"
+            );
+        });
     }
 
     #[tokio::test]

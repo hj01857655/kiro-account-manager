@@ -1,6 +1,7 @@
 import type React from 'react'
 import { useState, useMemo, useEffect } from 'react'
-import { RotateCw, TrendingUp, Shuffle, Zap, Users, CheckCircle2, Search, Ban, AlertCircle } from 'lucide-react'
+import { RotateCw, TrendingUp, Shuffle, Users, CheckCircle2, Search, AlertCircle } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,11 +26,35 @@ const POOL_STATUS_KEYS: Record<string, string> = {
   banned: 'gateway.poolStatusBanned',
   invalid: 'gateway.poolStatusInvalid',
 }
+
+const STRATEGY_KEYS: Record<string, string> = {
+  round_robin: 'gateway.roundRobin',
+  random: 'gateway.random',
+  balanced: 'gateway.strategyBalanced',
+  most_quota: 'gateway.strategyMostQuota',
+  weighted_random: 'gateway.weightedRandom',
+  least_connections: 'gateway.leastConnections',
+}
+
+const ACCOUNT_MODE_KEYS: Record<string, string> = {
+  single: 'gateway.singleAccount',
+  group: 'gateway.byGroup',
+  pool: 'gateway.globalPool',
+}
+
+// 只暴露语义能自解释的三种策略；后端另支持 balanced / weighted_random /
+// least_connections，但界面无法解释其差异，故不给出会误导的选项。
+type StrategyOption = { value: string; icon: LucideIcon }
+
+const STRATEGY_OPTIONS: StrategyOption[] = [
+  { value: 'round_robin', icon: RotateCw },
+  { value: 'most_quota', icon: TrendingUp },
+  { value: 'random', icon: Shuffle },
+]
 import { Textarea } from '@/components/ui/textarea'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { GatewaySurfaceCard } from './GatewayShared'
-import { countEffectiveClientApiKeys, parseClientApiKeys } from './gatewayPageUtils'
-import ModelMappingDialog from './ModelMappingDialog'
-import ApiKeysDialog from './ApiKeysDialog'
+import { ALLOWED_REGIONS } from './gatewayPageUtils'
 import PromptFilterRulesDialog from './PromptFilterRulesDialog'
 import {
   DialogRoot,
@@ -49,15 +74,9 @@ interface GatewayConfigProps {
   accountOptions: any[];
   groupOptions: any[];
   setConfig: React.Dispatch<React.SetStateAction<any>>;
-  applyGatewayLocalOnlyChange: (config: any, checked: boolean, generator: () => string) => any;
-  createGeneratedApiKey: () => string;
+  applyGatewayLocalOnlyChange: (config: any, checked: boolean) => any;
   handleSaveConfig: () => Promise<void>;
   handleAutoStartToggle: (checked: boolean) => Promise<void>;
-  onShowClientConfig?: () => void;
-  hasConfiguredClients?: boolean;
-  /** 由父级（接入引导区）触发打开密钥管理弹窗 */
-  openApiKeysDialog?: boolean;
-  onApiKeysDialogOpened?: () => void;
 }
 
 function GatewayConfig({
@@ -68,40 +87,20 @@ function GatewayConfig({
   groupOptions,
   setConfig,
   applyGatewayLocalOnlyChange,
-  createGeneratedApiKey,
   handleSaveConfig,
   handleAutoStartToggle,
-  onShowClientConfig,
-  hasConfiguredClients = false,
-  openApiKeysDialog = false,
-  onApiKeysDialogOpened,
 }: GatewayConfigProps) {
   const { t } = useApp()
-  const [showModelMappingDialog, setShowModelMappingDialog] = useState(false)
-  const [showApiKeysDialog, setShowApiKeysDialog] = useState(false)
-
-  // 父级（接入引导区）请求打开密钥弹窗：响应后立即回吐信号，避免重复触发
-  useEffect(() => {
-    if (!openApiKeysDialog) return
-    setShowApiKeysDialog(true)
-    onApiKeysDialogOpened?.()
-  }, [openApiKeysDialog, onApiKeysDialogOpened])
   const [showPromptFilterRulesDialog, setShowPromptFilterRulesDialog] = useState(false)
   const [showAccountPoolDialog, setShowAccountPoolDialog] = useState(false)
   const [poolSearchQuery, setPoolSearchQuery] = useState('')
   const [poolStatusFilter, setPoolStatusFilter] = useState<string>('all')
 
-  const getStrategyLabel = (strategy: string) => {
-    const STRATEGY_KEYS: Record<string, string> = {
-      round_robin: 'gateway.roundRobin',
-      random: 'gateway.random',
-      balanced: 'gateway.strategyBalanced',
-      most_quota: 'gateway.strategyMostQuota',
-      weighted_random: 'gateway.weightedRandom',
-      least_connections: 'gateway.leastConnections',
-    }
-    return STRATEGY_KEYS[strategy] ? t(STRATEGY_KEYS[strategy]) : strategy
-  }
+  const getStrategyLabel = (strategy: string) =>
+    STRATEGY_KEYS[strategy] ? t(STRATEGY_KEYS[strategy]) : strategy
+
+  const getAccountModeLabel = (mode: string) =>
+    ACCOUNT_MODE_KEYS[mode] ? t(ACCOUNT_MODE_KEYS[mode]) : (mode || 'single')
 
   const selectedPoolAccountIds = Array.isArray(config.poolAccountIds) ? config.poolAccountIds : []
   // 配置里的 id 可能指向已删除的账号。分母是「现存可选账号」，故分子也只该数
@@ -112,6 +111,36 @@ function GatewayConfig({
   )
   const selectedPoolAccounts = accountOptions.filter((account: any) => selectedPoolAccountIds.includes(account.value))
   const effectiveStrategy = config.strategy || 'round_robin'
+  const promptRules = config.promptFilterRules || []
+  const promptSwitchesOn = [config.filterClaudeCode, config.filterStripBoundaries, config.filterEnvNoise]
+    .filter(Boolean).length
+
+  // 各折叠组标题右侧的当前值摘要：收起状态下仍能一眼读全「现在是怎样」
+  // 「请求处理」组合并提示词清洗与响应缓存：两者都是改请求的旋钮，
+  // 摘要因此要同时说出两边各自的状态
+  const requestHandlingSummary = [
+    `${promptSwitchesOn} ${t('gateway.switchesOn')}`,
+    config.responseCacheEnabled
+      ? `${t('gateway.enabled')} · TTL ${config.responseCacheTtl}s`
+      : t('gateway.disabled')
+  ].join(' · ')
+  const accessSummary = `${config.localOnly ? t('gateway.localOnly') : t('gateway.allowRemote')} · ${config.enabled ? t('gateway.autoStartOn') : t('gateway.autoStartOff')}`
+
+  const routingSummary = (() => {
+    const mode = getAccountModeLabel(config.accountMode)
+    if (config.accountMode === 'pool') {
+      const selected = effectiveSelectedPoolIds.length > 0
+        ? `${t('gateway.selected')} ${effectiveSelectedPoolIds.length} ${t('gateway.accounts')}`
+        : t('gateway.noPoolSelected')
+      return `${mode} · ${selected} · ${getStrategyLabel(effectiveStrategy)}`
+    }
+    if (config.accountMode === 'group') {
+      const groupLabel = groupOptions.find((option: any) => option.value === config.groupId)?.label
+      return `${mode} · ${groupLabel || t('gateway.notSelected')} · ${getStrategyLabel(effectiveStrategy)}`
+    }
+    const accountLabel = accountOptions.find((option: any) => option.value === config.accountId)?.label
+    return `${mode} · ${accountLabel || t('gateway.notSelected')}`
+  })()
 
   const filteredPoolAccounts = useMemo(() => {
     return accountOptions
@@ -156,86 +185,24 @@ function GatewayConfig({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="flex flex-col gap-3">
       <GatewaySurfaceCard>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-4">
-            {/* Section 1: 网络与路由 */}
-            <div className="space-y-3">
-              <div className="text-sm font-medium text-foreground flex items-center gap-2">
-                <div className="w-1 h-4 bg-primary rounded-full"></div>
-                {t('gateway.sectionNetworkRouting')}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label>{t('gateway.listenAddress')}</Label>
-                  <Input
-                    value={config.host}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('host', e.target.value || '127.0.0.1')}
-                    className={fieldErrors.host ? 'border-red-500' : ''}
-                  />
-                  {fieldErrors.host && <div className="text-xs text-red-500">{fieldErrors.host}</div>}
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>{t('gateway.port')}</Label>
-                  <Input
-                    type="number"
-                    value={config.port}
-                    min={1}
-                    max={65535}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('port', Number(e.target.value) || 8765)}
-                    className={fieldErrors.port ? 'border-red-500' : ''}
-                  />
-                  {fieldErrors.port && <div className="text-xs text-red-500">{fieldErrors.port}</div>}
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Region</Label>
-                  <Select value={config.region} onValueChange={(v: string) => setField('region', v || 'us-east-1')}>
-                    <SelectTrigger className={fieldErrors.region ? 'border-red-500' : ''}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="us-east-1">us-east-1</SelectItem>
-                      <SelectItem value="us-east-2">us-east-2</SelectItem>
-                      <SelectItem value="us-west-1">us-west-1</SelectItem>
-                      <SelectItem value="us-west-2">us-west-2</SelectItem>
-                      <SelectItem value="eu-central-1">eu-central-1</SelectItem>
-                      <SelectItem value="eu-central-2">eu-central-2</SelectItem>
-                      <SelectItem value="eu-west-1">eu-west-1</SelectItem>
-                      <SelectItem value="eu-west-2">eu-west-2</SelectItem>
-                      <SelectItem value="eu-west-3">eu-west-3</SelectItem>
-                      <SelectItem value="eu-north-1">eu-north-1</SelectItem>
-                      <SelectItem value="eu-south-1">eu-south-1</SelectItem>
-                      <SelectItem value="eu-south-2">eu-south-2</SelectItem>
-                      <SelectItem value="ap-northeast-1">ap-northeast-1</SelectItem>
-                      <SelectItem value="ap-northeast-2">ap-northeast-2</SelectItem>
-                      <SelectItem value="ap-northeast-3">ap-northeast-3</SelectItem>
-                      <SelectItem value="ap-southeast-1">ap-southeast-1</SelectItem>
-                      <SelectItem value="ap-southeast-2">ap-southeast-2</SelectItem>
-                      <SelectItem value="ap-southeast-3">ap-southeast-3</SelectItem>
-                      <SelectItem value="ap-southeast-4">ap-southeast-4</SelectItem>
-                      <SelectItem value="ap-southeast-5">ap-southeast-5</SelectItem>
-                      <SelectItem value="ap-southeast-7">ap-southeast-7</SelectItem>
-                      <SelectItem value="ap-south-1">ap-south-1</SelectItem>
-                      <SelectItem value="ap-south-2">ap-south-2</SelectItem>
-                      <SelectItem value="ap-east-1">ap-east-1</SelectItem>
-                      <SelectItem value="af-south-1">af-south-1</SelectItem>
-                      <SelectItem value="ca-central-1">ca-central-1</SelectItem>
-                      <SelectItem value="ca-west-1">ca-west-1</SelectItem>
-                      <SelectItem value="sa-east-1">sa-east-1</SelectItem>
-                      <SelectItem value="me-south-1">me-south-1</SelectItem>
-                      <SelectItem value="me-central-1">me-central-1</SelectItem>
-                      <SelectItem value="il-central-1">il-central-1</SelectItem>
-                      <SelectItem value="mx-central-1">mx-central-1</SelectItem>
-                      <SelectItem value="us-gov-west-1">us-gov-west-1</SelectItem>
-                      <SelectItem value="us-gov-east-1">us-gov-east-1</SelectItem>
-                      <SelectItem value="cn-north-1">cn-north-1</SelectItem>
-                      <SelectItem value="cn-northwest-1">cn-northwest-1</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {fieldErrors.region && <div className="text-xs text-red-500">{fieldErrors.region}</div>}
-                </div>
-              </div>
+        {/* 设置 tab 的全部字段按使用频率收进折叠组，默认全部收起 */}
+        <Accordion type="multiple" className="w-full">
+          <AccordionItem value="routing">
+            <AccordionTrigger>
+              <span className="flex min-w-0 flex-1 items-center gap-2 pr-2">
+                <span className="shrink-0 text-sm font-medium text-foreground">{t('gateway.groupRouting')}</span>
+                {(!!fieldErrors.accountId || !!fieldErrors.groupId) && (
+                  <AlertCircle size={13} className="shrink-0 text-red-500" />
+                )}
+                <span className="ml-auto min-w-0 truncate text-[11px] font-normal text-muted-foreground" title={routingSummary}>
+                  {routingSummary}
+                </span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>{t('gateway.accountMode')}</Label>
@@ -260,40 +227,25 @@ function GatewayConfig({
                     >
                       <Users size={16} className="mr-2" />
                       {effectiveSelectedPoolIds.length > 0
-                        ? `${t('gateway.selected')} ${effectiveSelectedPoolIds.length} ${t('gateway.accounts')} · ${getStrategyLabel(effectiveStrategy)}`
+                        ? `${t('gateway.selected')} ${effectiveSelectedPoolIds.length} ${t('gateway.accounts')}`
                         : t('gateway.configureAccountPool')}
                     </Button>
                   </div>
                 ) : config.accountMode === 'group' ? (
-                  <>
-                    <div className="flex flex-col gap-1.5">
-                      <Label>{t('gateway.selectGroup')}</Label>
-                      <Select value={config.groupId} onValueChange={(v: string) => setField('groupId', v)}>
-                        <SelectTrigger className={fieldErrors.groupId ? 'border-red-500' : ''}>
-                          <SelectValue placeholder={t('gateway.selectGroupPlaceholder')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {groupOptions.map((opt: any) => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {fieldErrors.groupId && <div className="text-xs text-red-500">{fieldErrors.groupId}</div>}
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label>{t('gateway.routingStrategy')}</Label>
-                      <Select value={effectiveStrategy} onValueChange={(v: string) => setField('strategy', v || 'round_robin')}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="round_robin"><div className="flex items-center gap-2"><RotateCw size={14} /><span>{t('gateway.roundRobin')}</span></div></SelectItem>
-                          <SelectItem value="most_quota"><div className="flex items-center gap-2"><TrendingUp size={14} /><span>{t('gateway.priorityQuota')}</span></div></SelectItem>
-                          <SelectItem value="random"><div className="flex items-center gap-2"><Shuffle size={14} /><span>{t('gateway.random')}</span></div></SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </>
+                  <div className="flex flex-col gap-1.5">
+                    <Label>{t('gateway.selectGroup')}</Label>
+                    <Select value={config.groupId} onValueChange={(v: string) => setField('groupId', v)}>
+                      <SelectTrigger className={fieldErrors.groupId ? 'border-red-500' : ''}>
+                        <SelectValue placeholder={t('gateway.selectGroupPlaceholder')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {groupOptions.map((opt: any) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {fieldErrors.groupId && <div className="text-xs text-red-500">{fieldErrors.groupId}</div>}
+                  </div>
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     <Label>{t('gateway.specifySingleAccount')}</Label>
@@ -311,158 +263,173 @@ function GatewayConfig({
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Section 2: 客户端认证与模型 */}
-            <div className="space-y-3">
-              <div className="text-sm font-medium text-foreground flex items-center gap-2">
-                <div className="w-1 h-4 bg-primary rounded-full"></div>
-                {t('gateway.clientAuthAndModel')}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                  <div className="text-sm text-muted-foreground">
-                    {(() => {
-                      // 复用共享解析，避免与后端 effective_client_api_keys 语义漂移
-                      const totalCount = parseClientApiKeys(config.clientApiKeysText || config.apiKey).length
-                      const enabledCount = countEffectiveClientApiKeys(config.clientApiKeysText || config.apiKey)
-                      return totalCount > 0
-                        ? `${totalCount} ${t('gateway.keys')}, ${enabledCount} ${t('gateway.enabledCount')}`
-                        : t('gateway.noApiKey')
-                    })()}
+              {/* 单账号模式固定使用所选账号，策略与阈值不生效，故在该模式下不展示 */}
+              {config.accountMode !== 'single' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label>{t('gateway.routingStrategy')}</Label>
+                    <Select value={effectiveStrategy} onValueChange={(v: string) => setField('strategy', v || 'round_robin')}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STRATEGY_OPTIONS.map(option => {
+                          const Icon = option.icon
+                          return (
+                            <SelectItem key={option.value} value={option.value}>
+                              <div className="flex items-center gap-2">
+                                <Icon size={14} />
+                                <span>{getStrategyLabel(option.value)}</span>
+                              </div>
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Button size="sm" variant="outline" className="h-7 text-sm" onClick={() => setShowApiKeysDialog(true)}>
-                    {t('gateway.manageKeys')}
-                  </Button>
+                  <div className="flex flex-col gap-1.5">
+                    <Label>{t('gateway.thresholdPercent')}</Label>
+                    <Input
+                      type="number"
+                      value={config.threshold}
+                      min={1}
+                      max={100}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('threshold', Number(e.target.value) || 90)}
+                    />
+                    <span className="text-[11px] text-muted-foreground">{t('gateway.thresholdHint')}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                  <div className="text-sm text-muted-foreground">
-                    {config.modelMappings?.length > 0
-                      ? `${config.modelMappings.length} ${t('gateway.mappingRules')}, ${config.modelMappings.filter((r: any) => r.enabled).length} ${t('gateway.enabled')}`
-                      : t('gateway.noMappingRules')}
-                  </div>
-                  <Button size="sm" variant="outline" className="h-7 text-sm" onClick={() => setShowModelMappingDialog(true)}>
-                    <Shuffle size={12} className="mr-1" />
-                    {t('gateway.mappingRules')}
-                  </Button>
-                </div>
-                {onShowClientConfig && (
-                  <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                    <div className="text-sm text-muted-foreground">
-                      {hasConfiguredClients ? t('gateway.clientConfigured') : t('gateway.writeClientConfig')}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={hasConfiguredClients ? "default" : "outline"}
-                      className="h-7 text-sm"
-                      onClick={onShowClientConfig}
-                    >
-                      <Zap size={12} className="mr-1" />
-                      {hasConfiguredClients ? t('gateway.reconfigure') : t('gateway.configureClient')}
-                    </Button>
-                  </div>
-                )}
-              </div>
-              {fieldErrors.clientApiKeysText && <div className="text-xs text-red-500">{fieldErrors.clientApiKeysText}</div>}
-            </div>
+              )}
 
-            {/* Section 3: 提示词过滤 */}
-            <div className="space-y-3">
-              <div className="text-sm font-medium text-foreground flex items-center gap-2">
-                <div className="w-1 h-4 bg-primary rounded-full"></div>
-                {t('gateway.promptFilter')}
+              {/* Region 属于上游连接参数（网关调 Kiro 时用），不是本地监听参数。
+                  原先放在「网络与服务」组里会让人以为它影响本地服务。 */}
+              <div className="flex flex-col gap-1.5">
+                <Label>{t('gateway.upstreamRegion')}</Label>
+                <Select value={config.region} onValueChange={(v: string) => setField('region', v || 'us-east-1')}>
+                  <SelectTrigger className={fieldErrors.region ? 'border-red-500' : ''}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALLOWED_REGIONS.map(region => (
+                      <SelectItem key={region} value={region}>{region}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-[11px] text-muted-foreground">{t('gateway.upstreamRegionHint')}</span>
+                {fieldErrors.region && <div className="text-xs text-red-500">{fieldErrors.region}</div>}
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* 客户端密钥与模型映射改为下方平铺入口卡，不再各占一个折叠组 */}
+
+          {/* 提示词清洗与响应缓存合并为一组「请求处理」：两者都是改请求的旋钮。
+              原先「客户端密钥」「模型映射」各占一个折叠组，展开后只有一个开弹窗的按钮，
+              没有表单可收，且组标题摘要与内容摘要重复，已改为下方平铺入口卡。 */}
+          <AccordionItem value="requestHandling">
+            <AccordionTrigger>
+              <span className="flex min-w-0 flex-1 items-center gap-2 pr-2">
+                <span className="shrink-0 text-sm font-medium text-foreground">{t('gateway.groupRequestHandling')}</span>
+                <span className="ml-auto min-w-0 truncate text-[11px] font-normal text-muted-foreground" title={requestHandlingSummary}>
+                  {requestHandlingSummary}
+                </span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
                   <Label className="text-sm">{t('gateway.simplifyCCPrompt')}</Label>
                   <Switch checked={!!config.filterClaudeCode} onCheckedChange={(checked: boolean) => setField('filterClaudeCode', checked)} />
                 </div>
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
                   <Label className="text-sm">{t('gateway.removeBoundaryMarkers')}</Label>
                   <Switch checked={!!config.filterStripBoundaries} onCheckedChange={(checked: boolean) => setField('filterStripBoundaries', checked)} />
                 </div>
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
                   <Label className="text-sm">{t('gateway.removeEnvNoise')}</Label>
                   <Switch checked={!!config.filterEnvNoise} onCheckedChange={(checked: boolean) => setField('filterEnvNoise', checked)} />
                 </div>
               </div>
-              <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                <div className="text-sm text-muted-foreground">
-                  {config.promptFilterRules?.length > 0
-                    ? `${config.promptFilterRules.length} ${t('gateway.customRules')}, ${config.promptFilterRules.filter((r: any) => r.enabled).length} ${t('gateway.enabled')}`
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
+                <span className="text-xs text-muted-foreground">
+                  {promptRules.length > 0
+                    ? `${promptRules.length} ${t('gateway.customRules')}, ${promptRules.filter((r: any) => r.enabled).length} ${t('gateway.enabled')}`
                     : t('gateway.noCustomRules')}
-                </div>
+                </span>
                 <Button size="sm" variant="outline" className="h-7 text-sm" onClick={() => setShowPromptFilterRulesDialog(true)}>
                   {t('gateway.manageRules')}
                 </Button>
               </div>
-            </div>
-
-            {/* Section 4: 安全与高级 */}
-            <div className="space-y-3">
-              <div className="text-sm font-medium text-foreground flex items-center gap-2">
-                <div className="w-1 h-4 bg-primary rounded-full"></div>
-                {t('gateway.securityAndAdvanced')}
-              </div>
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-sm">{t('gateway.localOnly')}</Label>
-                  <Switch
-                    checked={!!config.localOnly}
-                    onCheckedChange={(checked: boolean) => {
-                      setConfig((prev: any) => applyGatewayLocalOnlyChange(prev, checked, createGeneratedApiKey))
-                    }}
-                  />
-                </div>
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-sm">{t('gateway.autoStart')}</Label>
-                  <Switch checked={!!config.enabled} onCheckedChange={handleAutoStartToggle} />
-                </div>
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30">
+              <div className="grid grid-cols-1 gap-3 pb-1 md:grid-cols-2">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
                   <Label className="text-sm">{t('gateway.responseCache')}</Label>
                   <Switch checked={!!config.responseCacheEnabled} onCheckedChange={(checked: boolean) => setField('responseCacheEnabled', checked)} />
                 </div>
-                <div className="flex flex-col gap-0.5 p-2.5 rounded-lg border border-border bg-muted/30">
+                <div className="flex flex-col gap-1.5">
                   <Label className="text-xs text-muted-foreground">{t('gateway.cacheTTLSeconds')}</Label>
                   <Input
                     type="number"
                     value={config.responseCacheTtl}
                     min={30}
                     max={3600}
-                    className="h-6 text-sm px-1.5"
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('responseCacheTtl', Number(e.target.value) || 180)}
                     disabled={!config.responseCacheEnabled}
                   />
                 </div>
-                <div className="flex flex-col gap-0.5 p-2.5 rounded-lg border border-border bg-muted/30">
-                  <Label className="text-xs text-muted-foreground">{t('gateway.thresholdPercent')}</Label>
-                  <Input
-                    type="number"
-                    value={config.threshold}
-                    min={1}
-                    max={100}
-                    className="h-6 text-sm px-1.5"
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('threshold', Number(e.target.value) || 90)}
-                  />
-                </div>
               </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-              {!config.localOnly && (
-                <div className="flex flex-col gap-1.5">
-                  <Label>{t('gateway.ipWhitelist')}</Label>
-                  <Textarea
-                    placeholder={'192.168.1.10\n10.0.0.0/24'}
-                    rows={2}
-                    value={config.allowedIpsText}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setField('allowedIpsText', e.target.value)}
-                    className={fieldErrors.allowedIpsText ? 'border-red-500' : ''}
-                  />
-                  {fieldErrors.allowedIpsText && <div className="text-xs text-red-500">{fieldErrors.allowedIpsText}</div>}
+          <AccordionItem value="access">
+            <AccordionTrigger>
+              <span className="flex min-w-0 flex-1 items-center gap-2 pr-2">
+                <span className="shrink-0 text-sm font-medium text-foreground">{t('gateway.groupAccess')}</span>
+                {!!fieldErrors.allowedIpsText && <AlertCircle size={13} className="shrink-0 text-red-500" />}
+                <span className="ml-auto min-w-0 truncate text-[11px] font-normal text-muted-foreground" title={accessSummary}>
+                  {accessSummary}
+                </span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                    <Label className="text-sm">{t('gateway.localOnly')}</Label>
+                    <Switch
+                      checked={!!config.localOnly}
+                      onCheckedChange={(checked: boolean) => {
+                        setConfig((prev: any) => applyGatewayLocalOnlyChange(prev, checked))
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                    <Label className="text-sm">{t('gateway.autoStart')}</Label>
+                    <Switch checked={!!config.enabled} onCheckedChange={handleAutoStartToggle} />
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
+
+                {!config.localOnly && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label>{t('gateway.ipWhitelist')}</Label>
+                    <Textarea
+                      placeholder={'192.168.1.10\n10.0.0.0/24'}
+                      rows={2}
+                      value={config.allowedIpsText}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setField('allowedIpsText', e.target.value)}
+                      className={fieldErrors.allowedIpsText ? 'border-red-500' : ''}
+                    />
+                    {fieldErrors.allowedIpsText
+                      ? <div className="text-xs text-red-500">{fieldErrors.allowedIpsText}</div>
+                      : <span className="text-[11px] text-muted-foreground">{t('gateway.ipWhitelistHint')}</span>}
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </GatewaySurfaceCard>
 
       {/* AccountPoolDialog */}
@@ -618,24 +585,6 @@ function GatewayConfig({
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
-
-      {/* ModelMappingDialog */}
-      <ModelMappingDialog
-        open={showModelMappingDialog}
-        onOpenChange={setShowModelMappingDialog}
-        modelMappings={config.modelMappings}
-        setField={setField}
-        onSave={handleSaveConfig}
-      />
-
-      {/* ApiKeysDialog */}
-      <ApiKeysDialog
-        open={showApiKeysDialog}
-        onOpenChange={setShowApiKeysDialog}
-        clientApiKeysText={config.clientApiKeysText}
-        setConfig={setConfig}
-        onSave={handleSaveConfig}
-      />
 
       {/* PromptFilterRulesDialog */}
       <PromptFilterRulesDialog

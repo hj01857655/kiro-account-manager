@@ -1,6 +1,6 @@
 // 与后端 src-tauri/src/clients/http_client.rs::SUPPORTED_KIRO_REGIONS 对齐。
 // 改这里时同步改后端那份；GatewayConfig.tsx 的 <SelectItem> 列表也要保持一致。
-const ALLOWED_REGIONS = [
+export const ALLOWED_REGIONS = [
   'us-east-1',
   'us-east-2',
   'us-west-1',
@@ -47,47 +47,9 @@ export const parseAllowedIps = (value: string | string[]): string[] => {
     .filter(Boolean)
 }
 
-/// 禁用 Key 的前缀，与后端 `effective_client_api_keys` 保持一致。
-/// 以该前缀开头的条目会被后端过滤，不参与鉴权。
-export const DISABLED_API_KEY_PREFIX = '#disabled#'
-
-/**
- * 把客户端 Key 文本解析为条目列表。
- *
- * **保真解析**：保留 `#disabled#` 前缀与 `name:key` 形式，不做语义过滤。
- * 供 hydrate / 配置往返使用 —— 过滤掉禁用项会导致用户在
- * ApiKeysDialog 里关掉的 key 被永久删除。要拿「能用的 key」请用
- * `getEffectiveClientApiKey`。
- */
-export const parseClientApiKeys = (value: string | string[]): string[] => {
-  if (Array.isArray(value)) return value
-  return String(value || '')
-    .split(/[\n,]+/)
-    .map(item => item.trim())
-    .filter(Boolean)
-    .filter((item, index, items) => items.indexOf(item) === index)
-}
-
-/**
- * 取首个**生效**的客户端 Key；无生效 key 时返回空串。
- *
- * 与后端 `effective_client_api_keys`（gateway/mod.rs）对齐：跳过空项、
- * 跳过 `#disabled#` 项，并剥离 `name:` 前缀 —— 后端的 key 列表里只存裸 key。
- * 用于「一键写入客户端配置」「Playground 测试」「复制 key」等场景。
- */
-export const getEffectiveClientApiKey = (value: string | string[]): string => {
-  for (const item of parseClientApiKeys(value)) {
-    if (item.startsWith(DISABLED_API_KEY_PREFIX)) continue
-    const colonIdx = item.indexOf(':')
-    const key = colonIdx > 0 && !item.startsWith('sk-') ? item.slice(colonIdx + 1).trim() : item
-    if (key && !key.startsWith(DISABLED_API_KEY_PREFIX)) return key
-  }
-  return ''
-}
-
-/** 生效的客户端 Key 数量（用于「已配置 N 个」这类统计） */
-export const countEffectiveClientApiKeys = (value: string | string[]): number =>
-  parseClientApiKeys(value).filter(item => !item.startsWith(DISABLED_API_KEY_PREFIX)).length
+/** 客户端鉴权密钥，与后端 `gateway::CLIENT_API_KEY` 一致。
+ * 多 Key 管理已移除，前后端固定用这个值。 */
+export const CLIENT_API_KEY = 'kiro'
 
 const isValidIpv4Address = (value: string): boolean => {
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) {
@@ -175,24 +137,16 @@ export const buildGatewayBaseUrl = (host: string, port: number, localOnly: boole
 
 export const applyGatewayLocalOnlyChange = (
   config: any,
-  nextLocalOnly: boolean,
-  createApiKey: () => string
+  nextLocalOnly: boolean
 ): any => {
-  const nextConfig = {
+  // host 完全由 localOnly 推导：只监听 127.0.0.1，或监听全部网卡。
+  // 监听地址曾经是一个可编辑字段，与这个开关重叠且能互相矛盾，已从设置页移除；
+  // 这里同步写 host，保证旧配置里遗留的 0.0.0.0 / 127.0.0.1 不跟开关唱反调。
+  return {
     ...config,
-    localOnly: !!nextLocalOnly
+    localOnly: !!nextLocalOnly,
+    host: nextLocalOnly ? '127.0.0.1' : '0.0.0.0'
   }
-
-  if (!nextLocalOnly && !parseClientApiKeys(config?.clientApiKeysText || config?.apiKey).length) {
-    const generatedKey = createApiKey()
-    return {
-      ...nextConfig,
-      apiKey: generatedKey,
-      clientApiKeysText: generatedKey
-    }
-  }
-
-  return nextConfig
 }
 
 export const formatGatewayTimestamp = (date = new Date()): string => {
@@ -201,7 +155,13 @@ export const formatGatewayTimestamp = (date = new Date()): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
-export const createGatewayFieldErrors = (config: any) => {
+/**
+ * 构建表单校验错误。
+ *
+ * `t` 由调用方传入（见 `index.tsx` 的 `useApp().t`）——
+ * 文案不放字面量，否则英文/俄文界面会显示中文。
+ */
+export const createGatewayFieldErrors = (config: any, t: (key: string, vars?: Record<string, any>) => string) => {
   const errors: any = {}
   const host = String(config?.host || '').trim()
   const port = Number(config?.port)
@@ -209,57 +169,41 @@ export const createGatewayFieldErrors = (config: any) => {
   const accountMode = String(config?.accountMode || 'single').trim()
   const localOnly = config?.localOnly ?? true
   const allowedIps = parseAllowedIps(config?.allowedIpsText)
-  const clientApiKeys = parseClientApiKeys(config?.clientApiKeysText || config?.apiKey)
 
   if (!host) {
-    errors.host = '监听地址不能为空'
+    errors.host = t('gatewaySummary.field.hostEmpty')
   } else if (!isValidGatewayHost(host)) {
-    errors.host = '监听地址必须是 localhost、IPv4 或 IPv6 地址'
+    errors.host = t('gatewaySummary.field.hostInvalid')
   }
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    errors.port = '端口必须在 1-65535 之间'
+    errors.port = t('gatewaySummary.field.portRange')
   }
 
   if (!region) {
-    errors.region = 'region 不能为空'
+    errors.region = t('gatewaySummary.field.regionEmpty')
   } else if (!(ALLOWED_REGIONS as readonly string[]).includes(region)) {
-    errors.region = `region 不受支持: ${region}`
+    errors.region = t('gatewaySummary.field.regionUnsupported', { region })
   }
 
   if (!['single', 'group', 'pool'].includes(accountMode)) {
-    errors.accountMode = 'accountMode 必须是 single/group/pool'
+    errors.accountMode = t('gatewaySummary.field.accountMode')
   } else if (accountMode === 'single' && !String(config?.accountId || '').trim()) {
-    errors.accountId = 'single 模式必须选择账号'
+    errors.accountId = t('gatewaySummary.field.accountRequired')
   } else if (accountMode === 'group' && !String(config?.groupId || '').trim()) {
-    errors.groupId = 'group 模式必须选择分组'
-  }
-
-  if (!clientApiKeys.length) {
-    errors.clientApiKeysText = '必须至少填写一个客户端 API Key'
+    errors.groupId = t('gatewaySummary.field.groupRequired')
   }
 
   if (!localOnly && !allowedIps.length) {
-    errors.allowedIpsText = '允许远程访问时必须至少配置一个白名单来源 IP'
+    errors.allowedIpsText = t('gatewaySummary.field.allowlistRequired')
   }
 
   const invalidAllowlistEntry = allowedIps.find(entry => !isValidAllowlistEntry(entry))
   if (invalidAllowlistEntry) {
-    errors.allowedIpsText = `白名单条目无效: ${invalidAllowlistEntry}`
+    errors.allowedIpsText = t('gatewaySummary.field.allowlistInvalid', { entry: invalidAllowlistEntry })
   }
 
   return errors
-}
-
-export const redactGatewayApiKey = (apiKey: string): string => {
-  const value = String(apiKey || '').trim()
-  if (!value) {
-    return 'sk-your-gateway-api-key'
-  }
-  if (value.length <= 8) {
-    return `${value.slice(0, 3)}***`
-  }
-  return `${value.slice(0, 6)}...${value.slice(-4)}`
 }
 
 export interface ErrorHistoryEntry {
@@ -304,16 +248,25 @@ export const mergeErrorHistory = (
 }
 
 interface ClientSamples {
+  /**
+   * 展示用（界面渲染）：**掩码**形式，Key 不可直接使用。
+   * 拿去剪贴板请用 `copy` 变体。
+   */
   anthropic: { env: string }
-  openai: { env: string; curl: string }
-  openaiChat: { env: string; curl: string }
-  claudeCode: { config: string; apiKey: string }
-  codex: { config: string; apiKey: string }
+  openai: { env: string }
+  openaiChat: { env: string }
+  /**
+   * 复制到剪贴板用的连接配置：**含真实 Key**。
+   *
+   * 认证是逐字比较，掩码形式（`sk-xxx…abcd`）贴进客户端必然 401，
+   * 所以「复制配置」必须给真身；界面上给人看的才是掩码版。
+   */
+  copy: { anthropic: string; openai: string; openaiChat: string }
 }
 
 /** 接入引导卡片所需的一切信息。 */
 export interface ClientRecipe {
-  /** 稳定标识，兼作一键写入的 client 参数（claudeCode / codex） */
+  /** 稳定标识 */
   id: string
   /** 展示名 */
   label: string
@@ -327,15 +280,9 @@ export interface ClientRecipe {
   authHeader: string
   /** 掩码后的 Key（展示用） */
   keyMasked: string
-  /** 真实 Key（一键写入 / 复制用） */
+  /** 真实 Key（复制用） */
   key: string
-  /** 配置写入路径；未支持一键写入时为空 */
-  configPath: string
-  /** 是否支持一键写入（后端 configureProxyClients 的 clients 取值） */
-  writable: boolean
-  /** 一键写入时写入的配置文本预览（仅 writable 卡有值；后端实际写入由 Rust 端重建，这里只作展示） */
-  writeConfig: string
-  /** 不可一键写入客户端的复制样本（如 OpenAI 兼容客户端的 curl）；writable 卡为空 */
+  /** 复制动作给出的连接配置：Base URL + Key 的环境变量写法，用户贴进自己客户端的配置里。 */
   copySample: string
 }
 
@@ -343,8 +290,8 @@ export interface ClientRecipe {
  * 生成各客户端的接入配方。
  *
  * 这里是「接一个客户端该填什么」的**唯一真相源**。历史上这些信息散落在
- * index.tsx 的 consoleHighlights、写入预览、configureProxyClients 调用点等
- * 六处，各写各的，导致 API key 过滤语义漂移（见 commit 55d6be1）。
+ * index.tsx 的 consoleHighlights、写入预览等六处，各写各的，导致 API key
+ * 过滤语义漂移（见 commit 55d6be1）。
  *
  * 关键差异（均有代码依据，不可"拉齐"）：
  * - Base URL：Anthropic 系给 origin，OpenAI 系还要带 `/v1`
@@ -354,138 +301,88 @@ export interface ClientRecipe {
  */
 export const buildGatewayClientRecipes = ({
   baseUrl,
-  keyMaterial,
   samples,
+  t,
 }: {
   baseUrl: string
-  keyMaterial: string | string[]
   samples: ClientSamples
+  t: (key: string) => string
 }): ClientRecipe[] => {
-  const key = getEffectiveClientApiKey(keyMaterial)
-  const keyMasked = key ? redactGatewayApiKey(key) : ''
+  const key = CLIENT_API_KEY
+  const keyMasked = key
   const origin = String(baseUrl || '').replace(/\/+$/, '')
 
   return [
     {
-      id: 'claudeCode',
-      label: 'Claude Code CLI',
+      id: 'anthropic',
+      label: 'Anthropic Messages',
       protocol: 'Anthropic Messages',
       baseUrl: origin,
       endpoint: '/v1/messages',
       authHeader: 'x-api-key',
       keyMasked,
       key,
-      configPath: '~/.claude/settings.json',
-      writable: true,
-      writeConfig: samples.claudeCode.config,
-      copySample: '',
+      copySample: samples.copy.anthropic,
     },
     {
-      id: 'codex',
-      label: 'Codex CLI',
+      id: 'openaiResponses',
+      label: 'OpenAI Responses',
       protocol: 'OpenAI Responses',
       baseUrl: `${origin}/v1`,
       endpoint: '/v1/responses',
       authHeader: 'Authorization: Bearer',
       keyMasked,
       key,
-      configPath: '~/.codex/auth.json + config.toml',
-      writable: true,
-      writeConfig: samples.codex.config,
-      copySample: '',
+      copySample: samples.copy.openai,
     },
     {
-      id: 'openaiCompatible',
-      label: '其他 OpenAI 兼容客户端',
+      id: 'openaiChat',
+      label: 'OpenAI Chat',
       protocol: 'OpenAI Chat',
       baseUrl: `${origin}/v1`,
       endpoint: '/v1/chat/completions',
       authHeader: 'Authorization: Bearer',
       keyMasked,
       key,
-      configPath: '',
-      writable: false,
-      writeConfig: '',
-      copySample: samples.openaiChat.curl,
+      copySample: samples.copy.openai,
     },
   ]
 }
 
-export const buildClientSamples = (baseUrl: string, apiKey: string | string[]): ClientSamples => {
-  const safeKey = redactGatewayApiKey(getEffectiveClientApiKey(apiKey))
-  const realKey = getEffectiveClientApiKey(apiKey)
-  const anthropicEnv = `ANTHROPIC_BASE_URL=${baseUrl}\nANTHROPIC_API_KEY=${safeKey}`
-  const openaiEnv = `OPENAI_BASE_URL=${baseUrl}\nOPENAI_API_KEY=${safeKey}`
-  const openaiResponsesCurl = [
-    `curl ${baseUrl}/v1/responses \\`,
-    '  -H "Content-Type: application/json" \\',
-    `  -H "Authorization: Bearer ${safeKey}" \\`,
-    '  -d "{\\"model\\":\\"claude-sonnet-4-5-20250929\\",\\"input\\":[{\\"role\\":\\"user\\",\\"content\\":[{\\"type\\":\\"input_text\\",\\"text\\":\\"hello\\"}]}]}"',
-  ].join('\n')
-  const openaiChatCurl = [
-    `curl ${baseUrl}/v1/chat/completions \\`,
-    '  -H "Content-Type: application/json" \\',
-    `  -H "Authorization: Bearer ${safeKey}" \\`,
-    '  -d "{\\"model\\":\\"claude-sonnet-4-5-20250929\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"hello\\"}]}"',
-  ].join('\n')
-
-  // Claude Code 配置（~/.claude/settings.json）
-  const claudeCodeConfig = [
-    '{',
-    '  "env": {',
-    `    "ANTHROPIC_BASE_URL": "${baseUrl}",`,
-    `    "ANTHROPIC_AUTH_TOKEN": "${safeKey}"`,
-    '  }',
-    '}',
-  ].join('\n')
-
-  // Codex CLI 配置（~/.codex/config.toml + ~/.codex/auth.json）
-  const codexConfig = [
-    '# ~/.codex/config.toml',
-    'model_provider = "custom"',
-    'model = "claude-sonnet-4-5-20250929"',
-    '',
-    '[model_providers.custom]',
-    'name = "custom"',
-    `base_url = "${baseUrl}/v1"`,
-    'wire_api = "responses"',
-    'requires_openai_auth = true',
-    '',
-    '# ~/.codex/auth.json',
-    '{',
-    `  "OPENAI_API_KEY": "${safeKey}"`,
-    '}',
-  ].join('\n')
+export const buildClientSamples = (baseUrl: string): ClientSamples => {
+  // 密钥固定为 kiro：不再是秘密，展示与复制同一个值
+  const key = CLIENT_API_KEY
+  const anthropicEnv = `ANTHROPIC_BASE_URL=${baseUrl}\nANTHROPIC_API_KEY=${key}`
+  // OpenAI 系客户端的 Base URL 必须带 /v1（对照 buildGatewayClientRecipes 的 `${origin}/v1`）
+  const openaiEnv = `OPENAI_BASE_URL=${baseUrl}/v1\nOPENAI_API_KEY=${key}`
 
   return {
     anthropic: {
       env: anthropicEnv
     },
     openai: {
-      env: openaiEnv,
-      curl: openaiResponsesCurl
+      env: openaiEnv
     },
     openaiChat: {
-      env: openaiEnv,
-      curl: openaiChatCurl
+      env: openaiEnv
     },
-    claudeCode: {
-      config: claudeCodeConfig,
-      apiKey: realKey
-    },
-    codex: {
-      config: codexConfig,
-      apiKey: realKey
+    copy: {
+      anthropic: anthropicEnv,
+      openai: openaiEnv,
+      openaiChat: openaiEnv
     }
   }
 }
 
 import { getQuota, getUsed, formatUsage } from '../../../utils/accountStats'
 
-export const formatGatewayAccountOptionLabel = (account: any): string => {
+export const formatGatewayAccountOptionLabel = (
+  account: any,
+  t: (key: string, vars?: Record<string, any>) => string
+): string => {
   const email = String(account?.email || '').trim()
   const userId = String(account?.userId || '').trim()
-  const baseLabel = email || userId || '未知账号'
+  const baseLabel = email || userId || t('gatewaySummary.unknownAccount')
 
   const quota = getQuota(account)
   const used = getUsed(account)
@@ -494,8 +391,14 @@ export const formatGatewayAccountOptionLabel = (account: any): string => {
   const currentOverages = breakdown?.currentOverages ?? 0
   const overageCap = breakdown?.overageCap ?? 0
   const quotaInfo = currentOverages > 0
-    ? `超额 ${formatUsage(currentOverages)}${overageCap > 0 ? '/' + formatUsage(overageCap) : ''}`
-    : `剩余 ${formatUsage(Math.max(0, remaining))}/${formatUsage(quota)}`
+    ? t('gatewaySummary.account.overage', {
+        used: formatUsage(currentOverages),
+        cap: overageCap > 0 ? '/' + formatUsage(overageCap) : ''
+      })
+    : t('gatewaySummary.account.remaining', {
+        remaining: formatUsage(Math.max(0, remaining)),
+        quota: formatUsage(quota)
+      })
 
   const status = String(account?.status || '').trim()
   const isActive = status === 'active' || status === ''
@@ -504,7 +407,7 @@ export const formatGatewayAccountOptionLabel = (account: any): string => {
   return `${baseLabel} ${quotaInfo}${statusInfo}`
 }
 
-export const buildGatewayStatusSummary = ({ config, status, errorHistory, lastStatusSyncAt }: any) => {
+export const buildGatewayStatusSummary = ({ config, status, errorHistory, lastStatusSyncAt, t }: any) => {
   const mode = config?.accountMode || 'single'
   const strategy = config?.strategy || 'round_robin'
   const listenHost = (status?.running ? status?.host : null) || config?.host || status?.host || '127.0.0.1'
@@ -518,54 +421,68 @@ export const buildGatewayStatusSummary = ({ config, status, errorHistory, lastSt
     logLevel: config?.logLevel || 'debug',
     sync: lastStatusSyncAt || '-',
     routing: `${mode} / ${strategy}`,
-    exposure: config?.localOnly ? '仅本机' : '允许远程',
+    exposure: config?.localOnly
+      ? t('gatewaySummary.exposureLocal')
+      : t('gatewaySummary.exposureRemote'),
     errorCount: errorCount
   }
 }
-export const buildGatewayRoutingSummary = ({ config, counts, selectedLabels = {} }: any) => {
+export const buildGatewayRoutingSummary = ({ config, counts, selectedLabels = {}, t }: any) => {
   const mode = config?.accountMode || 'single'
-  const inventorySummary = `账号 ${counts?.accounts || 0} 个 / 分组 ${counts?.groups || 0} 个`
+  const inventorySummary = t('gatewaySummary.inventory', {
+    accounts: counts?.accounts || 0,
+    groups: counts?.groups || 0
+  })
 
   if (mode === 'single') {
     return {
-      modeLabel: '指定单账号',
-      modeDescription: '2API会固定使用一个账号，适合调试或绑定到单一租户场景。',
-      selectionLabel: '当前账号',
-      selectionValue: selectedLabels.single || '未选择账号',
+      modeLabel: t('gatewaySummary.routing.single'),
+      modeDescription: t('gatewaySummary.routing.singleDesc'),
+      selectionLabel: t('gatewaySummary.routing.currentAccount'),
+      selectionValue: selectedLabels.single || t('gatewaySummary.routing.noAccount'),
       inventorySummary,
-      strategySummary: '固定账号，不参与轮换'
+      strategySummary: t('gatewaySummary.routing.fixed')
     }
   }
 
   if (mode === 'group') {
     return {
-      modeLabel: '按分组账号池',
-      modeDescription: '先锁定账号分组，再按策略和阈值从该分组中挑选可用账号。',
-      selectionLabel: '当前分组',
-      selectionValue: selectedLabels.group || '未选择分组',
+      modeLabel: t('gatewaySummary.routing.group'),
+      modeDescription: t('gatewaySummary.routing.groupDesc'),
+      selectionLabel: t('gatewaySummary.routing.currentGroup'),
+      selectionValue: selectedLabels.group || t('gatewaySummary.routing.noGroup'),
       inventorySummary,
-      strategySummary: `策略 ${config?.strategy || 'round_robin'} / 阈值 ${Number(config?.threshold) || 90}%`
+      strategySummary: t('gatewaySummary.routing.strategyThreshold', {
+        strategy: config?.strategy || 'round_robin',
+        threshold: Number(config?.threshold) || 90
+      })
     }
   }
 
   if (mode === 'pool') {
     return {
-      modeLabel: '账号管理池',
-      modeDescription: '使用所有可用账号，按策略和阈值自动选择，不限制分组。',
-      selectionLabel: '账号范围',
-      selectionValue: '所有可用账号',
+      modeLabel: t('gatewaySummary.routing.pool'),
+      modeDescription: t('gatewaySummary.routing.poolDesc'),
+      selectionLabel: t('gatewaySummary.routing.accountScope'),
+      selectionValue: t('gatewaySummary.routing.allAccounts'),
       inventorySummary,
-      strategySummary: `策略 ${config?.strategy || 'round_robin'} / 阈值 ${Number(config?.threshold) || 90}%`
+      strategySummary: t('gatewaySummary.routing.strategyThreshold', {
+        strategy: config?.strategy || 'round_robin',
+        threshold: Number(config?.threshold) || 90
+      })
     }
   }
 
   return {
-    modeLabel: '按分组账号池',
-    modeDescription: '先锁定账号分组，再按策略和阈值从该分组中挑选可用账号。',
-    selectionLabel: '当前分组',
-    selectionValue: selectedLabels.group || '未选择分组',
+    modeLabel: t('gatewaySummary.routing.group'),
+    modeDescription: t('gatewaySummary.routing.groupDesc'),
+    selectionLabel: t('gatewaySummary.routing.currentGroup'),
+    selectionValue: selectedLabels.group || t('gatewaySummary.routing.noGroup'),
     inventorySummary,
-    strategySummary: `策略 ${config?.strategy || 'round_robin'} / 阈值 ${Number(config?.threshold) || 90}%`
+    strategySummary: t('gatewaySummary.routing.strategyThreshold', {
+      strategy: config?.strategy || 'round_robin',
+      threshold: Number(config?.threshold) || 90
+    })
   }
 }
 
@@ -574,92 +491,91 @@ export const buildGatewayActionSummary = ({
   isDirty,
   hasUnsavedChanges,
   hasRuntimeChanges,
-  hasFieldErrors }: any) => {
+  hasFieldErrors,
+  t }: any) => {
   const unsavedChanges = hasUnsavedChanges ?? isDirty ?? false
   const runtimeChanges = hasRuntimeChanges ?? (running && unsavedChanges)
 
   if (hasFieldErrors) {
     return {
       tone: 'red',
-      title: '先修正配置错误',
-      description: '当前表单存在无效配置，保存、启动和重启都会被拦截，先修正标红字段。'
+      title: t('gatewaySummary.action.fixErrors'),
+      description: t('gatewaySummary.action.fixErrorsDesc')
     }
   }
 
   if (running && unsavedChanges && runtimeChanges) {
     return {
       tone: 'yellow',
-      title: '配置已变更，重启后生效',
-      description: '2API仍按已启动时的配置运行。先保存，再执行重启2API，才能让新配置生效。'
+      title: t('gatewaySummary.action.restartNeeded'),
+      description: t('gatewaySummary.action.restartNeededDesc')
     }
   }
 
   if (running && unsavedChanges) {
     return {
       tone: 'blue',
-      title: '当前运行配置尚未保存',
-      description: '当前页面配置已经用于运行2API，但还没有写回配置文件；如需保留下次启动沿用，请保存配置。'
+      title: t('gatewaySummary.action.unsavedRunning'),
+      description: t('gatewaySummary.action.unsavedRunningDesc')
     }
   }
 
   if (running) {
     return {
       tone: 'teal',
-      title: '2API运行中',
-      description: '当前配置与已保存状态一致；如需中断流量可直接停止2API。'
+      title: t('gatewaySummary.action.running'),
+      description: t('gatewaySummary.action.runningDesc')
     }
   }
 
   if (unsavedChanges) {
     return {
       tone: 'blue',
-      title: '可按当前配置直接启动',
-      description: '启动2API会使用当前表单里的配置；如果希望下次应用启动也沿用这些设置，先点保存配置。'
+      title: t('gatewaySummary.action.canStart'),
+      description: t('gatewaySummary.action.canStartDesc')
     }
   }
 
   return {
     tone: 'blue',
-    title: '2API当前未启动',
-    description: '可以直接启动现有配置，或先调整表单后再启动。'
+    title: t('gatewaySummary.action.stopped'),
+    description: t('gatewaySummary.action.stoppedDesc')
   }
 }
 
-export const buildGatewaySecuritySummary = ({ config }: any) => {
+export const buildGatewaySecuritySummary = ({ config, t }: any) => {
   const allowedIpsCount = parseAllowedIps(config?.allowedIpsText).length
-  const clientApiKeys = parseClientApiKeys(config?.clientApiKeysText || config?.apiKey)
-  // 统计的是「生效」key 数，与后端鉴权实际可用数量一致；
-  // 直接把条目总数报出来会让用户误以为被禁用的 key 也在生效
-  const effectiveCount = countEffectiveClientApiKeys(config?.clientApiKeysText || config?.apiKey)
-  const totalCount = clientApiKeys.length
 
   return {
-    exposureLabel: config?.localOnly ? '仅本机访问' : '允许远程访问',
+    exposureLabel: config?.localOnly
+      ? t('gatewaySummary.exposureLocalFull')
+      : t('gatewaySummary.exposureRemoteFull'),
     allowedIpsCount,
-    apiKeyState: effectiveCount
-      ? (totalCount > effectiveCount
-          ? `已配置 ${effectiveCount} 个客户端 Key（共 ${totalCount} 个，${totalCount - effectiveCount} 个已禁用）`
-          : `已配置 ${effectiveCount} 个客户端 Key`)
-      : (totalCount ? '所有客户端 Key 均已禁用' : '未配置客户端 Key'),
-    // 首个生效 key 的掩码形式；无生效 key 时为空串，调用方据此回退到 apiKeyState
-    primaryKeyMasked: effectiveCount
-      ? redactGatewayApiKey(getEffectiveClientApiKey(config?.clientApiKeysText || config?.apiKey))
-      : '',
+    // 密钥固定为 kiro，不再有启用/禁用之分；文案只说明这一事实
+    apiKeyState: t('gatewaySummary.security.keysFixed'),
     logLevel: config?.logLevel || 'debug'
   }
 }
 
-export const buildGatewayIntegrationSummary = ({ baseUrl, apiKey, clientApiKeysText, logDir, errorHistory }: any) => {
-  const clientApiKeys = parseClientApiKeys(clientApiKeysText || apiKey)
-  const safeKey = redactGatewayApiKey(clientApiKeys[0] || '')
+export const buildGatewayIntegrationSummary = ({
+  baseUrl,
+  logDir,
+  errorHistory,
+  t
+}: any) => {
   const errorCount = Array.isArray(errorHistory) ? errorHistory.length : 0
   const errorHits = Array.isArray(errorHistory) ? errorHistory.reduce((sum, item) => sum + Number(item.count || 0), 0) : 0
 
   return {
     endpointLabel: baseUrl,
-    authLabel: clientApiKeys.length > 1 ? `Bearer ${safeKey}（共 ${clientApiKeys.length} 个 Key）` : `Bearer ${safeKey}`,
-    logDirState: String(logDir || '').trim() ? '日志目录已定位' : '日志目录未获取',
-    errorDigest: `${errorCount} 条错误 / ${errorHits} 次命中`
+    authLabel: `Bearer ${CLIENT_API_KEY}`,
+    logDirState: String(logDir || '').trim()
+      ? t('gatewaySummary.integration.logDirReady')
+      : t('gatewaySummary.integration.logDirMissing'),
+    errorDigest: t('gatewaySummary.integration.errorDigest', {
+      errors: errorCount,
+      hits: errorHits
+    })
   }
 }
 
@@ -802,10 +718,10 @@ export const buildGatewayMetricsSummary = (entries: any) => {
       outcomeCounts.other += 1
     }
 
-    const model = String(item?.model || '未记录模型').trim() || '未记录模型'
+    const model = String(item?.model || '').trim()
     modelCounts[model] = (modelCounts[model] || 0) + 1
 
-    const upstream = String(item?.upstreamSource || '未解析上游来源').trim() || '未解析上游来源'
+    const upstream = String(item?.upstreamSource || '').trim()
     upstreamCounts[upstream] = (upstreamCounts[upstream] || 0) + 1
 
     const status = String(item?.statusCode || 0)

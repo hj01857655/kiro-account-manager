@@ -68,7 +68,7 @@ function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
 
   return (
     <div
-      className={cn("flex flex-col relative transition-[width] duration-200 ease-in-out glass-sidebar z-10 overflow-hidden")}
+      className={cn("flex flex-col relative transition-[width] duration-200 ease-in-out glass-sidebar z-10 overflow-hidden sidebar-top-inset")}
       style={{ width: collapsed ? 64 : 192 }}
     >
       <TooltipProvider>
@@ -85,7 +85,7 @@ function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
                 )}
                 style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
               >
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center backdrop-blur-sm transition-transform hover:scale-105 flex-shrink-0 sidebar-card">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center transition-transform hover:scale-105 flex-shrink-0 sidebar-card">
                   <svg width="24" height="24" viewBox="0 0 40 40" fill="none">
                     <path d="M20 4C12 4 6 10 6 18C6 22 8 25 8 25C8 25 7 28 7 30C7 32 8 34 10 34C11 34 12 33 13 32C14 33 16 34 20 34C24 34 26 33 27 32C28 33 29 34 30 34C32 34 33 32 33 30C33 28 32 25 32 25C32 25 34 22 34 18C34 10 28 4 20 4ZM14 20C12.5 20 11 18.5 11 17C11 15.5 12.5 14 14 14C15.5 14 17 15.5 17 17C17 18.5 15.5 20 14 20ZM26 20C24.5 20 23 18.5 23 17C23 15.5 24.5 14 26 14C27.5 14 29 15.5 29 17C29 18.5 27.5 20 26 20Z" fill="currentColor" className="sidebar-foreground"/>
                   </svg>
@@ -144,7 +144,7 @@ function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
       </div>
 
       {localToken && (
-        <div className={cn("mx-3 mb-3 p-3 rounded-xl backdrop-blur-sm sidebar-card", collapsed && "mx-2 px-0 flex justify-center")}>
+        <div className={cn("mx-3 mb-3 p-3 rounded-xl sidebar-card", collapsed && "mx-2 px-0 flex justify-center")}>
           {!collapsed ? (
             <>
               <div className="flex items-center gap-2 mb-2">

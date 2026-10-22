@@ -7,6 +7,7 @@ import {
   cleanupStaleHealth,
   getAllAccountHealth,
   getCacheStats,
+  getGatewayClientStats,
   getGatewayEndpointStats,
   getGatewayModelStats,
   getGatewayRequestLogs,
@@ -46,6 +47,8 @@ import { useApp } from '@/hooks/useApp'
 
 interface ProcessedRequestLog {
   id: string
+  /** 后端 request_id（UUID）：唯一键，展开详情与定位都靠它 */
+  requestId?: string
   timestamp: string
   path: string
   status: number
@@ -101,6 +104,17 @@ interface EndpointStat {
   error: number
 }
 
+/// 一个客户端工具的用量，回答「谁在用这个网关」。
+/// product 可能为 null：客户端没发 UA。
+interface ClientStat {
+  product?: string | null
+  count: number
+  success: number
+  error: number
+  totalInputTokens: number
+  totalOutputTokens: number
+}
+
 // 网关运行时账号健康度（键为账号 ID）
 interface AccountHealth {
   accountId: string
@@ -112,7 +126,7 @@ interface AccountHealth {
   healthScore: number
 }
 
-interface RequestLogsDialogProps {
+export interface RequestLogsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   logLevel: string
@@ -120,6 +134,9 @@ interface RequestLogsDialogProps {
   logRequests: boolean
   onLogRequestsChange: (enabled: boolean) => void
   onSave?: () => void
+  /** 内嵌模式：作为网关页的「请求日志」tab 内容渲染，不套 Dialog 外壳。
+   *  数据、轮询、交互与弹窗完全共用，只是少了 open/onOpenChange 这一层。 */
+  embedded?: boolean
 }
 
 function formatRequestLogAccount(upstream?: string) {
@@ -143,7 +160,8 @@ export function RequestLogsDialog({
   onLogLevelChange,
   logRequests,
   onLogRequestsChange,
-  onSave
+  onSave,
+  embedded = false
 }: RequestLogsDialogProps) {
   const { t } = useApp()
   const [requestLogs, setRequestLogs] = useState<ProcessedRequestLog[]>([])
@@ -152,6 +170,7 @@ export function RequestLogsDialog({
   // 维度统计与账号健康度：两个折叠区，默认收起（不抢日志表的视觉）
   const [modelStats, setModelStats] = useState<ModelStat[]>([])
   const [endpointStats, setEndpointStats] = useState<EndpointStat[]>([])
+  const [clientStats, setClientStats] = useState<ClientStat[]>([])
   const [health, setHealth] = useState<Record<string, AccountHealth>>({})
   const [healthUnavailable, setHealthUnavailable] = useState(false)
   // 被限流的账号 ID 集合：健康度表里标红并给「解除」入口
@@ -191,12 +210,14 @@ export function RequestLogsDialog({
       ])
 
       // 维度统计与健康度并行拉取；两者的失败都不应拖垮日志主流程
-      const [models, endpoints] = await Promise.all([
+      const [models, endpoints, clients] = await Promise.all([
         getGatewayModelStats<ModelStat[]>().catch(() => []),
-        getGatewayEndpointStats<EndpointStat[]>().catch(() => [])
+        getGatewayEndpointStats<EndpointStat[]>().catch(() => []),
+        getGatewayClientStats<ClientStat[]>().catch(() => [])
       ])
       setModelStats(models || [])
       setEndpointStats(endpoints || [])
+      setClientStats(clients || [])
       // 网关未启动时后端返回 Err，这是正常状态（"Gateway not initialized"），
       // 不是故障，因此用健康度是否可用来驱动提示而不是弹错误
       getAllAccountHealth<Record<string, AccountHealth>>()
@@ -208,7 +229,9 @@ export function RequestLogsDialog({
         .catch(() => setRateLimited(new Set()))
 
       setRequestLogs(logs.map(log => ({
-        id: `${log.requestIndex}-${log.occurredAt}`,
+        // 用后端的 request_id（UUID）作唯一键：requestIndex 重启归零、
+        // occurredAt 只到秒，两者拼接在同一秒的落盘历史里会撞 key。
+        id: log.requestId || `${log.requestIndex}-${log.occurredAt}`,
         timestamp: log.occurredAt,
         path: log.endpoint,
         status: log.statusCode,
@@ -350,14 +373,508 @@ export function RequestLogsDialog({
   }
 
   // 依赖 displayLimit，修复 5 秒轮询重置显示条数 Bug
+  // 内嵌模式下始终拉取（isActive 恒真）；弹窗模式仍由 open 驱动。
+  const isActive = embedded || open
+
   useEffect(() => {
-    if (!open) return
+    if (!isActive) return
     fetchRequestLogs()
     const interval = setInterval(() => {
       fetchRequestLogs()
     }, 5000)
     return () => clearInterval(interval)
-  }, [open, fetchRequestLogs])
+  }, [isActive, fetchRequestLogs])
+
+  // 请求日志面板内容：统计/缓存 + 维度折叠区 + 日志表。
+  // 弹窗与内嵌 tab 共用同一段 JSX，避免两处各写一份导致口径漂移。
+  const renderLogsPanel = () => (
+    <div className="space-y-3 flex flex-col min-h-0">
+
+      {/* 顶部：统计与缓存 */}
+      <div className="flex items-center justify-between gap-2 bg-muted/20 p-2.5 rounded-lg flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">{t('gatewayLogs.total')}</span>
+            <span className="font-semibold">{requestStats?.total || 0}</span>
+            <span className="text-green-600 border-l pl-2 ml-1">{t('gatewayLogs.success')}</span>
+            <span className="font-semibold text-green-600">{requestStats?.success || 0}</span>
+            <span className="text-red-500 border-l pl-2 ml-1">{t('gatewayLogs.error')}</span>
+            <span className="font-semibold text-red-500">{requestStats?.error || 0}</span>
+          </div>
+
+          {requestStats && requestStats.totalInputTokens > 0 && (
+            <div className="text-xs text-muted-foreground border-l pl-3 ml-1">
+              <span>Tokens: </span>
+              <strong>{(requestStats.totalInputTokens / 1000).toFixed(1)}K</strong> {t('gatewayLogs.tokensInput')} /
+              <strong> {(requestStats.totalOutputTokens / 1000).toFixed(1)}K</strong> {t('gatewayLogs.tokensOutput')}
+              {requestStats.totalCacheReadTokens > 0 && (
+                <span className="text-blue-500 font-medium">
+                  {t('gatewayLogs.cacheSaved', { pct: ((requestStats.totalCacheReadTokens / (requestStats.totalInputTokens + requestStats.totalCacheReadTokens)) * 100).toFixed(0) })}
+                </span>
+              )}
+            </div>
+          )}
+
+          {cacheStats && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground border-l pl-3 ml-1">
+              <Database size={11} className="text-blue-500" />
+              <span>{t('gatewayLogs.cacheLabel')} <strong>{cacheStats.lru_cache_size + cacheStats.delta_cache_size}</strong> {t('gatewayLogs.cacheItems', { delta: cacheStats.delta_cache_size, lru: cacheStats.lru_cache_size })}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 开关与缓存清理 */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Switch size="sm" checked={logRequests} onCheckedChange={onLogRequestsChange} />
+            <span className="text-xs text-muted-foreground">{t('gatewayLogs.logRequests')}</span>
+          </div>
+
+          {cacheStats && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearCache}
+              className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20 px-1.5 gap-1 font-normal"
+            >
+              <Database size={10} />
+              {t('gatewayLogs.clearCache')}
+            </Button>
+          )}
+
+          {cacheStats && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCleanupExpired}
+              className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-1.5 gap-1 font-normal"
+              title={t('gatewayLogs.cleanupExpiredTitle')}
+            >
+              <Trash2 size={10} />
+              {t('gatewayLogs.cleanupExpired')}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* 工具栏 */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+          <div className="relative flex-1 max-w-xs">
+            <Input
+              placeholder={t('gatewayLogs.searchPlaceholder')}
+              className="h-8 text-xs pl-7"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          </div>
+
+          <select
+            className="text-xs border rounded bg-background px-2 h-8 text-muted-foreground outline-none hover:border-primary/50 cursor-pointer transition-colors"
+            value={activeFilter}
+            onChange={(e) => setActiveFilter(e.target.value as any)}
+          >
+            <option value="all">{t('gatewayLogs.filterAll')}</option>
+            <option value="success">{t('gatewayLogs.filterSuccess')}</option>
+            <option value="error">{t('gatewayLogs.filterError')}</option>
+          </select>
+
+          <select
+            className="text-xs border rounded bg-background px-2 h-8 text-muted-foreground outline-none hover:border-primary/50 cursor-pointer transition-colors"
+            value={displayLimit}
+            onChange={(e) => { setDisplayLimit(Number(e.target.value)) }}
+          >
+            <option value={50}>{t('gatewayLogs.keepLatest50')}</option>
+            <option value={100}>{t('gatewayLogs.keepLatest100')}</option>
+            <option value={200}>{t('gatewayLogs.keepLatest200')}</option>
+          </select>
+        </div>
+
+        {/* 操作控制 */}
+        <div className="flex gap-1.5 items-center">
+          <select
+            className="text-xs border rounded bg-background px-2 h-8 text-muted-foreground outline-none hover:border-primary/50 cursor-pointer transition-colors mr-1"
+            value={logLevel}
+            onChange={(e) => onLogLevelChange(e.target.value)}
+            title={t('gatewayLogs.logLevelTitle')}
+          >
+            <option value="debug">{t('gatewayLogs.levelDebug')}</option>
+            <option value="info">{t('gatewayLogs.levelInfo')}</option>
+            <option value="warn">{t('gatewayLogs.levelWarn')}</option>
+            <option value="error">{t('gatewayLogs.levelError')}</option>
+          </select>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 gap-1 text-xs"
+            onClick={() => openGatewayLogDir()}
+            title={t('gatewayLogs.openLogDirTitle')}
+          >
+            <FolderOpen size={12} />
+            {t('gatewayLogs.logDir')}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 gap-1 text-xs"
+            onClick={handleExport}
+            disabled={filteredLogs.length === 0}
+            title={t('gatewayLogs.exportTitle')}
+          >
+            <Download size={12} />
+            {t('gatewayLogs.export')}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-8 px-2 text-xs transition-all",
+              clearConfirm && "bg-destructive text-destructive-foreground hover:bg-destructive/90 hover:text-destructive-foreground border-destructive"
+            )}
+            onClick={handleClearLogs}
+            disabled={requestLogs.length === 0}
+          >
+            <Trash2 size={12} className="mr-1 inline-block" />
+            {clearConfirm ? t('gatewayLogs.confirmClear') : t('gatewayLogs.clear')}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => fetchRequestLogs()}
+            disabled={isRefreshing}
+          >
+            <RefreshCw size={12} className={cn(isRefreshing && 'animate-spin')} />
+          </Button>
+        </div>
+      </div>
+
+      {/* 维度统计与账号健康度：两个折叠区，默认收起以免抢日志表的视觉 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => setShowBreakdown(v => !v)}
+          className="flex items-center gap-1 rounded border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+        >
+          {showBreakdown ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+          {t('gatewayLogs.breakdownTitle')}
+          <span className="opacity-60">({modelStats.length}/{endpointStats.length}/{clientStats.length})</span>
+        </button>
+
+        <button
+          onClick={() => setShowHealth(v => !v)}
+          className="flex items-center gap-1 rounded border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+        >
+          {showHealth ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+          {t('gatewayLogs.healthTitle')}
+          {!healthUnavailable && <span className="opacity-60">({Object.keys(health).length})</span>}
+        </button>
+      </div>
+
+      {showBreakdown && (
+        <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { key: 'model', title: t('gatewayLogs.byModel'), rows: modelStats.map(s => ({ name: s.model, count: s.count, success: s.success, error: s.error })) },
+            { key: 'endpoint', title: t('gatewayLogs.byEndpoint'), rows: endpointStats.map(s => ({ name: s.endpoint, count: s.count, success: s.success, error: s.error })) }
+          ]).map(group => (
+            <div key={group.key} className="rounded-lg border min-h-0">
+              <div className="border-b bg-muted/20 px-2.5 py-1.5 text-[11px] font-medium">{group.title}</div>
+              <div className="max-h-40 overflow-auto">
+                {group.rows.length === 0 ? (
+                  <p className="px-2.5 py-3 text-[11px] text-muted-foreground">{t('gatewayLogs.noData')}</p>
+                ) : (
+                  <table className="w-full text-[11px]">
+                    <tbody>
+                      {group.rows.map(r => (
+                        <tr key={r.name} className="border-b border-border/40 last:border-0">
+                          <td className="max-w-0 truncate px-2.5 py-1 font-mono" title={r.name}>{r.name}</td>
+                          <td className="w-12 px-1 py-1 text-right">{r.count}</td>
+                          <td className="w-12 px-1 py-1 text-right text-green-600">{r.success}</td>
+                          <td className="w-12 px-2 py-1 text-right text-red-500">{r.error}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* 谁在用：密钥固定后 Key 不再是区分性维度，UA 产品名就是「谁」 */}
+        <div className="rounded-lg border min-h-0">
+          <div className="border-b bg-muted/20 px-2.5 py-1.5 text-[11px] font-medium">{t('gatewayLogs.byClient')}</div>
+          <div className="max-h-40 overflow-auto">
+            {clientStats.length === 0 ? (
+              <p className="px-2.5 py-3 text-[11px] text-muted-foreground">{t('gatewayLogs.noData')}</p>
+            ) : (
+              <table className="w-full text-[11px]">
+                <thead className="sticky top-0 bg-muted">
+                  <tr className="border-b text-muted-foreground">
+                    <th className="px-2.5 py-1 text-left font-medium">{t('gatewayLogs.colClientTool')}</th>
+                    <th className="w-12 px-1 py-1 text-right font-medium">{t('gatewayLogs.colCount')}</th>
+                    <th className="w-12 px-1 py-1 text-right font-medium">{t('gatewayLogs.colSuccess')}</th>
+                    <th className="w-12 px-2 py-1 text-right font-medium">{t('gatewayLogs.colFailure')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientStats.map(row => (
+                    <tr key={row.product ?? ''} className="border-b border-border/40 last:border-0">
+                      <td className="max-w-0 truncate px-2.5 py-1 font-mono" title={row.product || ''}>
+                        {row.product || <span className="text-muted-foreground">{t('gatewayLogs.unknownClient')}</span>}
+                      </td>
+                      <td className="px-1 py-1 text-right">{row.count}</td>
+                      <td className="px-1 py-1 text-right text-green-600">{row.success}</td>
+                      <td className="px-2 py-1 text-right text-red-500">{row.error}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+        </div>
+      )}
+
+      {showHealth && (
+        <div className="rounded-lg border">
+          <div className="flex items-center justify-between border-b bg-muted/20 px-2.5 py-1.5">
+            <span className="text-[11px] font-medium">{t('gatewayLogs.healthTitle')}</span>
+            {!healthUnavailable && Object.keys(health).length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCleanupStale}
+                className="h-6 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground"
+              >
+                <Trash2 size={10} />
+                {t('gatewayLogs.cleanupStale')}
+              </Button>
+            )}
+          </div>
+          {healthUnavailable ? (
+            <p className="px-2.5 py-3 text-[11px] text-muted-foreground">{t('gatewayLogs.healthUnavailable')}</p>
+          ) : Object.keys(health).length === 0 ? (
+            <p className="px-2.5 py-3 text-[11px] text-muted-foreground">{t('gatewayLogs.noData')}</p>
+          ) : (
+            <div className="max-h-52 overflow-auto">
+              <table className="w-full text-[11px]">
+                <thead className="sticky top-0 bg-muted">
+                  <tr className="border-b">
+                    <th className="px-2.5 py-1.5 text-left font-sans font-medium">{t('gatewayLogs.colAccount')}</th>
+                    <th className="w-14 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colHealthScore')}</th>
+                    <th className="w-12 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colSuccess')}</th>
+                    <th className="w-12 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colFailure')}</th>
+                    <th className="w-14 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colConns')}</th>
+                    <th className="w-16 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colAvgMs')}</th>
+                    <th className="w-16 px-1 py-1.5 text-center font-sans font-medium">{t('gatewayLogs.colRateLimit')}</th>
+                    <th className="w-14 px-2 py-1.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.values(health).map(h => (
+                    <tr key={h.accountId} className="border-b border-border/40 last:border-0">
+                      <td className="truncate px-2.5 py-1 font-mono" title={h.accountId}>{h.accountId}</td>
+                      <td className={cn('px-1 py-1 text-right font-semibold', h.healthScore >= 80 ? 'text-green-600' : h.healthScore >= 50 ? 'text-amber-500' : 'text-red-500')}>
+                        {h.healthScore}
+                      </td>
+                      <td className="px-1 py-1 text-right text-green-600">{h.recentSuccesses}</td>
+                      <td className="px-1 py-1 text-right text-red-500">{h.recentFailures}</td>
+                      <td className="px-1 py-1 text-right">{h.activeConnections}</td>
+                      <td className="px-1 py-1 text-right">{h.avgResponseTimeMs}</td>
+                      <td className="px-1 py-1 text-center">
+                        {rateLimited.has(h.accountId) && (
+                          <button
+                            onClick={() => handleClearRateLimit(h.accountId)}
+                            title={t('gatewayLogs.rateLimitedHint')}
+                            className="rounded px-1.5 py-0.5 text-[10px] font-normal text-amber-600 bg-amber-500/10 hover:bg-amber-500/20 dark:text-amber-400 cursor-pointer"
+                          >
+                            {t('gatewayLogs.rateLimited')}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResetHealth(h.accountId)}
+                          className="h-5 px-1.5 text-[10px] font-normal text-muted-foreground"
+                        >
+                          {t('gatewayLogs.resetHealth')}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 日志表格区域 */}
+      <div className="border rounded-lg flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-xs font-mono border-collapse">
+            <thead className="sticky top-0 bg-muted z-10">
+              <tr className="border-b shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">
+                <th className="px-2 py-2 text-left w-[10px] font-sans"></th>
+                <th className="px-2 py-2 text-left w-[100px] font-sans">{t('gatewayLogs.colTime')}</th>
+                <th className="px-2 py-2 text-left w-[100px] font-sans">{t('gatewayLogs.colPath')}</th>
+                <th className="px-2 py-2 text-left w-[140px] font-sans">{t('gatewayLogs.colAccount')}</th>
+                <th className="px-2 py-2 text-left w-[150px] font-sans">{t('gatewayLogs.colModel')}</th>
+                <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colStatusTitle')}>{t('gatewayLogs.colStatus')}</th>
+                <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colInput')}</th>
+                <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colOutput')}</th>
+                <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colCacheReadTitle')}>{t('gatewayLogs.colCacheRead')}</th>
+                <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colCacheWriteTitle')}>{t('gatewayLogs.colCacheWrite')}</th>
+                <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colDuration')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="text-center py-16 text-muted-foreground font-sans text-sm">
+                    {requestLogs.length === 0 ? t('gatewayLogs.waitingTraffic') : t('gatewayLogs.noMatch')}
+                  </td>
+                </tr>
+              ) : (
+                filteredLogs.map((log) => {
+                  const isExpanded = expandedLogId === log.id;
+                  return (
+                    <React.Fragment key={log.id}>
+                      <tr
+                        className={cn(
+                          "border-b border-border/50 hover:bg-muted/40 cursor-pointer transition-colors",
+                          isExpanded && "bg-muted/20"
+                        )}
+                        onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                      >
+                        <td className="px-2 py-2 text-center text-muted-foreground">
+                          {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        </td>
+                        <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">{log.timestamp}</td>
+                        <td className="px-2 py-2 text-muted-foreground font-semibold truncate max-w-[140px]" title={log.path}>
+                          {log.outcome?.includes('cache') && <span className="text-blue-500 mr-1" title={t('gatewayLogs.cacheHitTitle')}>⚡</span>}
+                          {log.path}
+                        </td>
+                        <td className="px-2 py-2 truncate max-w-[140px] text-muted-foreground" title={log.upstream || '-'}>
+                          {formatRequestLogAccount(log.upstream)}
+                        </td>
+                        <td className="px-2 py-2 truncate max-w-[120px]" title={log.model}>{log.model || '-'}</td>
+                        <td className="px-2 py-2 text-center">
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded text-[10px] font-semibold",
+                            log.status >= 400
+                              ? 'bg-destructive/10 text-destructive'
+                              : log.status >= 300
+                                ? 'bg-yellow-500/10 text-yellow-600'
+                                : 'bg-green-500/10 text-green-600'
+                          )}>
+                            {log.status}
+                          </span>
+                          {log.stream && <span className="ml-1 text-blue-400 font-semibold" title={t('gatewayLogs.streamingTitle')}>⇣</span>}
+                        </td>
+                        <td className="px-2 py-2 text-right text-muted-foreground">{log.inputTokens?.toLocaleString() || '-'}</td>
+                        <td className="px-2 py-2 text-right text-muted-foreground">{log.outputTokens?.toLocaleString() || '-'}</td>
+                        <td className="px-2 py-2 text-right text-blue-500 font-medium" title={t('gatewayLogs.colCacheReadTitle')}>{log.cacheReadTokens?.toLocaleString() || '-'}</td>
+                        <td className="px-2 py-2 text-right text-purple-500 font-medium" title={t('gatewayLogs.colCacheWriteTitle')}>{log.cacheCreationTokens?.toLocaleString() || '-'}</td>
+                        <td className="px-2 py-2 text-right">
+                          <span className={log.duration > 5000 ? 'text-orange-500 font-bold' : log.duration > 2000 ? 'text-yellow-600 font-medium' : 'text-muted-foreground'}>
+                            {log.duration}ms
+                          </span>
+                        </td>
+                      </tr>
+
+                      {/* 展开详细信息（包括 Payload 格式化） */}
+                      {isExpanded && (
+                        <tr className="bg-muted/15 border-b">
+                          <td colSpan={11} className="px-4 py-3">
+                            <div className="space-y-3 font-sans">
+                              {log.error && (
+                                <div className="flex items-start gap-2 border border-destructive/20 bg-destructive/5 p-3 rounded-lg">
+                                  <XCircle size={14} className="text-destructive mt-0.5 shrink-0" />
+                                  <pre className="text-xs font-mono text-destructive dark:text-red-400 whitespace-pre-wrap break-all">{log.error}</pre>
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* 请求体 */}
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
+                                    <span>{t('gatewayLogs.requestPayload')}</span>
+                                    {log.requestBody && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 px-1.5 gap-1 text-[10px] hover:bg-muted"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleCopyPayload(log.requestBody!, 'req-' + log.id)
+                                        }}
+                                      >
+                                        {copiedPayloadId === 'req-' + log.id ? <Check size={10} className="text-green-600" /> : <Copy size={10} />}
+                                        {t('gatewayLogs.copy')}
+                                      </Button>
+                                    )}
+                                  </div>
+                                  <pre className="text-[10px] font-mono bg-background p-3 rounded-lg border max-h-48 overflow-y-auto whitespace-pre-wrap break-all text-muted-foreground">
+                                    {formatPayload(log.requestBody)}
+                                  </pre>
+                                </div>
+
+                                {/* 响应体 */}
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
+                                    <span>{t('gatewayLogs.responsePayload')}</span>
+                                    {log.responseBody && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 px-1.5 gap-1 text-[10px] hover:bg-muted"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleCopyPayload(log.responseBody!, 'resp-' + log.id)
+                                        }}
+                                      >
+                                        {copiedPayloadId === 'resp-' + log.id ? <Check size={10} className="text-green-600" /> : <Copy size={10} />}
+                                        {t('gatewayLogs.copy')}
+                                      </Button>
+                                    )}
+                                  </div>
+                                  <pre className="text-[10px] font-mono bg-background p-3 rounded-lg border max-h-48 overflow-y-auto whitespace-pre-wrap break-all text-muted-foreground">
+                                    {formatPayload(log.responseBody)}
+                                  </pre>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+
+  // 内嵌模式：直接返回面板内容，不套 Dialog 外壳（供网关页的「请求日志」tab 复用）
+  if (embedded) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-5">
+        {renderLogsPanel()}
+      </div>
+    )
+  }
 
   return (
     <DialogRoot open={open} onOpenChange={(v) => { onOpenChange(v); if (!v && onSave) onSave() }}>
@@ -371,445 +888,7 @@ export function RequestLogsDialog({
         </DialogHeader>
 
         <DialogBody className="space-y-3 flex flex-col min-h-0">
-          {/* 顶部：统计与缓存 */}
-          <div className="flex items-center justify-between gap-2 bg-muted/20 p-2.5 rounded-lg flex-wrap">
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground">{t('gatewayLogs.total')}</span>
-                <span className="font-semibold">{requestStats?.total || 0}</span>
-                <span className="text-green-600 border-l pl-2 ml-1">{t('gatewayLogs.success')}</span>
-                <span className="font-semibold text-green-600">{requestStats?.success || 0}</span>
-                <span className="text-red-500 border-l pl-2 ml-1">{t('gatewayLogs.error')}</span>
-                <span className="font-semibold text-red-500">{requestStats?.error || 0}</span>
-              </div>
-
-              {requestStats && requestStats.totalInputTokens > 0 && (
-                <div className="text-xs text-muted-foreground border-l pl-3 ml-1">
-                  <span>Tokens: </span>
-                  <strong>{(requestStats.totalInputTokens / 1000).toFixed(1)}K</strong> {t('gatewayLogs.tokensInput')} /
-                  <strong> {(requestStats.totalOutputTokens / 1000).toFixed(1)}K</strong> {t('gatewayLogs.tokensOutput')}
-                  {requestStats.totalCacheReadTokens > 0 && (
-                    <span className="text-blue-500 font-medium">
-                      {t('gatewayLogs.cacheSaved', { pct: ((requestStats.totalCacheReadTokens / (requestStats.totalInputTokens + requestStats.totalCacheReadTokens)) * 100).toFixed(0) })}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {cacheStats && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground border-l pl-3 ml-1">
-                  <Database size={11} className="text-blue-500" />
-                  <span>{t('gatewayLogs.cacheLabel')} <strong>{cacheStats.lru_cache_size + cacheStats.delta_cache_size}</strong> {t('gatewayLogs.cacheItems', { delta: cacheStats.delta_cache_size, lru: cacheStats.lru_cache_size })}</span>
-                </div>
-              )}
-            </div>
-
-            {/* 开关与缓存清理 */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <Switch size="sm" checked={logRequests} onCheckedChange={onLogRequestsChange} />
-                <span className="text-xs text-muted-foreground">{t('gatewayLogs.logRequests')}</span>
-              </div>
-
-              {cacheStats && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearCache}
-                  className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20 px-1.5 gap-1 font-normal"
-                >
-                  <Database size={10} />
-                  {t('gatewayLogs.clearCache')}
-                </Button>
-                )}
-
-                {cacheStats && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCleanupExpired}
-                    className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-1.5 gap-1 font-normal"
-                    title={t('gatewayLogs.cleanupExpiredTitle')}
-                  >
-                    <Trash2 size={10} />
-                    {t('gatewayLogs.cleanupExpired')}
-                  </Button>
-                )}
-            </div>
-          </div>
-
-          {/* 工具栏 */}
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-              <div className="relative flex-1 max-w-xs">
-                <Input
-                  placeholder={t('gatewayLogs.searchPlaceholder')}
-                  className="h-8 text-xs pl-7"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                />
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              </div>
-
-              <select
-                className="text-xs border rounded bg-background px-2 h-8 text-muted-foreground outline-none hover:border-primary/50 cursor-pointer transition-colors"
-                value={activeFilter}
-                onChange={(e) => setActiveFilter(e.target.value as any)}
-              >
-                <option value="all">{t('gatewayLogs.filterAll')}</option>
-                <option value="success">{t('gatewayLogs.filterSuccess')}</option>
-                <option value="error">{t('gatewayLogs.filterError')}</option>
-              </select>
-
-              <select
-                className="text-xs border rounded bg-background px-2 h-8 text-muted-foreground outline-none hover:border-primary/50 cursor-pointer transition-colors"
-                value={displayLimit}
-                onChange={(e) => { setDisplayLimit(Number(e.target.value)) }}
-              >
-                <option value={50}>{t('gatewayLogs.keepLatest50')}</option>
-                <option value={100}>{t('gatewayLogs.keepLatest100')}</option>
-                <option value={200}>{t('gatewayLogs.keepLatest200')}</option>
-              </select>
-            </div>
-
-            {/* 操作控制 */}
-            <div className="flex gap-1.5 items-center">
-              <select
-                className="text-xs border rounded bg-background px-2 h-8 text-muted-foreground outline-none hover:border-primary/50 cursor-pointer transition-colors mr-1"
-                value={logLevel}
-                onChange={(e) => onLogLevelChange(e.target.value)}
-                title={t('gatewayLogs.logLevelTitle')}
-              >
-                <option value="debug">{t('gatewayLogs.levelDebug')}</option>
-                <option value="info">{t('gatewayLogs.levelInfo')}</option>
-                <option value="warn">{t('gatewayLogs.levelWarn')}</option>
-                <option value="error">{t('gatewayLogs.levelError')}</option>
-              </select>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 gap-1 text-xs"
-                onClick={() => openGatewayLogDir()}
-                title={t('gatewayLogs.openLogDirTitle')}
-              >
-                <FolderOpen size={12} />
-                {t('gatewayLogs.logDir')}
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 gap-1 text-xs"
-                onClick={handleExport}
-                disabled={filteredLogs.length === 0}
-                title={t('gatewayLogs.exportTitle')}
-              >
-                <Download size={12} />
-                {t('gatewayLogs.export')}
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn(
-                  "h-8 px-2 text-xs transition-all",
-                  clearConfirm && "bg-destructive text-destructive-foreground hover:bg-destructive/90 hover:text-destructive-foreground border-destructive"
-                )}
-                onClick={handleClearLogs}
-                disabled={requestLogs.length === 0}
-              >
-                <Trash2 size={12} className="mr-1 inline-block" />
-                {clearConfirm ? t('gatewayLogs.confirmClear') : t('gatewayLogs.clear')}
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => fetchRequestLogs()}
-                disabled={isRefreshing}
-              >
-                <RefreshCw size={12} className={cn(isRefreshing && 'animate-spin')} />
-              </Button>
-            </div>
-          </div>
-
-          {/* 维度统计与账号健康度：两个折叠区，默认收起以免抢日志表的视觉 */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setShowBreakdown(v => !v)}
-              className="flex items-center gap-1 rounded border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-            >
-              {showBreakdown ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-              {t('gatewayLogs.breakdownTitle')}
-              <span className="opacity-60">({modelStats.length}/{endpointStats.length})</span>
-            </button>
-
-            <button
-              onClick={() => setShowHealth(v => !v)}
-              className="flex items-center gap-1 rounded border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-            >
-              {showHealth ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-              {t('gatewayLogs.healthTitle')}
-              {!healthUnavailable && <span className="opacity-60">({Object.keys(health).length})</span>}
-            </button>
-          </div>
-
-          {showBreakdown && (
-            <div className="grid grid-cols-2 gap-2">
-              {([
-                { key: 'model', title: t('gatewayLogs.byModel'), rows: modelStats.map(s => ({ name: s.model, count: s.count, success: s.success, error: s.error })) },
-                { key: 'endpoint', title: t('gatewayLogs.byEndpoint'), rows: endpointStats.map(s => ({ name: s.endpoint, count: s.count, success: s.success, error: s.error })) }
-              ]).map(group => (
-                <div key={group.key} className="rounded-lg border min-h-0">
-                  <div className="border-b bg-muted/20 px-2.5 py-1.5 text-[11px] font-medium">{group.title}</div>
-                  <div className="max-h-40 overflow-auto">
-                    {group.rows.length === 0 ? (
-                      <p className="px-2.5 py-3 text-[11px] text-muted-foreground">{t('gatewayLogs.noData')}</p>
-                    ) : (
-                      <table className="w-full text-[11px]">
-                        <tbody>
-                          {group.rows.map(r => (
-                            <tr key={r.name} className="border-b border-border/40 last:border-0">
-                              <td className="max-w-0 truncate px-2.5 py-1 font-mono" title={r.name}>{r.name}</td>
-                              <td className="w-12 px-1 py-1 text-right">{r.count}</td>
-                              <td className="w-12 px-1 py-1 text-right text-green-600">{r.success}</td>
-                              <td className="w-12 px-2 py-1 text-right text-red-500">{r.error}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {showHealth && (
-            <div className="rounded-lg border">
-              <div className="flex items-center justify-between border-b bg-muted/20 px-2.5 py-1.5">
-                <span className="text-[11px] font-medium">{t('gatewayLogs.healthTitle')}</span>
-                {!healthUnavailable && Object.keys(health).length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCleanupStale}
-                    className="h-6 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground"
-                  >
-                    <Trash2 size={10} />
-                    {t('gatewayLogs.cleanupStale')}
-                  </Button>
-                )}
-              </div>
-              {healthUnavailable ? (
-                <p className="px-2.5 py-3 text-[11px] text-muted-foreground">{t('gatewayLogs.healthUnavailable')}</p>
-              ) : Object.keys(health).length === 0 ? (
-                <p className="px-2.5 py-3 text-[11px] text-muted-foreground">{t('gatewayLogs.noData')}</p>
-              ) : (
-                <div className="max-h-52 overflow-auto">
-                  <table className="w-full text-[11px]">
-                    <thead className="sticky top-0 bg-muted/95 backdrop-blur">
-                      <tr className="border-b">
-                        <th className="px-2.5 py-1.5 text-left font-sans font-medium">{t('gatewayLogs.colAccount')}</th>
-                        <th className="w-14 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colHealthScore')}</th>
-                        <th className="w-12 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colSuccess')}</th>
-                        <th className="w-12 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colFailure')}</th>
-                        <th className="w-14 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colConns')}</th>
-                        <th className="w-16 px-1 py-1.5 text-right font-sans font-medium">{t('gatewayLogs.colAvgMs')}</th>
-                        <th className="w-16 px-1 py-1.5 text-center font-sans font-medium">{t('gatewayLogs.colRateLimit')}</th>
-                        <th className="w-14 px-2 py-1.5" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.values(health).map(h => (
-                        <tr key={h.accountId} className="border-b border-border/40 last:border-0">
-                          <td className="truncate px-2.5 py-1 font-mono" title={h.accountId}>{h.accountId}</td>
-                          <td className={cn('px-1 py-1 text-right font-semibold', h.healthScore >= 80 ? 'text-green-600' : h.healthScore >= 50 ? 'text-amber-500' : 'text-red-500')}>
-                            {h.healthScore}
-                          </td>
-                          <td className="px-1 py-1 text-right text-green-600">{h.recentSuccesses}</td>
-                          <td className="px-1 py-1 text-right text-red-500">{h.recentFailures}</td>
-                          <td className="px-1 py-1 text-right">{h.activeConnections}</td>
-                          <td className="px-1 py-1 text-right">{h.avgResponseTimeMs}</td>
-                          <td className="px-1 py-1 text-center">
-                            {rateLimited.has(h.accountId) && (
-                              <button
-                                onClick={() => handleClearRateLimit(h.accountId)}
-                                title={t('gatewayLogs.rateLimitedHint')}
-                                className="rounded px-1.5 py-0.5 text-[10px] font-normal text-amber-600 bg-amber-500/10 hover:bg-amber-500/20 dark:text-amber-400 cursor-pointer"
-                              >
-                                {t('gatewayLogs.rateLimited')}
-                              </button>
-                            )}
-                          </td>
-                          <td className="px-2 py-1 text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleResetHealth(h.accountId)}
-                              className="h-5 px-1.5 text-[10px] font-normal text-muted-foreground"
-                            >
-                              {t('gatewayLogs.resetHealth')}
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 日志表格区域 */}
-          <div className="border rounded-lg flex-1 min-h-0 flex flex-col">
-            <div className="flex-1 overflow-auto">
-              <table className="w-full text-xs font-mono border-collapse">
-                <thead className="sticky top-0 bg-muted/95 backdrop-blur z-10">
-                  <tr className="border-b shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">
-                    <th className="px-2 py-2 text-left w-[10px] font-sans"></th>
-                    <th className="px-2 py-2 text-left w-[100px] font-sans">{t('gatewayLogs.colTime')}</th>
-                    <th className="px-2 py-2 text-left w-[100px] font-sans">{t('gatewayLogs.colPath')}</th>
-                    <th className="px-2 py-2 text-left w-[140px] font-sans">{t('gatewayLogs.colAccount')}</th>
-                    <th className="px-2 py-2 text-left w-[150px] font-sans">{t('gatewayLogs.colModel')}</th>
-                    <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colStatusTitle')}>{t('gatewayLogs.colStatus')}</th>
-                    <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colInput')}</th>
-                    <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colOutput')}</th>
-                    <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colCacheReadTitle')}>{t('gatewayLogs.colCacheRead')}</th>
-                    <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colCacheWriteTitle')}>{t('gatewayLogs.colCacheWrite')}</th>
-                    <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colDuration')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={11} className="text-center py-16 text-muted-foreground font-sans text-sm">
-                        {requestLogs.length === 0 ? t('gatewayLogs.waitingTraffic') : t('gatewayLogs.noMatch')}
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredLogs.map((log) => {
-                      const isExpanded = expandedLogId === log.id;
-                      return (
-                        <React.Fragment key={log.id}>
-                          <tr
-                            className={cn(
-                              "border-b border-border/50 hover:bg-muted/40 cursor-pointer transition-colors",
-                              isExpanded && "bg-muted/20"
-                            )}
-                            onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                          >
-                            <td className="px-2 py-2 text-center text-muted-foreground">
-                              {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                            </td>
-                            <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">{log.timestamp}</td>
-                            <td className="px-2 py-2 text-muted-foreground font-semibold truncate max-w-[140px]" title={log.path}>
-                              {log.outcome?.includes('cache') && <span className="text-blue-500 mr-1" title={t('gatewayLogs.cacheHitTitle')}>⚡</span>}
-                              {log.path}
-                            </td>
-                            <td className="px-2 py-2 truncate max-w-[140px] text-muted-foreground" title={log.upstream || '-'}>
-                              {formatRequestLogAccount(log.upstream)}
-                            </td>
-                            <td className="px-2 py-2 truncate max-w-[120px]" title={log.model}>{log.model || '-'}</td>
-                            <td className="px-2 py-2 text-center">
-                              <span className={cn(
-                                "px-1.5 py-0.5 rounded text-[10px] font-semibold",
-                                log.status >= 400
-                                  ? 'bg-destructive/10 text-destructive'
-                                  : log.status >= 300
-                                    ? 'bg-yellow-500/10 text-yellow-600'
-                                    : 'bg-green-500/10 text-green-600'
-                              )}>
-                                {log.status}
-                              </span>
-                              {log.stream && <span className="ml-1 text-blue-400 font-semibold" title={t('gatewayLogs.streamingTitle')}>⇣</span>}
-                            </td>
-                            <td className="px-2 py-2 text-right text-muted-foreground">{log.inputTokens?.toLocaleString() || '-'}</td>
-                            <td className="px-2 py-2 text-right text-muted-foreground">{log.outputTokens?.toLocaleString() || '-'}</td>
-                            <td className="px-2 py-2 text-right text-blue-500 font-medium" title={t('gatewayLogs.colCacheReadTitle')}>{log.cacheReadTokens?.toLocaleString() || '-'}</td>
-                            <td className="px-2 py-2 text-right text-purple-500 font-medium" title={t('gatewayLogs.colCacheWriteTitle')}>{log.cacheCreationTokens?.toLocaleString() || '-'}</td>
-                            <td className="px-2 py-2 text-right">
-                              <span className={log.duration > 5000 ? 'text-orange-500 font-bold' : log.duration > 2000 ? 'text-yellow-600 font-medium' : 'text-muted-foreground'}>
-                                {log.duration}ms
-                              </span>
-                            </td>
-                          </tr>
-
-                          {/* 展开详细信息（包括 Payload 格式化） */}
-                          {isExpanded && (
-                            <tr className="bg-muted/15 border-b">
-                              <td colSpan={11} className="px-4 py-3">
-                                <div className="space-y-3 font-sans">
-                                  {log.error && (
-                                    <div className="flex items-start gap-2 border border-destructive/20 bg-destructive/5 p-3 rounded-lg">
-                                      <XCircle size={14} className="text-destructive mt-0.5 shrink-0" />
-                                      <pre className="text-xs font-mono text-destructive dark:text-red-400 whitespace-pre-wrap break-all">{log.error}</pre>
-                                    </div>
-                                  )}
-
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {/* 请求体 */}
-                                    <div className="space-y-1">
-                                      <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
-                                        <span>{t('gatewayLogs.requestPayload')}</span>
-                                        {log.requestBody && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-5 px-1.5 gap-1 text-[10px] hover:bg-muted"
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              handleCopyPayload(log.requestBody!, 'req-' + log.id)
-                                            }}
-                                          >
-                                            {copiedPayloadId === 'req-' + log.id ? <Check size={10} className="text-green-600" /> : <Copy size={10} />}
-                                            {t('gatewayLogs.copy')}
-                                          </Button>
-                                        )}
-                                      </div>
-                                      <pre className="text-[10px] font-mono bg-background p-3 rounded-lg border max-h-48 overflow-y-auto whitespace-pre-wrap break-all text-muted-foreground">
-                                        {formatPayload(log.requestBody)}
-                                      </pre>
-                                    </div>
-
-                                    {/* 响应体 */}
-                                    <div className="space-y-1">
-                                      <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
-                                        <span>{t('gatewayLogs.responsePayload')}</span>
-                                        {log.responseBody && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-5 px-1.5 gap-1 text-[10px] hover:bg-muted"
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              handleCopyPayload(log.responseBody!, 'resp-' + log.id)
-                                            }}
-                                          >
-                                            {copiedPayloadId === 'resp-' + log.id ? <Check size={10} className="text-green-600" /> : <Copy size={10} />}
-                                            {t('gatewayLogs.copy')}
-                                          </Button>
-                                        )}
-                                      </div>
-                                      <pre className="text-[10px] font-mono bg-background p-3 rounded-lg border max-h-48 overflow-y-auto whitespace-pre-wrap break-all text-muted-foreground">
-                                        {formatPayload(log.responseBody)}
-                                      </pre>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          {renderLogsPanel()}
         </DialogBody>
       </DialogContent>
     </DialogRoot>

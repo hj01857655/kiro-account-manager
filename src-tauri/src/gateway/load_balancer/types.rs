@@ -41,9 +41,14 @@ pub struct AccountHealth {
     pub account_id: String,
     /// 活跃连接数
     pub active_connections: usize,
-    /// 最近失败次数（滑动窗口）
+    /// **连续**失败次数：一次成功即清零。用于判断账号是否该被标记不健康。
+    ///
+    /// 与 `window_failures` 分开：前者回答「现在是不是连着坏」，
+    /// 后者回答「最近一段时间坏的比例」。混用一个字段会让两者都算错。
+    pub consecutive_failures: usize,
+    /// 滑动窗口内的失败次数（用于成功率统计）
     pub recent_failures: usize,
-    /// 最近成功次数（滑动窗口）
+    /// 滑动窗口内的成功次数
     pub recent_successes: usize,
     /// 最后一次健康检查时间
     pub last_check: Instant,
@@ -60,6 +65,7 @@ pub struct SerializableAccountHealth {
     pub active_connections: usize,
     pub recent_failures: usize,
     pub recent_successes: usize,
+    pub consecutive_failures: usize,
     pub is_healthy: bool,
     pub avg_response_time_ms: u64,
     pub health_score: u32,
@@ -72,6 +78,7 @@ impl From<&AccountHealth> for SerializableAccountHealth {
             active_connections: health.active_connections,
             recent_failures: health.recent_failures,
             recent_successes: health.recent_successes,
+            consecutive_failures: health.consecutive_failures,
             is_healthy: health.is_healthy,
             avg_response_time_ms: health.avg_response_time_ms,
             health_score: health.health_score(),
@@ -84,6 +91,7 @@ impl AccountHealth {
         Self {
             account_id,
             active_connections: 0,
+            consecutive_failures: 0,
             recent_failures: 0,
             recent_successes: 0,
             last_check: Instant::now(),
@@ -120,6 +128,8 @@ impl AccountHealth {
     /// 记录成功
     pub fn record_success(&mut self, response_time_ms: u64) {
         self.recent_successes += 1;
+        // 成功即中断连续失败，否则「连续」语义不成立
+        self.consecutive_failures = 0;
         self.is_healthy = true;
         self.last_check = Instant::now();
 
@@ -130,28 +140,48 @@ impl AccountHealth {
             self.avg_response_time_ms = (self.avg_response_time_ms * 9 + response_time_ms) / 10;
         }
 
-        // 滑动窗口：保持最近 100 次请求的统计
-        if self.recent_successes + self.recent_failures > 100 {
-            self.recent_successes = (self.recent_successes * 9) / 10;
-            self.recent_failures = (self.recent_failures * 9) / 10;
+        self.truncate_window();
+    }
+
+    /// 连续失败达到该阈值即标记不健康。
+    pub const CONSECUTIVE_FAILURE_THRESHOLD: usize = 3;
+
+    /// 成功率统计窗口大小（次）。
+    pub const WINDOW_SIZE: usize = 100;
+
+    /// 窗口真截断：保留最近 [`Self::WINDOW_SIZE`] 次，丢弃更早的。
+    ///
+    /// 原实现是 `count * 9 / 10` 的指数衰减，永不归零也永不到达稳态：
+    /// 一个 1024 次前的失败会一直以极小权重影响成功率，
+    /// 「最近 100 次」名不副实。
+    fn truncate_window(&mut self) {
+        let total = self.recent_successes + self.recent_failures;
+        if total <= Self::WINDOW_SIZE {
+            return;
         }
+        // 成比例缩减，保持成功率不变，只压总量
+        let keep_successes = self.recent_successes * Self::WINDOW_SIZE / total;
+        let keep_failures = Self::WINDOW_SIZE - keep_successes;
+        self.recent_successes = keep_successes;
+        self.recent_failures = keep_failures;
     }
 
     /// 记录失败
+    ///
+    /// 语义是**连续失败**：一次成功即把连续计数清零。
+    /// 原实现用 `recent_failures >= 3 && recent_successes == 0` 判断，
+    /// 那是「累计 3 次失败且从未成功」——一个曾经成功过 100 次、
+    /// 期间失败 3 次的账号会被误判为一直不健康，与注释不符。
     pub fn record_failure(&mut self) {
+        self.consecutive_failures += 1;
         self.recent_failures += 1;
         self.last_check = Instant::now();
 
-        // 连续失败 3 次标记为不健康
-        if self.recent_failures >= 3 && self.recent_successes == 0 {
+        if self.consecutive_failures >= Self::CONSECUTIVE_FAILURE_THRESHOLD {
             self.is_healthy = false;
         }
 
-        // 滑动窗口
-        if self.recent_successes + self.recent_failures > 100 {
-            self.recent_successes = (self.recent_successes * 9) / 10;
-            self.recent_failures = (self.recent_failures * 9) / 10;
-        }
+        self.truncate_window();
     }
 
     /// 增加活跃连接

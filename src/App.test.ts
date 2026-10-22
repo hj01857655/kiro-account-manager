@@ -9,5 +9,7 @@ test('App startup does not gate the whole shell behind auth loading', async () =
   assert.doesNotMatch(source, /const \[loading, setLoading\] = useState\(true\)/)
 
   assert.doesNotMatch(source, /setLoading\(false\)/)
-  assert.match(source, /requestAnimationFrame\(\(\) => \{\s*requestAnimationFrame\(\(\) => \{\s*dismissBootSplash\(\)\s*invoke\('show_main_window'\)/)
+  // invoke 已收拢进 src/api/ 封装层：App.tsx 只调 showMainWindow()，不直接写 invoke
+  assert.match(source, /import \{ showMainWindow \} from '\.\/api\/systemApi'/)
+  assert.match(source, /requestAnimationFrame\(\(\) => \{\s*requestAnimationFrame\(\(\) => \{\s*splashDismissedRef\.current = true\s*dismissBootSplash\(\)\s*showMainWindow\(\)/)
 })

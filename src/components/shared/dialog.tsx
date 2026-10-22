@@ -38,7 +38,7 @@ const DialogOverlay = React.forwardRef<HTMLDivElement, DialogOverlayProps>(({ cl
       transition
       className={cn(
         "fixed inset-0",
-        "bg-black/60 backdrop-blur-sm",
+        "bg-black/60",
         "duration-300 ease-out",
         "data-[closed]:opacity-0",
         className

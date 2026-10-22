@@ -176,6 +176,98 @@ pub fn sanitize_error(message: &str) -> String {
     sanitized
 }
 
+/// 网关自身的结构化错误。
+///
+/// 取代原先 `"__400__中文描述"` 这种把状态码编码进 message 前缀的做法：
+/// 调用方不得不 `starts_with("__402__")` 解析字符串，新增一种错误就要多一个分支，/// 且前缀一旦写错就静默退化成 401。现在状态码与错误类型是类型的一部分。
+pub enum GatewayError {
+    /// 请求指定的账号不在当前路由可用集合内
+    PreferredAccountUnavailable { account_id: String },
+    /// 当前配置下没有任何可用账号（全部禁用/封禁/超配额）
+    NoAvailableAccount,
+    /// 有账号列表，但负载均衡器没能选出任何一个（如全被健康检查滤掉）
+    BalancerNoSelection,
+}
+
+impl GatewayError {
+    /// HTTP 状态码。
+    ///
+    /// 「挑不出账号」是**服务端暂时不可用**，不是客户端欠费：
+    /// 用 402/`insufficient_quota` 会让客户端以为该去充值，
+    /// 而它实际该做的是退避重试。上游真实 402 仍走 `map_upstream_error`
+    /// 原样透传，与此处无关。
+    pub fn status(&self) -> StatusCode {
+        match self {
+            Self::PreferredAccountUnavailable { .. } => StatusCode::BAD_REQUEST,
+            Self::NoAvailableAccount => StatusCode::SERVICE_UNAVAILABLE,
+            Self::BalancerNoSelection => StatusCode::SERVICE_UNAVAILABLE,
+        }
+    }
+
+    /// 错误类型标识（写入响应体与日志，客户端可按它分支）。
+    pub fn error_type(&self) -> &'static str {
+        match self {
+            Self::PreferredAccountUnavailable { .. } => "invalid_request_error",
+            Self::NoAvailableAccount => "unavailable",
+            Self::BalancerNoSelection => "unavailable",
+        }
+    }
+
+    /// 用户可见描述。中文，后续迁 i18n。
+    pub fn message(&self) -> String {
+        match self {
+            Self::PreferredAccountUnavailable { account_id } => format!(
+                "指定账号 {account_id} 不在当前路由可用账号中，请检查账号模式/分组/账号池配置"
+            ),
+            Self::NoAvailableAccount => "未找到符合 kiro2api 配置的可用账号".to_string(),
+            Self::BalancerNoSelection => "负载均衡器未能选择可用账号".to_string(),
+        }
+    }
+}
+
+/// 把错误 message 还原为结构化错误。
+///
+/// 迁移期专用：`auth.rs` 目前仍返回 `String`（其调用方有按字符串判断限流的逻辑），
+/// 这里负责把 `__NNN__` 前缀还原成类型，让消费端不再自己解析。
+/// 待调用方全部改用类型传错后，此函数与 `Display` 里的前缀都可删除。
+pub fn classify_gateway_error(message: &str) -> Option<GatewayError> {
+    if let Some(rest) = message.strip_prefix("__400__") {
+        // 形如 `__400__指定账号 <id> 不在当前路由可用账号中，...`
+        let account_id = rest
+            .strip_prefix("指定账号 ")
+            .and_then(|s| s.split(" 不在").next())
+            .unwrap_or("")
+            .to_string();
+        return Some(GatewayError::PreferredAccountUnavailable { account_id });
+    }
+    if message.starts_with("__503__") {
+        let rest = &message["__503__".len()..];
+        if rest.starts_with("未找到符合") {
+            return Some(GatewayError::NoAvailableAccount);
+        }
+        return Some(GatewayError::BalancerNoSelection);
+    }
+    None
+}
+
+impl std::fmt::Display for GatewayError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // 保留 `__NNN__` 前缀：调用方现有按字符串分支的逻辑
+        // （如 `message.contains("429")` 判限流）仍能工作，迁移期间不改变行为。
+        // 全部调用方改用类型传错后，此前缀可删。
+        //
+        // 402 不在此列：那是上游真实配额不足的透传码（见 `map_upstream_error`），
+        // 网关自身「挑不出账号」用 503，两者不能混。
+        let code = match self.status() {
+            StatusCode::BAD_REQUEST => "__400__",
+            StatusCode::SERVICE_UNAVAILABLE => "__503__",
+            StatusCode::TOO_MANY_REQUESTS => "__429__",
+            _ => "",
+        };
+        write!(f, "{code}{}", self.message())
+    }
+}
+
 pub fn short_uuid() -> String {
     uuid::Uuid::new_v4().to_string().replace('-', "")
 }

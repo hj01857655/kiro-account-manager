@@ -49,6 +49,11 @@ pub struct RequestLogContext<'a> {
     pub(super) request_body_hint: Option<String>,
     /// 从原始请求体提取的 model（用于错误日志）
     pub(super) model_hint: Option<String>,
+    /// 请求 id：JSONL、`*-request.log` dump、SSE dump 共用同一个值，
+    /// 否则三套日志各写各的标识，排障时无法把一次请求对起来。
+    pub(super) request_id: String,
+    /// 客户端发来的 User-Agent（区别于发给 Kiro 的上游 UA）
+    pub(super) client_user_agent: Option<String>,
     /// 是否流式请求（避免 request 为 None 时丢失信息）
     pub(super) is_stream: Option<bool>,
 }
@@ -123,6 +128,27 @@ pub fn extract_model_from_payload(payload_str: &str) -> Option<String> {
         .get("model")?
         .as_str()
         .map(String::from)
+}
+
+/// 落盘的请求体 / 响应体体积上限。
+///
+/// Claude Code 的 system prompt 叠加大段代码上下文，单条几百 KB 是常态；
+/// 原样入库时 JSONL 会迅速涨爆，且 `request_summary` 已记录长度与工具数，
+/// 完整正文并非排查必需。超限截断并附标记，保证仍能看出「被截了多少」。
+const LOGGED_BODY_MAX_BYTES: usize = 64 * 1024;
+
+/// 截断待落盘的报文体，超限时附加截断标记。
+fn truncate_logged_body(body: Option<&str>) -> Option<String> {
+    let body = body?;
+    let end = crate::gateway::proxy::errors::safe_truncate(body, LOGGED_BODY_MAX_BYTES);
+    if end >= body.len() {
+        return Some(body.to_string());
+    }
+    Some(format!(
+        "{}…[truncated, total {} bytes]",
+        &body[..end],
+        body.len()
+    ))
 }
 
 pub fn write_request_log(
@@ -227,10 +253,11 @@ pub fn write_request_log(
 
     let entry = GatewayRequestLogEntry {
         occurred_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-        request_id: uuid::Uuid::new_v4().to_string(),
+        request_id: context.request_id.clone(),
         request_index: context.request_index,
         endpoint: context.endpoint.to_string(),
         client_ip: context.client_addr.ip().to_string(),
+        client_user_agent: context.client_user_agent.clone(),
         model: context
             .request
             .map(|item| item.model.clone())
@@ -245,11 +272,9 @@ pub fn write_request_log(
         outcome: outcome.to_string(),
         duration_ms,
         error: error.map(str::to_string),
-        request_body: context
-            .request_body
-            .map(str::to_string)
+        request_body: truncate_logged_body(context.request_body)
             .or_else(|| context.request_body_hint.clone()),
-        response_body: _response_body.map(str::to_string),
+        response_body: truncate_logged_body(_response_body),
         input_tokens,
         output_tokens,
         cache_read_input_tokens,

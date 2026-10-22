@@ -20,7 +20,7 @@ use auth::AuthState;
 use core::account::{AccountStore, GroupTagStore};
 use services::session_storage::SessionStorage;
 use state::AppState;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{Listener, Manager};
 
 // 导入命令
@@ -53,16 +53,16 @@ use commands::cli_config_cmd::{
     write_codex_cli_config,
 };
 
-//网关2API
+// 网关 kiro2api
 use commands::gateway_cmd::{
     cleanup_stale_health,
     clear_gateway_request_logs,
     clear_rate_limit_account,
-    configure_proxy_clients,
     get_all_account_health,
     get_available_models,
     get_banned_accounts,
     get_gateway_config,
+    get_gateway_client_stats,
     get_gateway_endpoint_stats,
     get_gateway_log_dir,
     get_gateway_model_stats,
@@ -256,12 +256,54 @@ fn handle_deep_link_event(app_handle: &tauri::AppHandle, payload: &str) {
     auth::handle_incoming_deep_link(app_handle, &url);
 }
 
+/// 把主窗口带到前台并按当前屏幕可用区收一次尺寸。
+///
+/// 窗口在 tauri.conf.json 里就是 visible，启动卡由 index.html 的 #boot-splash 盖住，
+/// 所以这里不再是「首次显示」——前端首屏 ready 后调用它，是为了在 splash 撤掉的
+/// 同一时刻完成 fit + focus，避免用户看到一次尺寸跳变。
 #[tauri::command]
 fn show_main_window(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        fit_window_to_screen(&window);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+/// 把窗口尺寸收进当前屏幕可用区。
+///
+/// `tauri.conf.json` 里写死 1400×820，而 13 寸 MacBook 默认缩放的可用高度
+/// 只有约 800px——窗口会被挤出屏幕，用户看到的是「打不开」或只能拖出来。
+/// 这里在首次显示前按 monitor 可用区收缩，保留原尺寸意图（大屏不受影响）。
+///
+/// 只在窗口超出屏幕时收缩，不放大：放大反而会改变大屏上的观感。
+fn fit_window_to_screen(window: &tauri::WebviewWindow) {
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let work = monitor.size().to_logical::<u32>(monitor.scale_factor());
+    // 留出余量：dock / menu bar / 窗口阴影
+    let max_w = work.width.saturating_sub(80);
+    let max_h = work.height.saturating_sub(120);
+    let Ok(size) = window.inner_size() else {
+        return;
+    };
+    let logical = size.to_logical::<u32>(monitor.scale_factor());
+    let target_w = logical.width.min(max_w);
+    let target_h = logical.height.min(max_h);
+    if target_w != logical.width || target_h != logical.height {
+        log::info!(
+            "主窗口尺寸 {}x{} 超出屏幕可用区 {}x{}，收缩为 {}x{}",
+            logical.width,
+            logical.height,
+            max_w,
+            max_h,
+            target_w,
+            target_h
+        );
+        let _ = window.set_size(tauri::LogicalSize::new(target_w, target_h));
+        let _ = window.center();
     }
 }
 
@@ -301,7 +343,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {
         if let Err(err) = gateway::auto_start_if_enabled(&app_handle).await {
-            log::error!("自动启动2API失败: {err}");
+            log::error!("自动启动 kiro2api 失败: {err}");
         }
     });
 
@@ -322,14 +364,17 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // 监听窗口关闭事件
     setup_window_close_handler(app)?;
 
-    // 主窗口由前端首屏 ready 后通过命令触发显示，避免 setup 阶段过早白屏
-    // 兜底：如果前端 3 秒内没有调用 show_main_window，强制显示窗口（防止 macOS 上"打不开"）
+    // 主窗口始终可见（启动卡由 index.html 的 #boot-splash 盖住，不藏窗口）。
+    // 前端首屏 ready 后调 show_main_window 做 fit + focus；这里仍保留一次兜底：
+    // 若前端始终没调用（打包损坏、JS 抛异常），3 秒后强制收一次尺寸并聚焦，
+    // 配合 index.html 里 8 秒强制撤 splash，保证用户至少能拿到一个可操作的窗口。
     let app_handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
         if let Some(window) = app_handle.get_webview_window("main") {
-            if !window.is_visible().unwrap_or(true) {
-                log::warn!("主窗口 3s 内未显示，强制 show");
+            if !window.is_focused().unwrap_or(false) {
+                log::warn!("主窗口 3s 内未聚焦，强制 fit + focus");
+                fit_window_to_screen(&window);
                 let _ = window.show();
                 let _ = window.set_focus();
             }
@@ -454,12 +499,13 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_os::init())
         // 单实例插件：确保只有一个实例运行，deep-link 回调传递给已运行的实例
         .plugin(tauri_plugin_single_instance::init(
             setup_single_instance_callback,
         ))
         .manage(AppState {
-            store: Mutex::new(AccountStore::new()),
+            store: Arc::new(Mutex::new(AccountStore::new())),
             group_tag_store: Mutex::new(GroupTagStore::new()),
             auth: AuthState::new(),
             pending_login: Mutex::new(None),
@@ -591,9 +637,9 @@ fn main() {
             get_gateway_request_stats,
             get_gateway_model_stats,
             get_gateway_endpoint_stats,
+            get_gateway_client_stats,
             open_gateway_log_dir,
             clear_gateway_request_logs,
-            configure_proxy_clients,
             test_account_proxy,
             // Gateway 负载均衡 API
             get_rate_limited_accounts,
