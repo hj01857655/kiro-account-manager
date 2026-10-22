@@ -1180,7 +1180,7 @@ function_call: None,
                     "item": {
                         "id": message_id,
                         "type": "message",
-                        "status": "completed",
+                        "status": stream::responses_item_status(&aggregated),
                         "role": "assistant",
                         "content": content
                     }

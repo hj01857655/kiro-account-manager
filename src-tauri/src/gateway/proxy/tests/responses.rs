@@ -357,3 +357,24 @@ fn openai_response_without_upstream_stop_keeps_heuristic() {
     let response = stream::build_openai_response("gpt-5.6", &plain);
     assert_eq!(response.choices[0].finish_reason.as_deref(), Some("stop"));
 }
+
+#[test]
+fn responses_item_status_follows_upstream_stop_reason() {
+    // G-8 补丁：item 与终态单一来源，incomplete 响应下 item 不得仍报 completed
+    assert_eq!(
+        stream::responses_item_status(&aggregated_with_stop(Some("MAX_TOKENS"), None)),
+        "incomplete"
+    );
+    assert_eq!(
+        stream::responses_item_status(&aggregated_with_stop(Some("CONTENT_FILTERED"), None)),
+        "incomplete"
+    );
+    assert_eq!(
+        stream::responses_item_status(&aggregated_with_stop(Some("END_TURN"), None)),
+        "completed"
+    );
+    assert_eq!(
+        stream::responses_item_status(&aggregated_with_stop(None, None)),
+        "completed"
+    );
+}

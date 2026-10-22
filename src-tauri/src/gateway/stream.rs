@@ -924,6 +924,22 @@ pub fn map_stop_reason_to_responses_incomplete(reason: &str) -> Option<&'static 
     }
 }
 
+/// Responses 终态与 item 状态的单一来源（G-8 补丁）：
+/// `response.output_item.done` 的 message item 与 response 主体必须同一
+/// status，incomplete 响应下 item 不得仍报 completed。
+pub fn responses_item_status(aggregated: &AggregatedKiroResponse) -> &'static str {
+    if aggregated
+        .stop_reason
+        .as_deref()
+        .and_then(map_stop_reason_to_responses_incomplete)
+        .is_some()
+    {
+        "incomplete"
+    } else {
+        "completed"
+    }
+}
+
 /// G-9：流式 OpenAI finish 帧的 delta.refusal —— 仅当最终 finish_reason 为
 /// content_filter 且上游给了 refusal 文本时下发，否则不下发该字段。
 pub fn finish_refusal_text(aggregated: &AggregatedKiroResponse, finish_reason: &str) -> Option<String> {

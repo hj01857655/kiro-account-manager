@@ -317,7 +317,7 @@ pub fn build_responses_response_with_ids(
         "id": response_id,
         "object": "response",
         "created_at": created_at,
-        "status": if incomplete_reason.is_some() { "incomplete" } else { "completed" },
+        "status": stream::responses_item_status(aggregated),
         "model": model,
         "previous_response_id": previous_response_id,
         "output": output,
