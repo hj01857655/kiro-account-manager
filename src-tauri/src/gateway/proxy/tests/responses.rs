@@ -20,6 +20,8 @@ fn build_responses_response_emits_kiro_citation_annotations() {
         cache_read_input_tokens: None,
         cache_creation_input_tokens: None,
         metering_usage: None,
+        stop_reason: None,
+        refusal: None,
     };
 
     let response = build_responses_response_with_ids(
@@ -84,6 +86,8 @@ fn build_responses_response_omits_guessed_range_for_location_citations() {
         cache_read_input_tokens: None,
         cache_creation_input_tokens: None,
         metering_usage: None,
+        stop_reason: None,
+        refusal: None,
     };
 
     let response = build_responses_response_with_ids(
@@ -130,6 +134,8 @@ fn build_anthropic_response_maps_kiro_citations_into_sdk_shape() {
         cache_read_input_tokens: None,
         cache_creation_input_tokens: None,
         metering_usage: None,
+        stop_reason: None,
+        refusal: None,
     };
 
     let response = build_anthropic_response("claude-sonnet-4-5", &aggregated);
@@ -174,6 +180,8 @@ fn build_stream_responses_completed_event_keeps_citations_and_tool_calls() {
         cache_read_input_tokens: None,
         cache_creation_input_tokens: None,
         metering_usage: None,
+        stop_reason: None,
+        refusal: None,
     };
 
     let event = build_stream_responses_completed_event(
@@ -227,4 +235,125 @@ fn build_stream_responses_done_events_use_expected_shape() {
     assert_eq!(reasoning_done["type"], "response.reasoning.done");
     assert_eq!(reasoning_done["response_id"], "resp_test");
     assert_eq!(reasoning_done["text"], "Think");
+}
+
+/// 构造只改 stop_reason/refusal 的聚合体基线
+fn aggregated_with_stop(
+    stop_reason: Option<&str>,
+    refusal: Option<&str>,
+) -> stream::AggregatedKiroResponse {
+    stream::AggregatedKiroResponse {
+        text: "partial output".to_string(),
+        thinking: String::new(),
+        thinking_signature: None,
+        tool_calls: Vec::new(),
+        input_tokens: 3,
+        output_tokens: 5,
+        context_usage_percentage: None,
+        citations: Vec::new(),
+        cache_read_input_tokens: None,
+        cache_creation_input_tokens: None,
+        metering_usage: None,
+        stop_reason: stop_reason.map(str::to_string),
+        refusal: refusal.map(str::to_string),
+    }
+}
+
+#[test]
+fn anthropic_stop_reason_prefers_upstream_max_tokens() {
+    // G-8：上游 MAX_TOKENS 不得被启发式报成 end_turn
+    let aggregated = aggregated_with_stop(Some("MAX_TOKENS"), None);
+    let response =
+        build_anthropic_response_with_stop("claude-sonnet-4.5", &aggregated, None);
+    assert_eq!(response["stop_reason"], "max_tokens");
+}
+
+#[test]
+fn anthropic_stop_sequence_hit_wins_over_upstream() {
+    let aggregated = aggregated_with_stop(Some("MAX_TOKENS"), None);
+    let response = build_anthropic_response_with_stop(
+        "claude-sonnet-4.5",
+        &aggregated,
+        Some("###STOP"),
+    );
+    assert_eq!(response["stop_reason"], "stop_sequence");
+    assert_eq!(response["stop_sequence"], "###STOP");
+}
+
+#[test]
+fn responses_terminal_reports_incomplete_on_max_tokens() {
+    // G-8b：截断终态报 incomplete + incomplete_details
+    let aggregated = aggregated_with_stop(Some("MAX_TOKENS"), None);
+    let event = build_stream_responses_completed_event(
+        "claude-sonnet-4.5",
+        &aggregated,
+        "resp_test",
+        "msg_test",
+        123,
+        None,
+    );
+    assert_eq!(event["type"], "response.incomplete");
+    assert_eq!(event["response"]["status"], "incomplete");
+    assert_eq!(
+        event["response"]["incomplete_details"]["reason"],
+        "max_output_tokens"
+    );
+}
+
+#[test]
+fn responses_terminal_content_filter_reason() {
+    let aggregated = aggregated_with_stop(Some("CONTENT_FILTERED"), Some("blocked"));
+    let event = build_stream_responses_completed_event(
+        "claude-sonnet-4.5",
+        &aggregated,
+        "resp_test",
+        "msg_test",
+        123,
+        None,
+    );
+    assert_eq!(event["type"], "response.incomplete");
+    assert_eq!(
+        event["response"]["incomplete_details"]["reason"],
+        "content_filter"
+    );
+}
+
+#[test]
+fn responses_terminal_end_turn_stays_completed() {
+    let aggregated = aggregated_with_stop(Some("END_TURN"), None);
+    let event = build_stream_responses_completed_event(
+        "claude-sonnet-4.5",
+        &aggregated,
+        "resp_test",
+        "msg_test",
+        123,
+        None,
+    );
+    assert_eq!(event["type"], "response.completed");
+    assert!(event["response"]["incomplete_details"].is_null());
+}
+
+#[test]
+fn openai_response_fills_refusal_and_content_filter_finish() {
+    // G-9 + G-8b：CONTENT_FILTERED → finish_reason=content_filter 且 refusal 回填
+    let aggregated = aggregated_with_stop(Some("CONTENT_FILTERED"), Some("blocked by filter"));
+    let response = stream::build_openai_response("gpt-5.6", &aggregated);
+    assert_eq!(response.choices[0].finish_reason.as_deref(), Some("content_filter"));
+    assert_eq!(
+        response.choices[0].message.refusal.as_deref(),
+        Some("blocked by filter")
+    );
+}
+
+#[test]
+fn openai_response_without_upstream_stop_keeps_heuristic() {
+    // 无上游 stopReason：有工具→tool_calls，否则 stop（启发式兑底保留）
+    let mut aggregated = aggregated_with_stop(None, None);
+    aggregated.tool_calls = vec![("call_1".into(), "search".into(), "{}".into())];
+    let response = stream::build_openai_response("gpt-5.6", &aggregated);
+    assert_eq!(response.choices[0].finish_reason.as_deref(), Some("tool_calls"));
+
+    let plain = aggregated_with_stop(None, None);
+    let response = stream::build_openai_response("gpt-5.6", &plain);
+    assert_eq!(response.choices[0].finish_reason.as_deref(), Some("stop"));
 }

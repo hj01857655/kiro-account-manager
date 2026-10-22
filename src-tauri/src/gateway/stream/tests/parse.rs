@@ -34,8 +34,106 @@ fn parse_kiro_event_full_reads_text_tool_and_usage_events() {
             output_tokens: 34,
             cache_read_input_tokens: None,
             cache_creation_input_tokens: None,
+            stop_reason: None,
+            refusal: None,
         })
     );
+}
+
+#[test]
+fn parse_kiro_event_full_reads_metadata_stop_reason() {
+    // G-8：终帧携 stopReason 时不得丢失
+    assert_eq!(
+        parse_kiro_event_full(
+            r#"{"metadataEvent":{"tokenUsage":{"uncachedInputTokens":10,"outputTokens":20},"stopReason":"MAX_TOKENS"}}"#
+        ),
+        Some(KiroEvent::Usage {
+            input_tokens: 10,
+            output_tokens: 20,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
+            stop_reason: Some("MAX_TOKENS".to_string()),
+            refusal: None,
+        })
+    );
+}
+
+#[test]
+fn parse_kiro_event_full_accepts_zero_token_stop_frame() {
+    // 纯终止帧（无 tokenUsage 或全 0）：token 字段置 0，stop 语义仍要产出
+    assert_eq!(
+        parse_kiro_event_full(r#"{"metadataEvent":{"stopReason":"END_TURN"}}"#),
+        Some(KiroEvent::Usage {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
+            stop_reason: Some("END_TURN".to_string()),
+            refusal: None,
+        })
+    );
+}
+
+#[test]
+fn parse_kiro_event_full_reads_refusal_stop_details() {
+    // G-9：stopDetails.refusal 的 explanation 优先于 category
+    assert_eq!(
+        parse_kiro_event_full(
+            r#"{"metadataEvent":{"stopReason":"CONTENT_FILTERED","stopDetails":{"refusal":{"category":"policy","explanation":"blocked by filter"}}}}"#
+        ),
+        Some(KiroEvent::Usage {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
+            stop_reason: Some("CONTENT_FILTERED".to_string()),
+            refusal: Some("blocked by filter".to_string()),
+        })
+    );
+    // 无 explanation 时退 category
+    let event = parse_kiro_event_full(
+        r#"{"metadataEvent":{"stopReason":"CONTENT_FILTERED","stopDetails":{"refusal":{"category":"policy"}}}}"#,
+    );
+    assert!(matches!(
+        event,
+        Some(KiroEvent::Usage { refusal: Some(text), .. }) if text == "policy"
+    ));
+}
+
+#[test]
+fn stop_reason_mapping_covers_known_enum() {
+    // G-8b：取证自 ldi 枚举 + Ofd 终态
+    assert_eq!(map_stop_reason_to_anthropic("END_TURN"), "end_turn");
+    assert_eq!(map_stop_reason_to_anthropic("MAX_TOKENS"), "max_tokens");
+    assert_eq!(map_stop_reason_to_anthropic("TOOL_USE"), "tool_use");
+    assert_eq!(map_stop_reason_to_anthropic("CONTENT_FILTERED"), "refusal");
+    assert_eq!(map_stop_reason_to_anthropic("PAUSE_TURN"), "pause_turn");
+    assert_eq!(
+        map_stop_reason_to_anthropic("MODEL_CONTEXT_WINDOW_EXCEEDED"),
+        "max_tokens"
+    );
+    assert_eq!(
+        map_stop_reason_to_anthropic("COMPACTION_REQUIRED_FOR_MODEL_HANDOFF"),
+        "max_tokens"
+    );
+    assert_eq!(map_stop_reason_to_openai_finish("MAX_TOKENS"), "length");
+    assert_eq!(map_stop_reason_to_openai_finish("TOOL_USE"), "tool_calls");
+    assert_eq!(
+        map_stop_reason_to_openai_finish("CONTENT_FILTERED"),
+        "content_filter"
+    );
+    assert_eq!(
+        map_stop_reason_to_responses_incomplete("MAX_TOKENS"),
+        Some("max_output_tokens")
+    );
+    assert_eq!(
+        map_stop_reason_to_responses_incomplete("CONTENT_FILTERED"),
+        Some("content_filter")
+    );
+    assert_eq!(map_stop_reason_to_responses_incomplete("END_TURN"), None);
+    assert_eq!(map_stop_reason_to_responses_incomplete("PAUSE_TURN"), None);
+    assert!(is_kiro_stop_reason("UNKNOWN"));
+    assert!(!is_kiro_stop_reason("BOGUS_REASON"));
 }
 
 #[test]
