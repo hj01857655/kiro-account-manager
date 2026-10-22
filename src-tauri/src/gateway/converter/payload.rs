@@ -596,6 +596,12 @@ pub async fn build_kiro_payload(
         .map(|thinking| !thinking.is_disabled())
         .unwrap_or(false);
 
+    let thinking_disabled = request
+        .thinking
+        .as_ref()
+        .map(|thinking| thinking.is_disabled())
+        .unwrap_or(false);
+
     let requested_effort = request
         .effort
         .as_deref()
@@ -621,9 +627,14 @@ pub async fn build_kiro_payload(
     };
 
     // 档位归一化到该模型允许的枚举（上游声明优先，缺失时官方静态表兜底）
-    let resolved_effort = requested_effort
-        .as_deref()
-        .and_then(|effort| resolve_effort_level(effort_profile.as_ref(), &model_id, effort));
+    let resolved_effort = requested_effort.as_deref().and_then(|effort| {
+        resolve_effort_level(
+            effort_profile.as_ref(),
+            &model_id,
+            effort,
+            thinking_disabled,
+        )
+    });
 
     // max_tokens 随 AMRF 下发：客户端设的输出长度上限必须送到上游，否则
     // 上游按自己的默认窗口生成，客户端的输出意图丢失。clamp 到该模型的输出
@@ -665,7 +676,14 @@ pub async fn build_kiro_payload(
                 None
             } else {
                 let mut fields = serde_json::Map::new();
-                if thinking_enabled {
+                // G-2：官方 `tAu` 只在 `thinking.type.enum` 同时含 disabled+adaptive
+                // 时才认为该模型有思考开关；没有开关的模型官方 UI 不给选，我们也不发。
+                // 上游清单取不到时 profile 为 None，保持旧行为（照发）。
+                let thinking_toggleable = effort_profile
+                    .as_ref()
+                    .and_then(|profile| profile.thinking_toggleable(&model_id))
+                    .unwrap_or(true);
+                if thinking_enabled && thinking_toggleable {
                     // 官方原生 AMRF 的 thinking 信封恒为 `{thinking:{type}}`：
                     // 官方扩展 `rAu` 只写 type，不写 display——`display` 是
                     // `/v1/responses` 路径的**输入**字段（`Tui` 读它映射为

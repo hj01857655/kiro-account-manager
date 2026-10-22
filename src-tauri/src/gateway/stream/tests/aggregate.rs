@@ -1,5 +1,20 @@
 use super::*;
 
+// G-7：被屏蔽思考进入聚合态，与 thinking / signature 并列。
+#[test]
+fn aggregate_kiro_response_from_payloads_keeps_redacted_thinking() {
+    let payloads = vec![
+        r#"{"reasoningContentEvent":{"redactedContent":"QUJDREVG"}}"#.to_string(),
+        r#"{"assistantResponseEvent":{"content":"ok"}}"#.to_string(),
+    ];
+
+    let aggregated = aggregate_kiro_response_from_payloads(&payloads);
+
+    assert_eq!(aggregated.thinking_redacted.as_deref(), Some("QUJDREVG"));
+    assert!(aggregated.thinking.is_empty());
+    assert_eq!(aggregated.text, "ok");
+}
+
 #[test]
 fn aggregate_kiro_response_from_payloads_keeps_name_when_input_arrives_first() {
     let payloads = vec![

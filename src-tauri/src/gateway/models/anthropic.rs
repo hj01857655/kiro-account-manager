@@ -73,6 +73,9 @@ pub struct AnthropicContentBlock {
     /// Anthropic thinking block signature (from Kiro reasoningContentEvent.signature)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// Anthropic `redacted_thinking` 块的密文（原样来自 Kiro `redactedContent`）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

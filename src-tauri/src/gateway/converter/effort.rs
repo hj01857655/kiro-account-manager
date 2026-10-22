@@ -85,6 +85,49 @@ fn clamp_to_levels(requested: &str, allowed: &[String]) -> Option<String> {
         .or_else(|| best_lower.map(|(_, level)| level.clone()))
 }
 
+/// 官方 `m4e`：thinking 关闭时不得请求的深层档位。
+/// Kiro 1.4.5 `ySe(effortLevel, effortLevels)`：命中即改取枚举里**最后一个**
+/// 不在本集合内的档（`Cbt` 只在 `thinkingType==="disabled"` 时走这条）。
+const THINKING_DISABLED_EXCLUDED_LEVELS: [&str; 2] = ["xhigh", "max"];
+
+/// thinking 关闭时的档位降级（官方 `ySe`）。
+///
+/// 语义：思考关着就不该请求最深思考。命中 `m4e` 时从枚举尾部往前找第一个
+/// 不属 `m4e` 的档；枚举本就没有可降的档时返回 None（不下发该字段）。
+fn downgrade_level_when_thinking_disabled(requested: &str, allowed: &[String]) -> Option<String> {
+    let requested = requested.trim().to_ascii_lowercase();
+    if !THINKING_DISABLED_EXCLUDED_LEVELS.contains(&requested.as_str()) {
+        return None;
+    }
+    allowed
+        .iter()
+        .rev()
+        .find(|level| !THINKING_DISABLED_EXCLUDED_LEVELS.contains(&level.trim().to_ascii_lowercase().as_str()))
+        .cloned()
+}
+
+/// 官方 `tAu`：schema 里 `thinking.properties.type.enum` 同时含
+/// `"disabled"` 与 `"adaptive"` 时，该模型才有思考开关。
+/// 不含则官方 UI 根本不展示开关，我们也不应下发 thinking 信封（G-2）。
+fn thinking_is_toggleable(schema: &Value) -> bool {
+    let Some(levels) = schema
+        .get("properties")
+        .and_then(|value| value.get("thinking"))
+        .and_then(|value| value.get("properties"))
+        .and_then(|value| value.get("type"))
+        .and_then(|value| value.get("enum"))
+        .and_then(|value| value.as_array())
+    else {
+        return false;
+    };
+    let has = |target: &str| {
+        levels
+            .iter()
+            .any(|level| level.as_str() == Some(target))
+    };
+    has("disabled") && has("adaptive")
+}
+
 /// 从 schema 解析 effort 枚举。
 ///
 /// 依次尝试 `output_config.properties.effort.enum` 与
@@ -146,6 +189,8 @@ pub struct ModelEffortProfile {
     schemas: std::collections::HashMap<String, Value>,
     /// model_id → effort 枚举
     profiles: std::collections::HashMap<String, EffortEnum>,
+    /// model_id → 该模型是否有思考开关（官方 `tAu` 判定）
+    toggleable_thinking: std::collections::HashSet<String>,
     /// model_id → 输出窗口上限（上游 tokenLimits.maxOutputTokens）
     output_limits: std::collections::HashMap<String, i64>,
 }
@@ -155,6 +200,7 @@ impl ModelEffortProfile {
         let mut model_ids = std::collections::HashSet::new();
         let mut schemas = std::collections::HashMap::new();
         let mut profiles = std::collections::HashMap::new();
+        let mut toggleable_thinking = std::collections::HashSet::new();
         let mut output_limits = std::collections::HashMap::new();
         for model in models {
             let Some(model_id) = model.get("modelId").and_then(Value::as_str) else {
@@ -177,6 +223,9 @@ impl ModelEffortProfile {
             if !schema.is_object() {
                 continue;
             }
+            if thinking_is_toggleable(schema) {
+                toggleable_thinking.insert(model_id.to_string());
+            }
             if let Some(effort) = parse_effort_enum(schema) {
                 profiles.insert(model_id.to_string(), effort);
             }
@@ -186,6 +235,7 @@ impl ModelEffortProfile {
             model_ids,
             schemas,
             profiles,
+            toggleable_thinking,
             output_limits,
         }
     }
@@ -225,6 +275,17 @@ impl ModelEffortProfile {
         self.output_limits.get(model_id).copied()
     }
 
+    /// 该模型是否声明了思考开关（`thinking.type.enum` 含 disabled+adaptive）。
+    ///
+    /// 上游清单里**有**该模型却未声明开关 → 肯定没有；清单里**没有**该模型
+    /// （取不到清单 / 模型不在账号权限内）→ 交给调用方决定（保持旧行为）。
+    pub fn thinking_toggleable(&self, model_id: &str) -> Option<bool> {
+        if !self.model_ids.contains(model_id) {
+            return None;
+        }
+        Some(self.toggleable_thinking.contains(model_id))
+    }
+
     /// 上游 schema 是否声明了 max_tokens 字段。
     ///
     /// 用于判断能不能把客户端的输出长度上限放进 AMRF——上游没声明的字段硬发
@@ -239,9 +300,26 @@ impl ModelEffortProfile {
             .unwrap_or(false)
     }
 
-    /// 把客户端请求的档位归一化到该模型允许的档位。
+    /// 把客户端请求的档位归一化到该模型允许的档位（thinking 开启时的口径）。
     pub fn resolve_level(&self, model_id: &str, requested: &str) -> Option<String> {
         clamp_to_levels(requested, self.allowed_levels(model_id)?)
+    }
+
+    /// 同 `resolve_level`，但 thinking 关闭时走官方 `ySe` 降级（G-1）。
+    pub fn resolve_level_with_thinking_state(
+        &self,
+        model_id: &str,
+        requested: &str,
+        thinking_disabled: bool,
+    ) -> Option<String> {
+        let allowed = self.allowed_levels(model_id)?;
+        if thinking_disabled {
+            // 官方先降档（ySe）再归一到枚举；降档后的值必然在枚举内
+            if let Some(downgraded) = downgrade_level_when_thinking_disabled(requested, allowed) {
+                return Some(downgraded);
+            }
+        }
+        clamp_to_levels(requested, allowed)
     }
 }
 
@@ -307,10 +385,11 @@ pub fn resolve_effort_level(
     profile: Option<&ModelEffortProfile>,
     model_id: &str,
     requested: &str,
+    thinking_disabled: bool,
 ) -> Option<String> {
     if let Some(profile) = profile {
         if profile.allowed_levels(model_id).is_some() {
-            return profile.resolve_level(model_id, requested);
+            return profile.resolve_level_with_thinking_state(model_id, requested, thinking_disabled);
         }
         // 上游清单里明确有该模型，却没声明 effort 枚举 → 不下发
         if profile.has_model(model_id) {
@@ -318,5 +397,10 @@ pub fn resolve_effort_level(
         }
     }
     let allowed = fallback_allowed_levels(model_id)?;
+    if thinking_disabled {
+        if let Some(downgraded) = downgrade_level_when_thinking_disabled(requested, &allowed) {
+            return Some(downgraded);
+        }
+    }
     clamp_to_levels(requested, &allowed)
 }

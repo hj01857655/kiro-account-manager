@@ -74,6 +74,16 @@ pub fn extract_reasoning_content(content: Option<&Value>) -> Option<Value> {
 
     for item in items {
         let item_type = item.get("type").and_then(Value::as_str).unwrap_or_default();
+        // Anthropic 的屏蔽思考块（redacted_thinking{data}）回到 Kiro 侧是
+        // reasoningContent.redactedContent；漏掉它会让多轮 reasoning 断链（G-7）。
+        if item_type == "redacted_thinking" {
+            if let Some(data) = item.get("data").and_then(Value::as_str) {
+                if !data.is_empty() && redacted_content.is_none() {
+                    redacted_content = Some(Value::String(data.to_string()));
+                }
+            }
+            continue;
+        }
         if item_type != "reasoning" && item_type != "thinking" {
             continue;
         }

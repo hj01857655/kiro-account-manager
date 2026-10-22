@@ -243,17 +243,20 @@ pub fn flush_pending_responses_user_items(
     });
 }
 
-/// OpenAI Responses 官方 reasoning item → Kiro reasoningContent 结构
-/// 文档字段：summary[].summary_text / content[].reasoning_text / encrypted_content
+/// OpenAI Responses 官方 reasoning item → Kiro reasoningContent 结构。
+/// `encrypted_content` 是官方 `C6i` JSON 信封（`{"redactedContent":<b64>}` 或
+/// `{"reasoningText":{text,signature?}}`），按官方 `efd` 语义解包：信封存在时
+/// 它就是全部内容；无信封时退回文档字段 content[].reasoning_text，其次
+/// summary[].summary_text。
 pub fn extract_responses_reasoning_item(item: &Value) -> Option<Value> {
-    let mut texts = Vec::new();
-
-    if let Some(summary) = item.get("summary") {
-        let text = extract_text_content(Some(summary));
-        if !text.is_empty() {
-            texts.push(text);
-        }
+    let encrypted = item
+        .get("encrypted_content")
+        .or_else(|| item.get("encryptedContent"));
+    if let Some(reasoning) = parse_responses_encrypted_envelope(encrypted) {
+        return Some(reasoning);
     }
+
+    let mut texts = Vec::new();
 
     if let Some(content) = item.get("content") {
         match content {
@@ -274,6 +277,19 @@ pub fn extract_responses_reasoning_item(item: &Value) -> Option<Value> {
         }
     }
 
+    // content 缺失时才看 summary（两者并存时 content 是思考正文，summary 只是摘要）
+    if texts.is_empty() {
+        if let Some(Value::Array(parts)) = item.get("summary") {
+            for part in parts {
+                if let Some(text) = part.get("text").and_then(Value::as_str) {
+                    if !text.is_empty() {
+                        texts.push(text.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     // summary / content 都没有时，兜底 text 字段
     if texts.is_empty() {
         if let Some(text) = item.get("text").and_then(Value::as_str) {
@@ -283,30 +299,36 @@ pub fn extract_responses_reasoning_item(item: &Value) -> Option<Value> {
         }
     }
 
-    let encrypted = item
-        .get("encrypted_content")
-        .or_else(|| item.get("encryptedContent"))
-        .cloned();
-
-    if texts.is_empty() && encrypted.is_none() {
+    if texts.is_empty() {
         return None;
     }
 
-    let mut reasoning_text = Map::new();
-    let merged = texts.join("\n");
-    if !merged.is_empty() {
-        reasoning_text.insert("text".to_string(), Value::String(merged));
+    meaningful_optional_value(Some(json!({
+        "reasoningText": { "text": texts.join("\n") }
+    })))
+}
+
+/// 官方 `efd` 的信封解析：解不出或形状不符返回 None（官方同样不落 reasoning）。
+fn parse_responses_encrypted_envelope(encrypted: Option<&Value>) -> Option<Value> {
+    let encoded = encrypted?.as_str()?;
+    let parsed: Value = serde_json::from_str(encoded).ok()?;
+    let obj = parsed.as_object()?;
+
+    if let Some(redacted) = obj
+        .get("redactedContent")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        return Some(json!({ "redactedContent": redacted }));
     }
 
-    let mut reasoning = Map::new();
-    if !reasoning_text.is_empty() {
-        reasoning.insert("reasoningText".to_string(), Value::Object(reasoning_text));
+    let reasoning_text = obj.get("reasoningText")?.as_object()?;
+    let text = reasoning_text.get("text").and_then(Value::as_str)?;
+    let mut envelope = json!({ "reasoningText": { "text": text } });
+    if let Some(signature) = reasoning_text.get("signature").and_then(Value::as_str) {
+        envelope["reasoningText"]["signature"] = json!(signature);
     }
-    if let Some(enc) = encrypted {
-        reasoning.insert("encryptedContent".to_string(), enc);
-    }
-
-    meaningful_optional_value(Some(Value::Object(reasoning)))
+    Some(envelope)
 }
 
 /// Responses 官方工具调用 item → assistant.tool_calls（function 语义）

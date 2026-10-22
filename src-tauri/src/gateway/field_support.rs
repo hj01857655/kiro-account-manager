@@ -82,6 +82,9 @@ static ANTHROPIC_MESSAGES_FIELDS: &[(&str, FieldSupport)] = &[
     ("tools", FieldSupport::Consumed),
     ("tool_choice", FieldSupport::Consumed),
     ("thinking", FieldSupport::Consumed),
+    // 官方 effort 档位在顶层 output_config.effort（与 thinking 正交），
+    // 归一化阶段已消费进 NormalizedRequest.effort
+    ("output_config", FieldSupport::Consumed),
     // 上游 Kiro 不接受 top_k，转发会被忽略，不如明说
     (
         "top_k",
@@ -277,9 +280,7 @@ static OPENAI_RESPONSES_FIELDS: &[(&str, FieldSupport)] = &[
     ),
     (
         "reasoning",
-        FieldSupport::Ignored {
-            reason: "推理档位：请使用 thinking",
-        },
+        FieldSupport::Consumed,
     ),
 ];
 
@@ -392,5 +393,19 @@ mod tests {
         let found = find_rejected_field(Protocol::AnthropicMessages, &payload)
             .expect("top_k should be rejected");
         assert_eq!(found.0, "top_k");
+    }
+
+    /// R5：Anthropic 表收录 output_config（effort 真实消费）；
+    /// Responses 表 reasoning 现在是 Consumed（reasoning.effort + reasoning item）。
+    #[test]
+    fn effort_fields_are_consumed() {
+        assert_eq!(
+            Protocol::AnthropicMessages.support_of("output_config"),
+            FieldSupport::Consumed
+        );
+        assert_eq!(
+            Protocol::OpenAIResponses.support_of("reasoning"),
+            FieldSupport::Consumed
+        );
     }
 }

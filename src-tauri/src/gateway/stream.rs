@@ -3,6 +3,10 @@ pub enum KiroEvent {
     Text(String),
     Thinking(String),
     ThinkingSignature(String),
+    /// 上游屏蔽掉的思考（`reasoningContentEvent.redactedContent`，base64 字符串）。
+    /// 官方 `Zfd` 对 `redactedContent` 原样取串、Uint8Array 才转 base64；
+    /// 出站按 Anthropic `redacted_thinking` / Responses `reasoning.encrypted_content` 下发。
+    ThinkingRedacted(String),
     ToolUseStart {
         id: String,
         name: String,
@@ -63,6 +67,9 @@ pub struct AggregatedKiroResponse {
     pub text: String,
     pub thinking: String,
     pub thinking_signature: Option<String>,
+    /// 上游屏蔽思考（`reasoningContentEvent.redactedContent`，base64）。
+    /// 与 `thinking` 互斥：该轮既无正文也无签名时只有它。
+    pub thinking_redacted: Option<String>,
     pub tool_calls: Vec<(String, String, String)>,
     pub input_tokens: i32,
     pub output_tokens: i32,
@@ -318,6 +325,14 @@ pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
             return Some(KiroEvent::ThinkingSignature(sig));
         }
     }
+    // 被屏蔽的思考：只有它时该轮思考既无正文也无签名（G-7）。
+    // 官方 Zfd 要求 text/signature/redacted 三者全空才不产出，因此必须放在
+    // 前两者之后单独一档，不能与它们合并返回。
+    if let Some(redacted) = parse_reasoning_redacted(&value) {
+        if !redacted.is_empty() {
+            return Some(KiroEvent::ThinkingRedacted(redacted));
+        }
+    }
 
     // 解析 codeReferenceEvent
     if let Some(code_ref) = value.get("codeReferenceEvent") {
@@ -504,6 +519,7 @@ pub fn aggregate_kiro_response_from_payloads(payloads: &[String]) -> AggregatedK
                 KiroEvent::Text(_) => "Text",
                 KiroEvent::Thinking(_) => "Thinking",
                 KiroEvent::ThinkingSignature(_) => "ThinkingSignature",
+                KiroEvent::ThinkingRedacted(_) => "ThinkingRedacted",
                 KiroEvent::ToolUseStart { .. } => "ToolUseStart",
                 KiroEvent::ToolUseInputDelta { .. } => "ToolUseInputDelta",
                 KiroEvent::ToolUseStop { .. } => "ToolUseStop",
@@ -526,6 +542,10 @@ pub fn aggregate_kiro_response_from_payloads(payloads: &[String]) -> AggregatedK
                 KiroEvent::ThinkingSignature(sig) => {
                     log::debug!("[聚合] 思考签名: {} 字符", sig.len());
                     aggregated.thinking_signature = Some(sig);
+                }
+                KiroEvent::ThinkingRedacted(redacted) => {
+                    log::debug!("[聚合] 屏蔽思考: {} 字符", redacted.len());
+                    aggregated.thinking_redacted = Some(redacted);
                 }
                 KiroEvent::ToolUseStart { id, name } => {
                     log::debug!("[聚合] 工具使用开始: id={}, name={}", id, name);
@@ -737,6 +757,16 @@ fn parse_reasoning_signature(value: &serde_json::Value) -> Option<String> {
     value
         .get("reasoningContentEvent")
         .and_then(|item| item.get("signature"))
+        .and_then(|item| item.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// 从 reasoningContentEvent 中提取被屏蔽的思考（base64 字符串）
+fn parse_reasoning_redacted(value: &serde_json::Value) -> Option<String> {
+    value
+        .get("reasoningContentEvent")
+        .and_then(|item| item.get("redactedContent"))
         .and_then(|item| item.as_str())
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
@@ -1012,6 +1042,35 @@ pub fn build_openai_usage_chunk(
     }
 }
 
+/// R4：Kiro citations → Chat 官方 `annotations` 形状
+/// `{type:"url_citation", url_citation:{end_index, start_index, title, url}}`。
+/// title 用引用文本，起止从 Kiro target.range 映射；缺 range 时不出注解（官方
+/// 索引必填，不能像 Responses 那样猜）。
+fn build_openai_url_citation_annotations(
+    aggregated: &AggregatedKiroResponse,
+) -> Vec<serde_json::Value> {
+    let mut annotations = Vec::new();
+    for citation in &aggregated.citations {
+        let range = citation.target.get("range");
+        let (Some(start), Some(end)) = (
+            range.and_then(|r| r.get("start")).and_then(serde_json::Value::as_u64),
+            range.and_then(|r| r.get("end")).and_then(serde_json::Value::as_u64),
+        ) else {
+            continue;
+        };
+        annotations.push(serde_json::json!({
+            "type": "url_citation",
+            "url_citation": {
+                "end_index": end,
+                "start_index": start,
+                "title": citation.text.clone().unwrap_or_else(|| citation.link.clone()),
+                "url": citation.link
+            }
+        }));
+    }
+    annotations
+}
+
 pub fn build_openai_response(
     model: &str,
     aggregated: &AggregatedKiroResponse,
@@ -1031,7 +1090,7 @@ pub fn build_openai_response(
         },
         // refusal 先置空，等 finish_reason 定下来后按 G-9 口径回填
         refusal: None,
-        annotations: vec![],
+        annotations: build_openai_url_citation_annotations(aggregated),
         tool_calls: None,
         audio: None,
         function_call: None,

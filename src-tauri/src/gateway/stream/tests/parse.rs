@@ -144,6 +144,26 @@ fn parse_kiro_event_full_reads_reasoning_content() {
     );
 }
 
+// G-7：被屏蔽的思考是 base64 字符串，官方 Zfd 原样取用；text 优先于它
+// （与官方「text/signature/redacted 三者全空才不产出」的顺序一致）。
+#[test]
+fn parse_kiro_event_full_reads_redacted_reasoning_content() {
+    assert_eq!(
+        parse_kiro_event_full(r#"{"reasoningContentEvent":{"redactedContent":"QUJD"}}"#),
+        Some(KiroEvent::ThinkingRedacted("QUJD".to_string()))
+    );
+    assert_eq!(
+        parse_kiro_event_full(
+            r#"{"reasoningContentEvent":{"text":"t","redactedContent":"QUJD"}}"#
+        ),
+        Some(KiroEvent::Thinking("t".to_string()))
+    );
+    assert_eq!(
+        parse_kiro_event_full(r#"{"reasoningContentEvent":{"redactedContent":""}}"#),
+        None
+    );
+}
+
 #[test]
 fn parse_kiro_event_full_reads_metering_event() {
     assert_eq!(

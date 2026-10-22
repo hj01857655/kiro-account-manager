@@ -1305,7 +1305,9 @@ async fn build_kiro_payload_clamps_effort_to_upstream_declared_levels() {
         .expect("fields should exist");
     // thinking 启用但客户端没给 effort → 补默认档位 high（保证思考意图送达后端）
     assert_eq!(fields["output_config"]["effort"], "high");
-    assert_eq!(fields["thinking"]["type"], "adaptive");
+    // 该 schema 没声明 thinking.type.enum → 官方 tAu 判为「无思考开关」，
+    // 因此只发 effort、不发 thinking 信封（G-2）
+    assert!(fields.get("thinking").is_none());
 }
 
 // 客户端 budget_tokens 必须传导到 <max_thinking_length> 标签（clamp 到
@@ -1419,6 +1421,128 @@ async fn build_kiro_payload_amrf_thinking_envelope_matches_official_shape() {
     );
     // effort 走 output_config 路径
     assert_eq!(fields["output_config"], json!({ "effort": "high" }));
+}
+
+// G-2：官方 `tAu` 只在 thinking.type.enum 同时含 disabled+adaptive 时才认为
+// 该模型有思考开关；没有开关就不下发 thinking 信封。
+#[tokio::test]
+async fn build_kiro_payload_sends_thinking_envelope_only_when_toggleable() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "claude-sonnet-5.5",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "thinking": {
+                    "type": "object",
+                    "properties": {
+                        "type": { "type": "string", "enum": ["disabled", "adaptive"] }
+                    }
+                },
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high"] }
+                    }
+                }
+            }
+        }
+    })];
+    let thinking = Some(crate::gateway::models::Thinking {
+        thinking_type: "adaptive".to_string(),
+        budget_tokens: 8000,
+    });
+
+    // 可开关 → 发 thingsvelope
+    let request = minimal_request_with_thinking("claude-sonnet-5.5", thinking.clone());
+    let payload = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build");
+    let fields = payload
+        .additional_model_request_fields
+        .expect("amrf should exist");
+    assert_eq!(fields["thinking"]["type"], "adaptive");
+
+    // 不可开关（schema 无该枚举）→ 不发 thinking 信封
+    let models = vec![json!({
+        "modelId": "claude-sonnet-5.5",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": { "type": "string", "enum": ["low", "medium", "high"] }
+                    }
+                }
+            }
+        }
+    })];
+    let payload = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build");
+    let fields = payload
+        .additional_model_request_fields
+        .expect("amrf should still carry effort");
+    assert!(
+        fields.get("thinking").is_none(),
+        "non-toggleable model must not get thinking envelope, got: {fields:?}"
+    );
+}
+
+// G-1：thinking 显式关闭时，官方 `ySe` 把 xhigh/max 降为枚举中最后一个
+// 非 m4e 档。thinking 照常开启时同样的请求必须保持原档。
+#[tokio::test]
+async fn build_kiro_payload_downgrades_deep_effort_when_thinking_disabled() {
+    let client = Client::new();
+    let models = vec![json!({
+        "modelId": "claude-sonnet-5.5",
+        "additionalModelRequestFieldsSchema": {
+            "type": "object",
+            "properties": {
+                "output_config": {
+                    "type": "object",
+                    "properties": {
+                        "effort": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high", "xhigh", "max"]
+                        }
+                    }
+                }
+            }
+        }
+    })];
+
+    let disabled = Some(crate::gateway::models::Thinking {
+        thinking_type: "disabled".to_string(),
+        budget_tokens: 0,
+    });
+    let mut request = minimal_request_with_thinking("claude-sonnet-5.5", disabled);
+    request.effort = Some("max".to_string());
+    let payload = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build");
+    let fields = payload
+        .additional_model_request_fields
+        .expect("amrf should exist");
+    // max 与 xhigh 都在 m4e 里 → 取枚举尾部第一个非 m4e 档 = high
+    assert_eq!(fields["output_config"]["effort"], "high");
+    assert!(fields.get("thinking").is_none());
+
+    // thinking 开启时原档保留
+    let enabled = Some(crate::gateway::models::Thinking {
+        thinking_type: "adaptive".to_string(),
+        budget_tokens: 8000,
+    });
+    let mut request = minimal_request_with_thinking("claude-sonnet-5.5", enabled);
+    request.effort = Some("max".to_string());
+    let payload = build_kiro_payload(&client, &request, None, Some(&models))
+        .await
+        .expect("payload should build");
+    let fields = payload
+        .additional_model_request_fields
+        .expect("amrf should exist");
+    assert_eq!(fields["output_config"]["effort"], "max");
 }
 
 // AMRF 三个来源全空时整个字段不出现（官方 `Cbt` 的

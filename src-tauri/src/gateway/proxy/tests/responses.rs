@@ -8,6 +8,7 @@ fn build_responses_response_emits_kiro_citation_annotations() {
         text: "Hello Rust".to_string(),
         thinking: String::new(),
         thinking_signature: None,
+        thinking_redacted: None,
         tool_calls: Vec::new(),
         input_tokens: 3,
         output_tokens: 5,
@@ -74,6 +75,7 @@ fn build_responses_response_omits_guessed_range_for_location_citations() {
         text: "Hello Rust".to_string(),
         thinking: String::new(),
         thinking_signature: None,
+        thinking_redacted: None,
         tool_calls: Vec::new(),
         input_tokens: 3,
         output_tokens: 5,
@@ -122,6 +124,7 @@ fn build_anthropic_response_maps_kiro_citations_into_sdk_shape() {
         text: "Hello Rust".to_string(),
         thinking: String::new(),
         thinking_signature: None,
+        thinking_redacted: None,
         tool_calls: Vec::new(),
         input_tokens: 3,
         output_tokens: 5,
@@ -164,6 +167,7 @@ fn build_stream_responses_completed_event_keeps_citations_and_tool_calls() {
         text: "Hello Rust".to_string(),
         thinking: String::new(),
         thinking_signature: None,
+        thinking_redacted: None,
         tool_calls: vec![(
             "call_1".to_string(),
             "search_docs".to_string(),
@@ -237,6 +241,110 @@ fn build_stream_responses_done_events_use_expected_shape() {
     assert_eq!(reasoning_done["text"], "Think");
 }
 
+/// G-7：被屏蔽思考出站为 Anthropic `redacted_thinking{data}` 块；
+/// Responses 为独立 reasoning output item，`encrypted_content` 是官方 C6i
+/// `{"redactedContent":<b64>}` JSON 信封（b64 原值透传，不解码）。
+#[test]
+fn anthropic_emits_redacted_thinking_block() {
+    let mut aggregated = aggregated_with_stop(None, None);
+    aggregated.text = String::new();
+    aggregated.thinking_redacted = Some("QUJDREVG".to_string());
+
+    let response = build_anthropic_response_with_stop("claude-sonnet-4.5", &aggregated, None);
+    assert_eq!(response["content"][0]["type"], "redacted_thinking");
+    assert_eq!(response["content"][0]["data"], "QUJDREVG");
+    assert!(response["content"][0].get("thinking").is_none());
+
+    let responses = build_responses_response_with_ids(
+        "claude-sonnet-4.5",
+        &aggregated,
+        "resp_test",
+        "msg_test",
+        123,
+        None,
+    );
+    let output = responses["output"].as_array().expect("output array");
+    assert_eq!(output[0]["type"], "reasoning");
+    assert_eq!(output[0]["summary"], json!([]));
+    let envelope: serde_json::Value = serde_json::from_str(
+        output[0]["encrypted_content"]
+            .as_str()
+            .expect("envelope string"),
+    )
+    .expect("valid envelope json");
+    assert_eq!(envelope["redactedContent"], "QUJDREVG");
+    assert_eq!(output[1]["type"], "message");
+}
+
+/// R1：文本思考出站走 C6i `{"reasoningText":{text,signature?}}` 信封，
+/// summary 恒空数组，message.content 不再混入 reasoning。
+#[test]
+fn responses_reasoning_text_uses_official_envelope() {
+    let mut aggregated = aggregated_with_stop(None, None);
+    aggregated.thinking = "Think".to_string();
+    aggregated.thinking_signature = Some("sig1".to_string());
+
+    let response = build_responses_response_with_ids(
+        "claude-sonnet-4.5",
+        &aggregated,
+        "resp_test",
+        "msg_test",
+        123,
+        None,
+    );
+    let output = response["output"].as_array().expect("output array");
+    assert_eq!(output[0]["type"], "reasoning");
+    assert_eq!(output[0]["summary"], json!([]));
+    let envelope: serde_json::Value = serde_json::from_str(
+        output[0]["encrypted_content"]
+            .as_str()
+            .expect("envelope string"),
+    )
+    .expect("valid envelope json");
+    assert_eq!(envelope["reasoningText"]["text"], "Think");
+    assert_eq!(envelope["reasoningText"]["signature"], "sig1");
+
+    assert_eq!(output[1]["type"], "message");
+    let message_content = output[1]["content"].as_array().expect("content array");
+    assert!(
+        message_content.iter().all(|part| part["type"] != "reasoning"),
+        "message.content 不应再携带 reasoning"
+    );
+}
+
+#[test]
+fn responses_reasoning_envelope_omits_missing_signature() {
+    let mut aggregated = aggregated_with_stop(None, None);
+    aggregated.thinking = "Think".to_string();
+
+    let response = build_responses_response_with_ids(
+        "claude-sonnet-4.5",
+        &aggregated,
+        "resp_test",
+        "msg_test",
+        123,
+        None,
+    );
+    let envelope: serde_json::Value = serde_json::from_str(
+        response["output"][0]["encrypted_content"]
+            .as_str()
+            .expect("envelope string"),
+    )
+    .expect("valid envelope json");
+    assert_eq!(envelope["reasoningText"]["text"], "Think");
+    assert!(envelope["reasoningText"].get("signature").is_none());
+}
+
+/// R3：signature_delta 事件形状与官方流式契约一致。
+#[test]
+fn anthropic_signature_delta_event_uses_official_shape() {
+    let event = build_anthropic_signature_delta_event(0, "sig1");
+    assert_eq!(event["type"], "content_block_delta");
+    assert_eq!(event["index"], 0);
+    assert_eq!(event["delta"]["type"], "signature_delta");
+    assert_eq!(event["delta"]["signature"], "sig1");
+}
+
 /// 构造只改 stop_reason/refusal 的聚合体基线
 fn aggregated_with_stop(
     stop_reason: Option<&str>,
@@ -246,6 +354,7 @@ fn aggregated_with_stop(
         text: "partial output".to_string(),
         thinking: String::new(),
         thinking_signature: None,
+        thinking_redacted: None,
         tool_calls: Vec::new(),
         input_tokens: 3,
         output_tokens: 5,
@@ -331,6 +440,36 @@ fn responses_terminal_end_turn_stays_completed() {
     );
     assert_eq!(event["type"], "response.completed");
     assert!(event["response"]["incomplete_details"].is_null());
+}
+
+/// R4：Chat 出站把 Kiro citations 填进官方 annotations
+/// `{type:"url_citation", url_citation:{end_index, start_index, title, url}}`；
+/// 缺 range 的引用不出注解（官方索引必填，不猜位置）。
+#[test]
+fn openai_response_fills_url_citation_annotations() {
+    let mut aggregated = aggregated_with_stop(None, None);
+    aggregated.citations = vec![stream::AggregatedCitation {
+        text: Some("Rust".to_string()),
+        link: "https://example.com/rust".to_string(),
+        target: json!({ "range": { "start": 6, "end": 10 } }),
+    }];
+
+    let response = stream::build_openai_response("gpt-5.6", &aggregated);
+    let annotation = &response.choices[0].message.annotations[0];
+    assert_eq!(annotation["type"], "url_citation");
+    assert_eq!(annotation["url_citation"]["start_index"], 6);
+    assert_eq!(annotation["url_citation"]["end_index"], 10);
+    assert_eq!(annotation["url_citation"]["title"], "Rust");
+    assert_eq!(annotation["url_citation"]["url"], "https://example.com/rust");
+
+    // 无 range 的 location 型引用不出注解
+    aggregated.citations = vec![stream::AggregatedCitation {
+        text: Some("Rust".to_string()),
+        link: "https://example.com/rust".to_string(),
+        target: json!({ "location": 6 }),
+    }];
+    let response = stream::build_openai_response("gpt-5.6", &aggregated);
+    assert!(response.choices[0].message.annotations.is_empty());
 }
 
 #[test]

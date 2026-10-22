@@ -3,6 +3,19 @@
 use super::*;
 
 
+/// 首帧前的 SSE 心跳间隔（G-13）。取值远低于代理常见的 60s 空闲阈值，
+/// 同时不至于在短期等待时扰流。
+const KEEPALIVE_INTERVAL_SECS: u64 = 15;
+
+/// 流任务退出时置位，让心跳任务立即结束并释放 `tx` 引用。
+struct StreamFinishedGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for StreamFinishedGuard {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// stream_proxy_response 的可变翻译状态（原闭包平铺变量收拢）。
 /// 纯状态容器：转换逻辑仍按 format 分支处理，字段访问顺序与原变量一致。
 #[derive(Default)]
@@ -69,6 +82,48 @@ pub fn stream_proxy_response(
         let message_id = format!("msg_{}", short_uuid());
         let created_at = chrono::Utc::now().timestamp();
         let completion_id = format!("chatcmpl-{}", short_uuid());
+
+        // G-13：上游 TTFB 上限 60s（官方 requestTimeoutMs），长思考期间下游可能
+        // 一帧都收不到，中间代理会当空闲连接断掉。首帧前定期发心跳：Anthropic
+        // 用协议内 `ping` 事件，OpenAI/Responses 用 SSE 注释行（客户端均忽略）。
+        let first_frame_sent = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stream_finished = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // 任务任何路径返回（含提前 return）都要置位，否则心跳任务会一直持着 tx，
+        // 把响应体吊住不结束
+        let _finished_guard = StreamFinishedGuard(stream_finished.clone());
+        {
+            let keepalive_payload = match format {
+                ResponseFormat::Anthropic => "event: ping\ndata: {\"type\":\"ping\"}\n\n",
+                // 注释行：合规 SSE，所有客户端都忽略
+                _ => ": keepalive\n\n",
+            };
+            let hb_tx = tx.clone();
+            let hb_first = first_frame_sent.clone();
+            let hb_done = stream_finished.clone();
+            tokio::spawn(async move {
+                use std::sync::atomic::Ordering;
+                let mut ticker =
+                    tokio::time::interval(std::time::Duration::from_secs(KEEPALIVE_INTERVAL_SECS));
+                ticker.tick().await; // interval 首个 tick 立即返回，跳过
+                loop {
+                    ticker.tick().await;
+                    if hb_first.load(Ordering::Relaxed) || hb_done.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    if hb_tx
+                        .send(Ok(Bytes::from_static(keepalive_payload.as_bytes())))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            });
+        }
+
+        // 首帧已出，心跳不再需要（G-13）。放在首个下游帧之前的分支入口处，
+        // 三个格式都会走到。
+        first_frame_sent.store(true, std::sync::atomic::Ordering::Relaxed);
 
         if matches!(format, ResponseFormat::Responses) {
             let created = json!({
@@ -205,6 +260,7 @@ function_call: None,
                                         KiroEvent::Text(_) => "Text",
                                         KiroEvent::Thinking(_) => "Thinking",
                                         KiroEvent::ThinkingSignature(_) => "ThinkingSignature",
+                                        KiroEvent::ThinkingRedacted(_) => "ThinkingRedacted",
                                         KiroEvent::ToolUseStart { .. } => "ToolUseStart",
                                         KiroEvent::ToolUseInputDelta { .. } => "ToolUseInputDelta",
                                         KiroEvent::ToolUseStop { .. } => "ToolUseStop",
@@ -297,7 +353,102 @@ function_call: None,
                                             .await;
                                         }
                                         KiroEvent::ThinkingSignature(sig) => {
-                                            aggregated.thinking_signature = Some(sig);
+                                            aggregated.thinking_signature = Some(sig.clone());
+                                            // R3：thinking 块签名须以 signature_delta 增量下发；
+                                            // 块未开（无思考文本先行）时无从附着，仅入聚合态。
+                                            if let Some(index) = st.thinking_block_index {
+                                                let delta =
+                                                    build_anthropic_signature_delta_event(
+                                                        index, &sig,
+                                                    );
+                                                send_event(
+                                                    &tx,
+                                                    Some("content_block_delta"),
+                                                    &delta.to_string(),
+                                                )
+                                                .await;
+                                            }
+                                        }
+                                        KiroEvent::ThinkingRedacted(redacted) => {
+                                            aggregated.thinking_redacted = Some(redacted.clone());
+                                            match format {
+                                                ResponseFormat::Anthropic => {
+                                                    // 屏蔽思考必须以完整块一次性下发：
+                                                    // Anthropic 的 redacted_thinking 没有 delta 形态
+                                                    ensure_anthropic_message_start(
+                                                        &tx,
+                                                        &mut st.message_started,
+                                                        &anthropic_id,
+                                                        &model,
+                                                        aggregated.input_tokens,
+                                                        aggregated.output_tokens,
+                                                        aggregated.cache_read_input_tokens,
+                                                        aggregated.cache_creation_input_tokens,
+                                                    )
+                                                    .await;
+                                                    close_content_block(
+                                                        &tx,
+                                                        &mut st.text_block_index,
+                                                    )
+                                                    .await;
+                                                    close_content_block(
+                                                        &tx,
+                                                        &mut st.thinking_block_index,
+                                                    )
+                                                    .await;
+                                                    let index = st.next_block_index;
+                                                    st.next_block_index += 1;
+                                                    let start = json!({
+                                                        "type": "content_block_start",
+                                                        "index": index,
+                                                        "content_block": {
+                                                            "type": "redacted_thinking",
+                                                            "data": redacted
+                                                        }
+                                                    });
+                                                    send_event(
+                                                        &tx,
+                                                        Some("content_block_start"),
+                                                        &start.to_string(),
+                                                    )
+                                                    .await;
+                                                    let stop = json!({
+                                                        "type": "content_block_stop",
+                                                        "index": index
+                                                    });
+                                                    send_event(
+                                                        &tx,
+                                                        Some("content_block_stop"),
+                                                        &stop.to_string(),
+                                                    )
+                                                    .await;
+                                                }
+                                                ResponseFormat::Responses => {
+                                                    let output_index =
+                                                        st.responses_next_output_index;
+                                                    st.responses_next_output_index += 1;
+                                                    // 官方 `C6i`：encrypted_content 必须是
+                                                    // `{"redactedContent":<b64>}` JSON 信封，
+                                                    // 裸 base64 不会被官方 `efd` 读回。
+                                                    let item = json!({
+                                                        "type": "response.output_item.done",
+                                                        "response_id": response_id,
+                                                        "output_index": output_index,
+                                                        "item": {
+                                                            "id": format!("rs_{}", short_uuid()),
+                                                            "type": "reasoning",
+                                                            "summary": [],
+                                                            "encrypted_content": json!({
+                                                                "redactedContent": redacted
+                                                            })
+                                                            .to_string()
+                                                        }
+                                                    });
+                                                    send_data(&tx, &item.to_string()).await;
+                                                }
+                                                // OpenAI Chat 协议没有屏蔽思考的承载位，丢弃
+                                                ResponseFormat::OpenAI => {}
+                                            }
                                         }
                                         KiroEvent::Text(text) => {
                                             // stop 序列截断：Kiro 上游无 stop 字段对应物，
@@ -1171,6 +1322,28 @@ function_call: None,
                         &aggregated.thinking,
                     );
                     send_data(&tx, &reasoning_done.to_string()).await;
+                    // 官方 `ifd`：文本思考同样要落独立 reasoning output item
+                    // （C6i 信封）。redacted 分支已在事件到达时下发。
+                    if let Some(encrypted) = build_responses_reasoning_encrypted_content(
+                        &aggregated.thinking,
+                        aggregated.thinking_signature.as_deref(),
+                        None,
+                    ) {
+                        let output_index = st.responses_next_output_index;
+                        st.responses_next_output_index += 1;
+                        let item = json!({
+                            "type": "response.output_item.done",
+                            "response_id": response_id,
+                            "output_index": output_index,
+                            "item": {
+                                "id": format!("rs_{}", short_uuid()),
+                                "type": "reasoning",
+                                "summary": [],
+                                "encrypted_content": encrypted
+                            }
+                        });
+                        send_data(&tx, &item.to_string()).await;
+                    }
                 }
                 let content = build_responses_message_content(&aggregated);
                 let output_item_done = json!({
@@ -1463,6 +1636,17 @@ pub async fn handle_stream_text(
             }
         }
         ResponseFormat::Responses => {
+            // 官方 Dfd 一视同仁接受 `response.reasoning_text.delta` 与
+            // `response.reasoning.delta`；但客户端监听的事件名各异，只听前者的
+            // SDK 会完全看不到思考（G-12）。两帧同发，幂等。
+            if is_thinking {
+                let alias = json!({
+                    "type": "response.reasoning_text.delta",
+                    "response_id": response_id,
+                    "delta": text
+                });
+                send_data(tx, &alias.to_string()).await;
+            }
             let data = json!({
                 "type": if is_thinking { "response.reasoning.delta" } else { "response.output_text.delta" },
                 "response_id": response_id,
@@ -1563,8 +1747,7 @@ pub async fn send_event(
     tx: &mpsc::Sender<Result<Bytes, Infallible>>,
     event: Option<&str>,
     payload: &str,
-) -> bool {
-    // 写入发给客户端的每个 SSE 事件到文件
+) -> bool {    // 写入发给客户端的每个 SSE 事件到文件
     {
         let log_dir = crate::core::paths::app_data_dir_or_default().join("logs");
         let body_end = safe_truncate(payload, 2000);

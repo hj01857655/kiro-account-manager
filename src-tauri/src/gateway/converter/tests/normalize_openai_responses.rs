@@ -283,3 +283,69 @@ fn normalize_openai_responses_request_preserves_compaction_items() {
         "compaction data should be preserved"
     );
 }
+
+/// R2：入站 reasoning item 的 `encrypted_content` 是官方 C6i JSON 信封，
+/// 按官方 `efd` 语义解包还原 Kiro reasoningContent（含签名回写）。
+#[test]
+fn normalize_openai_responses_reasoning_item_decodes_official_envelope() {
+    let text_envelope = json!({
+        "reasoningText": { "text": "思考", "signature": "sig" }
+    })
+    .to_string();
+    let redacted_envelope = json!({ "redactedContent": "QUJDREVG" }).to_string();
+
+    let payload = json!({
+        "model": "claude-sonnet-4",
+        "input": [
+            {
+                "type": "reasoning",
+                "summary": [],
+                "encrypted_content": text_envelope
+            },
+            {
+                "type": "reasoning",
+                "summary": [],
+                "encrypted_content": redacted_envelope
+            }
+        ]
+    });
+
+    let converted =
+        normalize_openai_responses_request(&payload).expect("responses should convert");
+    assert_eq!(converted.messages[0].role, "assistant");
+    assert_eq!(
+        converted.messages[0].metadata,
+        Some(json!({
+            "reasoningContent": { "reasoningText": { "text": "思考", "signature": "sig" } }
+        }))
+    );
+    assert_eq!(
+        converted.messages[1].metadata,
+        Some(json!({
+            "reasoningContent": { "redactedContent": "QUJDREVG" }
+        }))
+    );
+}
+
+/// 无信封时退回文档字段：content[].reasoning_text 优先，其次 summary[].summary_text。
+#[test]
+fn normalize_openai_responses_reasoning_item_falls_back_to_summary_text() {
+    let payload = json!({
+        "model": "claude-sonnet-4",
+        "input": [
+            {
+                "type": "reasoning",
+                "summary": [{ "type": "summary_text", "text": "摘要" }]
+            }
+        ]
+    });
+
+    let converted =
+        normalize_openai_responses_request(&payload).expect("responses should convert");
+    assert_eq!(
+        converted.messages[0].metadata,
+        Some(json!({
+            "reasoningContent": { "reasoningText": { "text": "摘要" } }
+        }))
+    );
+}

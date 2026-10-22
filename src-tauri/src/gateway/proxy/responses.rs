@@ -109,6 +109,7 @@ pub fn build_anthropic_content_blocks(
             text: None,
             thinking: Some(aggregated.thinking.clone()),
             signature: aggregated.thinking_signature.clone(),
+            data: None,
             id: None,
             name: None,
             input: None,
@@ -117,12 +118,33 @@ pub fn build_anthropic_content_blocks(
             citations: None,
         });
     }
+    // 被屏蔽思考单独成块：Anthropic 侧对应 `redacted_thinking{data}`，
+    // 官方 Kiro 把 `redactedContent` 当不透明密文透传，客户端多轮原样回传即可
+    // 保住 reasoning 连续性（G-7）。
+    if let Some(redacted) = aggregated.thinking_redacted.as_ref() {
+        if !redacted.is_empty() {
+            content.push(AnthropicContentBlock {
+                block_type: "redacted_thinking".to_string(),
+                text: None,
+                thinking: None,
+                signature: None,
+                data: Some(redacted.clone()),
+                id: None,
+                name: None,
+                input: None,
+                tool_use_id: None,
+                content: None,
+                citations: None,
+            });
+        }
+    }
     if !aggregated.text.is_empty() {
         content.push(AnthropicContentBlock {
             block_type: "text".to_string(),
             text: Some(aggregated.text.clone()),
             thinking: None,
             signature: None,
+            data: None,
             id: None,
             name: None,
             input: None,
@@ -137,6 +159,7 @@ pub fn build_anthropic_content_blocks(
             text: None,
             thinking: None,
             signature: None,
+            data: None,
             id: Some(id.clone()),
             name: Some(name.clone()),
             input: Some(serde_json::from_str(arguments).unwrap_or_else(|_| json!({}))),
@@ -247,6 +270,44 @@ pub fn build_responses_output_text(aggregated: &stream::AggregatedKiroResponse) 
     ResponsesOutputText { text, annotations }
 }
 
+/// 官方 `C6i`：`encrypted_content` 是 JSON 信封字符串 —— redacted 优先
+/// （`{"redactedContent":<b64>}`，b64 原值即上游 `redactedContent`），否则
+/// `{"reasoningText":{text,signature?}}`。signature 仅在有值时携带。
+pub fn build_responses_reasoning_encrypted_content(
+    thinking: &str,
+    signature: Option<&str>,
+    redacted: Option<&str>,
+) -> Option<String> {
+    if let Some(redacted) = redacted.filter(|value| !value.is_empty()) {
+        return Some(json!({ "redactedContent": redacted }).to_string());
+    }
+    if thinking.is_empty() {
+        return None;
+    }
+    let mut envelope = json!({ "reasoningText": { "text": thinking } });
+    if let Some(signature) = signature.filter(|value| !value.is_empty()) {
+        envelope["reasoningText"]["signature"] = json!(signature);
+    }
+    Some(envelope.to_string())
+}
+
+/// 官方 `ifd`：reasoning 是 output[] 独立 item，`summary` 恒为空数组，
+/// 思考内容（文本+签名 / 屏蔽密文）全部走 `encrypted_content` 的 C6i JSON
+/// 信封，不混进 message.content。
+pub fn build_responses_reasoning_item(aggregated: &stream::AggregatedKiroResponse) -> Option<Value> {
+    let encrypted = build_responses_reasoning_encrypted_content(
+        &aggregated.thinking,
+        aggregated.thinking_signature.as_deref(),
+        aggregated.thinking_redacted.as_deref(),
+    )?;
+    Some(json!({
+        "id": format!("rs_{}", short_uuid()),
+        "type": "reasoning",
+        "summary": [],
+        "encrypted_content": encrypted
+    }))
+}
+
 pub fn build_responses_message_content(aggregated: &stream::AggregatedKiroResponse) -> Vec<Value> {
     let output_text = build_responses_output_text(aggregated);
     let mut content = Vec::new();
@@ -255,12 +316,6 @@ pub fn build_responses_message_content(aggregated: &stream::AggregatedKiroRespon
             "type": "output_text",
             "text": output_text.text,
             "annotations": output_text.annotations
-        }));
-    }
-    if !aggregated.thinking.is_empty() {
-        content.push(json!({
-            "type": "reasoning",
-            "summary": aggregated.thinking
         }));
     }
     for (id, name, arguments) in &aggregated.tool_calls {
@@ -301,12 +356,18 @@ pub fn build_responses_response_with_ids(
     let output_text = build_responses_output_text(aggregated);
     let content = build_responses_message_content(aggregated);
 
-    let output = vec![json!({
+    // 官方 `ifd`：reasoning 是 output[] 独立 item（`summary` 恒空数组、内容走
+    // `encrypted_content` 的 C6i JSON 信封），不混进 message.content。
+    let mut output = Vec::new();
+    if let Some(reasoning_item) = build_responses_reasoning_item(aggregated) {
+        output.push(reasoning_item);
+    }
+    output.push(json!({
         "id": message_id,
         "type": "message",
         "role": "assistant",
         "content": content
-    })];
+    }));
 
     // G-8b：上游截断/拦截终态必须报 incomplete + incomplete_details，不得一律 completed
     let incomplete_reason = aggregated
@@ -391,5 +452,18 @@ pub fn build_stream_responses_reasoning_done_event(response_id: &str, text: &str
         "type": "response.reasoning.done",
         "response_id": response_id,
         "text": text
+    })
+}
+
+/// R3：官方 Anthropic 流式契约在 thinking 块末尾以 `signature_delta` 增量下发签名；
+/// 非流式侧由 content block 的 signature 字段承载。
+pub fn build_anthropic_signature_delta_event(index: usize, signature: &str) -> Value {
+    json!({
+        "type": "content_block_delta",
+        "index": index,
+        "delta": {
+            "type": "signature_delta",
+            "signature": signature
+        }
     })
 }
