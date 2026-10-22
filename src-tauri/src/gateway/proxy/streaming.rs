@@ -109,6 +109,7 @@ pub fn stream_proxy_response(
                 content: Some("".to_string()),
                 tool_calls: None,
 audio: None,
+refusal: None,
 function_call: None,
             };
             let chunk =
@@ -437,6 +438,7 @@ function_call: None,
                                                                 }
                                                             ]),
                                                             audio: None,
+                                                            refusal: None,
                                                             function_call: None,
                                                         },
                                                         None,
@@ -588,6 +590,7 @@ function_call: None,
                                                                             }
                                                                         ]),
                                                                         audio: None,
+                                                                        refusal: None,
                                                                         function_call: None,
                                                                     },
                                                                     None,
@@ -727,6 +730,7 @@ function_call: None,
                                                                     }
                                                                 ]),
                                                                 audio: None,
+                                                                refusal: None,
                                                                 function_call: None,
                                                             },
                                                             None,
@@ -1236,6 +1240,7 @@ function_call: None,
                         content: None,
                         tool_calls: None,
                         audio: None,
+                        refusal: stream::finish_refusal_text(&aggregated, finish_reason),
                         function_call: None,
                     },
                     Some(finish_reason.to_string()),
@@ -1479,6 +1484,7 @@ pub async fn handle_stream_text(
                 content: Some(text.to_string()),
                 tool_calls: None,
 audio: None,
+refusal: None,
 function_call: None,
             };
             let chunk = crate::gateway::stream::build_openai_chunk(

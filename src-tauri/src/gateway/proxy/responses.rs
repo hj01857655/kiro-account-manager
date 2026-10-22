@@ -160,8 +160,18 @@ pub fn build_anthropic_response_with_stop(
     stop_sequence: Option<&str>,
 ) -> Value {
     let content = build_anthropic_content_blocks(aggregated);
+    // 优先级：stop_sequence 命中 > 上游 stopReason 映射（G-8）> 消息内容启发式
     let stop_reason = if stop_sequence.is_some() {
         "stop_sequence".to_string()
+    } else if let Some(reason) = aggregated.stop_reason.as_deref() {
+        let mapped = stream::map_stop_reason_to_anthropic(reason);
+        // 上游说 end_turn 但累积到了工具调用（stop 事件缺失等）：tool_use 优先，
+        // 否则客户端不会执行已下发的 tool_use 块
+        if mapped == "end_turn" && !aggregated.tool_calls.is_empty() {
+            "tool_use".to_string()
+        } else {
+            mapped.to_string()
+        }
     } else if aggregated.tool_calls.is_empty() {
         "end_turn".to_string()
     } else {
@@ -298,11 +308,16 @@ pub fn build_responses_response_with_ids(
         "content": content
     })];
 
-    json!({
+    // G-8b：上游截断/拦截终态必须报 incomplete + incomplete_details，不得一律 completed
+    let incomplete_reason = aggregated
+        .stop_reason
+        .as_deref()
+        .and_then(stream::map_stop_reason_to_responses_incomplete);
+    let mut response = json!({
         "id": response_id,
         "object": "response",
         "created_at": created_at,
-        "status": "completed",
+        "status": if incomplete_reason.is_some() { "incomplete" } else { "completed" },
         "model": model,
         "previous_response_id": previous_response_id,
         "output": output,
@@ -314,9 +329,15 @@ pub fn build_responses_response_with_ids(
             "cache_creation_input_tokens": aggregated.cache_creation_input_tokens,
             "cache_read_input_tokens": aggregated.cache_read_input_tokens
         }
-    })
+    });
+    if let Some(reason) = incomplete_reason {
+        response["incomplete_details"] = json!({ "reason": reason });
+    }
+    response
 }
 
+/// 流式终态事件：按上游 stopReason 在 response.completed / response.incomplete 间选择
+///（官方 Dfd 同样区分两种终帧）。
 pub fn build_stream_responses_completed_event(
     model: &str,
     aggregated: &stream::AggregatedKiroResponse,
@@ -325,16 +346,22 @@ pub fn build_stream_responses_completed_event(
     created_at: i64,
     previous_response_id: Option<&str>,
 ) -> Value {
+    let response = build_responses_response_with_ids(
+        model,
+        aggregated,
+        response_id,
+        message_id,
+        created_at,
+        previous_response_id,
+    );
+    let event_type = if response.get("status").and_then(Value::as_str) == Some("incomplete") {
+        "response.incomplete"
+    } else {
+        "response.completed"
+    };
     json!({
-        "type": "response.completed",
-        "response": build_responses_response_with_ids(
-            model,
-            aggregated,
-            response_id,
-            message_id,
-            created_at,
-            previous_response_id,
-        )
+        "type": event_type,
+        "response": response
     })
 }
 

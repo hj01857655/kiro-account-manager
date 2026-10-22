@@ -256,6 +256,9 @@ pub struct OpenAIChatDelta {
     pub role: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// OpenAI 流式拒答：仅在 finish 帧带 content_filter 时下发（G-9）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<OpenAIDeltaToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]

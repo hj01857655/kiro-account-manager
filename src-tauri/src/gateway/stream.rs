@@ -20,6 +20,10 @@ pub enum KiroEvent {
         output_tokens: i32,
         cache_read_input_tokens: Option<i32>,
         cache_creation_input_tokens: Option<i32>,
+        /// 上游 metadataEvent.stopReason 原值（G-8）
+        stop_reason: Option<String>,
+        /// 上游 metadataEvent.stopDetails.refusal 的解释/分类（G-9）
+        refusal: Option<String>,
     },
     ContextUsage {
         percentage: f32,
@@ -67,6 +71,11 @@ pub struct AggregatedKiroResponse {
     pub context_usage_percentage: Option<f32>,
     pub metering_usage: Option<f64>,
     pub citations: Vec<AggregatedCitation>,
+    /// 上游终止语义原值（END_TURN / MAX_TOKENS / TOOL_USE / CONTENT_FILTERED / ...），
+    /// None=上游未给出，出站继续用启发式
+    pub stop_reason: Option<String>,
+    /// 内容拦截时的 refusal 文本（explanation 优先，退到 category）
+    pub refusal: Option<String>,
 }
 
 pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
@@ -99,6 +108,28 @@ pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
             metadata_event.keys().collect::<Vec<_>>()
         );
 
+        // 上游终止语义（G-8/G-8b/G-9）：metadataEvent 除 tokenUsage 外还携 stopReason
+        // 与 stopDetails.refusal，旧实现只取了 tokenUsage 导致截断/拦截被当 end_turn
+        let stop_reason = metadata_event
+            .get("stopReason")
+            .and_then(|item| item.as_str())
+            .filter(|item| !item.is_empty())
+            .map(|item| {
+                if !is_kiro_stop_reason(item) {
+                    log::warn!("[Token 解析] 未识别的上游 stopReason: {}", item);
+                }
+                item.to_string()
+            });
+        let refusal = metadata_event
+            .get("stopDetails")
+            .and_then(|item| item.get("refusal"))
+            .and_then(|item| {
+                item.get("explanation")
+                    .or_else(|| item.get("category"))
+                    .and_then(|value| value.as_str())
+                    .filter(|text| !text.is_empty())
+                    .map(|text| text.to_string())
+            });
         if let Some(token_usage) = metadata_event
             .get("tokenUsage")
             .and_then(|item| item.as_object())
@@ -155,10 +186,32 @@ pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
                     output_tokens,
                     cache_read_input_tokens,
                     cache_creation_input_tokens,
+                    stop_reason,
+                    refusal,
+                });
+            } else if stop_reason.is_some() || refusal.is_some() {
+                // 纯终止帧：tokens 全 0，下游不得据此覆盖已累计的 usage
+                return Some(KiroEvent::Usage {
+                    input_tokens,
+                    output_tokens,
+                    cache_read_input_tokens,
+                    cache_creation_input_tokens,
+                    stop_reason,
+                    refusal,
                 });
             } else {
                 log::warn!("[Token 解析] ⚠️ 发现 tokenUsage 但所有 token 都为 0");
             }
+        } else if stop_reason.is_some() || refusal.is_some() {
+            // 部分上游终帧只带 stopReason/stopDetails，不带 tokenUsage
+            return Some(KiroEvent::Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_read_input_tokens: None,
+                cache_creation_input_tokens: None,
+                stop_reason,
+                refusal,
+            });
         } else {
             log::warn!("[Token 解析] ⚠️ 发现 metadataEvent 但没有 tokenUsage 字段");
         }
@@ -209,6 +262,8 @@ pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
                 output_tokens,
                 cache_read_input_tokens,
                 cache_creation_input_tokens,
+                stop_reason: None,
+                refusal: None,
             });
         }
     }
@@ -528,12 +583,28 @@ pub fn aggregate_kiro_response_from_payloads(payloads: &[String]) -> AggregatedK
                     output_tokens,
                     cache_read_input_tokens,
                     cache_creation_input_tokens,
+                    stop_reason,
+                    refusal,
                 } => {
-                    found_usage = true;
-                    aggregated.input_tokens = input_tokens;
-                    aggregated.output_tokens = output_tokens;
-                    aggregated.cache_read_input_tokens = cache_read_input_tokens;
-                    aggregated.cache_creation_input_tokens = cache_creation_input_tokens;
+                    // 纯终止帧（四个 token 字段全空）：只更新 stop_reason/refusal，
+                    // 不得覆盖已累计的 usage；旧格式帧可能只带 cache tokens，仍要收下
+                    if input_tokens > 0
+                        || output_tokens > 0
+                        || cache_read_input_tokens.is_some()
+                        || cache_creation_input_tokens.is_some()
+                    {
+                        found_usage = true;
+                        aggregated.input_tokens = input_tokens;
+                        aggregated.output_tokens = output_tokens;
+                        aggregated.cache_read_input_tokens = cache_read_input_tokens;
+                        aggregated.cache_creation_input_tokens = cache_creation_input_tokens;
+                    }
+                    if stop_reason.is_some() {
+                        aggregated.stop_reason = stop_reason;
+                    }
+                    if refusal.is_some() {
+                        aggregated.refusal = refusal;
+                    }
                     log::info!(
                         "[聚合] ✅ 发现 usage 信息: input={}, output={}, cache_read={:?}, cache_creation={:?}",
                         input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens
@@ -793,6 +864,76 @@ use crate::gateway::models::{
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
+/// 上游 `metadataEvent.stopReason` 已知集合（内部枚举 `ldi` 7 值 + `Ofd` 终态）。
+/// 取证：docs/kiro-re-1.4.5/stopreason-enum.txt；定策：docs/Kiro 1.4.5/协议面与网关对照.md §G-8b。
+pub fn is_kiro_stop_reason(reason: &str) -> bool {
+    matches!(
+        reason,
+        "END_TURN"
+            | "MAX_TOKENS"
+            | "TOOL_USE"
+            | "CONTENT_FILTERED"
+            | "PAUSE_TURN"
+            | "MODEL_CONTEXT_WINDOW_EXCEEDED"
+            | "UNKNOWN"
+            | "COMPACTION_REQUIRED_FOR_MODEL_HANDOFF"
+    )
+}
+
+/// G-8b 全量映射：上游 stopReason → Anthropic `stop_reason`。
+/// 官方文档（docs/protocol/anthropic-messages-api.md §5.2）明确
+/// 「实现应把停止原因作为可扩展字符串处理」，因此：
+/// - MODEL_CONTEXT_WINDOW_EXCEEDED / COMPACTION 都映 max_tokens（输出被截）；
+/// - PAUSE_TURN 映 pause_turn（Anthropic 本就保留该值给长回合模型）；
+/// - 仅 UNKNOWN 退回 end_turn（上游自身也无法定性，无更多信息可传）。
+pub fn map_stop_reason_to_anthropic(reason: &str) -> &'static str {
+    match reason {
+        "MAX_TOKENS" | "MODEL_CONTEXT_WINDOW_EXCEEDED" | "COMPACTION_REQUIRED_FOR_MODEL_HANDOFF" => {
+            "max_tokens"
+        }
+        "TOOL_USE" => "tool_use",
+        "CONTENT_FILTERED" => "refusal",
+        "PAUSE_TURN" => "pause_turn",
+        _ => "end_turn",
+    }
+}
+
+/// G-8b 全量映射：上游 stopReason → OpenAI Chat `finish_reason`。
+pub fn map_stop_reason_to_openai_finish(reason: &str) -> &'static str {
+    match reason {
+        "MAX_TOKENS" | "MODEL_CONTEXT_WINDOW_EXCEEDED" | "COMPACTION_REQUIRED_FOR_MODEL_HANDOFF" => {
+            "length"
+        }
+        "TOOL_USE" => "tool_calls",
+        "CONTENT_FILTERED" => "content_filter",
+        _ => "stop",
+    }
+}
+
+/// G-8b 全量映射：上游 stopReason → OpenAI Responses `incomplete_details.reason`；
+/// None 表示终态 completed。OpenAI 标准的 reason 枚举只有 max_output_tokens /
+/// content_filter，非标截断（窗口超限/压缩交接）归入 max_output_tokens，
+/// 原值保留在解析日志，不发明非标 reason 去撞客户端解析器。
+pub fn map_stop_reason_to_responses_incomplete(reason: &str) -> Option<&'static str> {
+    match reason {
+        "MAX_TOKENS" | "MODEL_CONTEXT_WINDOW_EXCEEDED" | "COMPACTION_REQUIRED_FOR_MODEL_HANDOFF" => {
+            Some("max_output_tokens")
+        }
+        "CONTENT_FILTERED" => Some("content_filter"),
+        _ => None,
+    }
+}
+
+/// G-9：流式 OpenAI finish 帧的 delta.refusal —— 仅当最终 finish_reason 为
+/// content_filter 且上游给了 refusal 文本时下发，否则不下发该字段。
+pub fn finish_refusal_text(aggregated: &AggregatedKiroResponse, finish_reason: &str) -> Option<String> {
+    if finish_reason == "content_filter" {
+        aggregated.refusal.clone()
+    } else {
+        None
+    }
+}
+
 pub fn build_openai_chat_usage(prompt_tokens: i32, completion_tokens: i32) -> OpenAIChatUsage {
     OpenAIChatUsage {
         prompt_tokens,
@@ -872,6 +1013,7 @@ pub fn build_openai_response(
         } else {
             Some(aggregated.text.clone())
         },
+        // refusal 先置空，等 finish_reason 定下来后按 G-9 口径回填
         refusal: None,
         annotations: vec![],
         tool_calls: None,
@@ -879,7 +1021,7 @@ pub fn build_openai_response(
         function_call: None,
     };
 
-    let finish_reason = if !aggregated.tool_calls.is_empty() {
+    if !aggregated.tool_calls.is_empty() {
         let tool_calls: Vec<OpenAIResponseToolCall> = aggregated
             .tool_calls
             .iter()
@@ -893,10 +1035,29 @@ pub fn build_openai_response(
             })
             .collect();
         message.tool_calls = Some(tool_calls);
-        "tool_calls".to_string()
-    } else {
-        "stop".to_string()
+    }
+    // G-8：上游 stopReason 优先，启发式仅在缺失时兑底；
+    // 有工具但映射结果仍是 stop 时纠正为 tool_calls，否则客户端不会执行工具
+    let finish_reason = match aggregated
+        .stop_reason
+        .as_deref()
+        .map(map_stop_reason_to_openai_finish)
+    {
+        Some(mapped) if !(mapped == "stop" && message.tool_calls.is_some()) => {
+            mapped.to_string()
+        }
+        _ => {
+            if message.tool_calls.is_some() {
+                "tool_calls".to_string()
+            } else {
+                "stop".to_string()
+            }
+        }
     };
+
+    // G-9：refusal 文本只在终态真是 content_filter 时下发，避免与
+    // finish_reason=length/stop 共出矛盾组合（流式侧走同一个 finish_refusal_text）
+    message.refusal = finish_refusal_text(aggregated, &finish_reason);
 
     OpenAIChatResponse {
         id: completion_id,
