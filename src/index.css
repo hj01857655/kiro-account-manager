@@ -95,8 +95,6 @@
   --app-primary-rgb: 59 130 246;
   --surface-rgb: 255 255 255;
   --surface-contrast-rgb: 248 250 252;
-  --glass-opacity: 0.85;
-  --glass-blur: 24px;
 
   --bg-color: #f8fafc;
   --bg-gradient-1: #e2e8f0;
@@ -105,10 +103,6 @@
   --bg-gradient-2-rgb: 241 245 249;
   --bg-gradient-3: #ffffff;
   --bg-gradient-3-rgb: 255 255 255;
-  
-  --glass-border: rgb(var(--surface-rgb) / 0.62);
-  --glow-rgb: 255 255 255;
-  --bg-glow-opacity: 0.15;
 }
 
 [data-theme='dark'] {
@@ -135,7 +129,6 @@
   --app-primary-rgb: 59 130 246;
   --surface-rgb: 15 23 42;
   --surface-contrast-rgb: 2 6 23;
-  --glass-opacity: 0.72;
 }
 
 /* ============================================================
@@ -157,8 +150,6 @@
   --secondary: rgb(var(--surface-rgb) / 0.82) !important;
   --muted: rgb(var(--primary-rgb) / 0.1) !important;
   --accent: rgb(var(--primary-rgb) / 0.12) !important;
-  --glass-border: rgba(255, 255, 255, 0.08) !important;
-  --bg-glow-opacity: 0.12;
 
   /* 背景渐变（body 的 background-image 由这三个变量驱动）。
      此前暗色主题未覆盖这组变量，导致左上角被亮色渐变（#e2e8f0/#f1f5f9/#fff）
@@ -252,16 +243,6 @@
 .card-current { border-color: rgb(34 197 94 / 0.3); background: rgb(34 197 94 / 0.05); }
 .card-banned { border-color: rgb(239 68 68 / 0.3); background: rgb(239 68 68 / 0.05); }
 
-.bg-glow {
-  position: fixed; width: 50vw; height: 50vw;
-  filter: blur(120px); border-radius: 100%;
-  z-index: -1; pointer-events: none;
-  opacity: var(--bg-glow-opacity);
-  background: radial-gradient(circle, rgb(var(--primary-rgb)), transparent 70%);
-}
-.bg-glow-1 { top: -10%; left: -10%; animation: float 20s infinite alternate; }
-.bg-glow-2 { bottom: -10%; right: -10%; animation: float 25s infinite alternate-reverse; }
-
 /* ============================================================
    GLOBAL STYLES
    ============================================================ */
@@ -327,7 +308,6 @@ html:not([data-os='macos']) ::-webkit-scrollbar-track { background: transparent;
 
 /* 动画定义 */
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes float { from { transform: translate(0, 0); } to { transform: translate(30px, 30px); } }
 @keyframes floatIcon { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 @keyframes bounceIn {
   0% { opacity: 0; transform: scale(0.3); }
