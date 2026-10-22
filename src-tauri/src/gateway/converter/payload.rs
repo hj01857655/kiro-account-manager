@@ -379,6 +379,8 @@ pub async fn build_kiro_payload(
                     let images = extract_images(client, message.content.as_ref()).await;
                     let tool_results = extract_tool_results(message.content.as_ref());
                     let user_context = build_user_context(None, tool_results.clone());
+                    let documents = extract_documents(message.content.as_ref());
+                    ensure_documents_within_limit(&documents)?;
 
                     // 规则 7：user 消息必须有 content 或 toolResults
                     if content.trim().is_empty() && tool_results.is_empty() {
@@ -399,6 +401,7 @@ pub async fn build_kiro_payload(
                             model_id: model_id.clone(),
                             origin: "AI_EDITOR".to_string(),
                             images: images_option(images),
+                            documents: documents_option(documents),
                             user_input_message_context: user_context,
                         },
                     });
@@ -420,6 +423,7 @@ pub async fn build_kiro_payload(
                             model_id: model_id.clone(),
                             origin: "AI_EDITOR".to_string(),
                             images: None,
+                            documents: None,
                             user_input_message_context: build_user_context(
                                 tools_for_context,
                                 tool_results,
@@ -443,6 +447,8 @@ pub async fn build_kiro_payload(
             _ => extract_tool_results(current_msg.content.as_ref()),
         };
         let current_content_for_history = extract_text_content(current_msg.content.as_ref());
+        let current_documents_for_history = extract_documents(current_msg.content.as_ref());
+        ensure_documents_within_limit(&current_documents_for_history)?;
         history_items.push(HistoryItem::User {
             user_input_message: HistoryUserMessage {
                 content: if current_content_for_history.trim().is_empty()
@@ -455,6 +461,7 @@ pub async fn build_kiro_payload(
                 model_id: model_id.clone(),
                 origin: "AI_EDITOR".to_string(),
                 images: None,
+                documents: documents_option(current_documents_for_history),
                 user_input_message_context: if current_tool_results_for_history.is_empty() {
                     None
                 } else {
@@ -566,6 +573,12 @@ pub async fn build_kiro_payload(
         current_content.clear();
     }
     let current_images = extract_images(client, current_message.content.as_ref()).await;
+    let current_documents = if let Some(HistoryItem::User { user_input_message }) = &sanitized_current {
+        user_input_message.documents.clone().unwrap_or_default()
+    } else {
+        extract_documents(current_message.content.as_ref())
+    };
+    ensure_documents_within_limit(&current_documents)?;
 
     // 官方 thinking 通道：带顶层 additionalModelRequestFields，上游返回原生
     // reasoningContentEvent（带签名）。
@@ -726,7 +739,7 @@ pub async fn build_kiro_payload(
                     origin: "AI_EDITOR".to_string(),
                     cache_point: None,
                     client_cache_config: None,
-                    documents: None,
+                    documents: documents_option(current_documents),
                     images: images_option(current_images),
                     user_input_message_context: build_user_context(
                         tools_for_current,

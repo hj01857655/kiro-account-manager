@@ -150,7 +150,8 @@ pub fn convert_responses_input_items(items: &[Value]) -> Vec<NormalizedMessage> 
                     metadata: None,
                 });
             }
-            "input_text" | "output_text" | "input_image" | "image_url" | "image" => {
+            "input_text" | "output_text" | "input_image" | "image_url" | "image"
+            | "input_file" | "file" => {
                 pending_user_items.push(item.clone());
             }
             // OpenAI Responses 文档 reasoning item → Kiro reasoningContent

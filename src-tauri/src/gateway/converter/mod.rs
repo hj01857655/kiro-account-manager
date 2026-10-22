@@ -5,11 +5,11 @@
 
 use crate::clients::http_client::apply_app_proxy;
 use crate::gateway::models::{
-    AnthropicMessagesRequest, ConversationState, CurrentMessage, HistoryAssistantMessage,
-    HistoryItem, HistoryUserMessage, ImageBlock, ImageSource, KiroInputSchema, KiroPayload,
-    KiroTool, KiroToolResult, KiroToolResultContent, KiroToolSpec, KiroToolUse, ModelInfo,
-    NormalizedMessage, NormalizedRequest, OpenAIChatRequest, Thinking, Tool, ToolCall,
-    ToolCallFunction, ToolFunction, UserInputMessage, UserInputMessageContext,
+    AnthropicMessagesRequest, ConversationState, CurrentMessage, DocumentBlock, DocumentSource,
+    HistoryAssistantMessage, HistoryItem, HistoryUserMessage, ImageBlock, ImageSource,
+    KiroInputSchema, KiroPayload, KiroTool, KiroToolResult, KiroToolResultContent, KiroToolSpec,
+    KiroToolUse, ModelInfo, NormalizedMessage, NormalizedRequest, OpenAIChatRequest, Thinking,
+    Tool, ToolCall, ToolCallFunction, ToolFunction, UserInputMessage, UserInputMessageContext,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use reqwest::Client;
@@ -25,6 +25,7 @@ mod normalize;
 mod models;
 mod tools;
 mod images;
+mod documents;
 mod content;
 mod history;
 mod payload;
@@ -34,6 +35,7 @@ pub use normalize::*;
 pub use models::*;
 pub use tools::*;
 pub use images::*;
+pub use documents::*;
 pub use content::*;
 pub use history::*;
 pub use payload::*;

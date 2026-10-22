@@ -24,6 +24,7 @@ pub fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
                     model_id: String::new(),
                     origin: "AI_EDITOR".to_string(),
                     images: None,
+                    documents: None,
                     user_input_message_context: None,
                 },
             },
@@ -107,6 +108,7 @@ pub fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
                                 model_id: String::new(),
                                 origin: "AI_EDITOR".to_string(),
                                 images: None,
+                                documents: None,
                                 user_input_message_context: Some(UserInputMessageContext {
                                     additional_context: None,
                                     app_studio_context: None,
@@ -154,6 +156,7 @@ pub fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
                         model_id: String::new(),
                         origin: "AI_EDITOR".to_string(),
                         images: None,
+                        documents: None,
                         user_input_message_context: None,
                     },
                 });

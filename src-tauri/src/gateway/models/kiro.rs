@@ -92,9 +92,8 @@ pub enum DocumentSource {
     Bytes {
         bytes: String, // Base64 编码的字节数据
     },
-    FileId {
-        file_id: String, // Files API 上传后的文件ID
-    },
+    // 官方 DocumentSource union 仅含 bytes（extension.js Smithy schema
+    // DocumentSource$ 与 ImageSource$ 同构），无 Files API file_id 通道。
     Other {
         #[serde(flatten)]
         data: serde_json::Value,
@@ -257,6 +256,8 @@ pub struct HistoryUserMessage {
     pub origin: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<ImageBlock>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub documents: Option<Vec<DocumentBlock>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_input_message_context: Option<UserInputMessageContext>,
 }

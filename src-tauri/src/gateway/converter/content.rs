@@ -10,6 +10,14 @@ pub fn images_option(images: Vec<ImageBlock>) -> Option<Vec<ImageBlock>> {
     }
 }
 
+pub fn documents_option(documents: Vec<DocumentBlock>) -> Option<Vec<DocumentBlock>> {
+    if documents.is_empty() {
+        None
+    } else {
+        Some(documents)
+    }
+}
+
 pub fn extract_text_content(content: Option<&Value>) -> String {
     match content {
         None => String::new(),

@@ -121,12 +121,15 @@ pub fn convert_anthropic_content(content: &Value) -> Value {
                 return content.clone();
             }
 
-            // 检查是否包含图片（必须保留原始数组，extract_images 需要从中提取）
+            // 检查是否包含图片或文档（必须保留原始数组，extract_images/extract_documents 需要从中提取）
             let has_image = items.iter().any(|item| {
                 let t = item.get("type").and_then(Value::as_str).unwrap_or_default();
                 t == "image" || t == "image_url" || t == "input_image"
             });
-            if has_image {
+            let has_document = items
+                .iter()
+                .any(|item| item.get("type").and_then(Value::as_str) == Some("document"));
+            if has_image || has_document {
                 return content.clone();
             }
 
