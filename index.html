@@ -21,6 +21,11 @@
         width: 100%;
         height: 100%;
         margin: 0;
+        /* 底色必须内联在这里：index.css 要等 main.tsx 的模块图加载完才注入，
+           而 #boot-splash 被 8s 兜底撤掉后（chunk 加载失败就是这种情形）
+           页面会露出 html/body 的默认白底。内联值随后会被 index.css 里的
+           html/body 规则覆盖，不影响主题切换。 */
+        background-color: #0b1220;
       }
       #root {
         width: 100%;

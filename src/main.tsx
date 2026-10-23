@@ -9,10 +9,21 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { THEME_KEYS } from './lib/themeRegistry'
 import { scheduleBootSplashFallback } from './utils/bootSplash'
 import { applyOsAttribute } from './utils/os'
+import { showMainWindow } from './api/systemApi'
 
 // 撤卡兜底：React 若始终没挂载，启动卡会永久盖住窗口。必须在 render 之前注册，
 // 这样渲染抛错时也能撤。不能放进 index.html 的内联 script——生产 CSP 会拦掉。
-scheduleBootSplashFallback()
+// 兜底触发时同步点亮窗口：否则卡片撤了、窗口仍 visible:false，用户什么也看不到。
+scheduleBootSplashFallback(document, undefined, () => {
+  void showMainWindow().catch((e) => console.error('boot fallback show window failed:', e))
+})
+
+// 首屏 chunk 预热：路由是 lazy() 的，dev 模式下 Vite 要现场转译整条依赖链，
+// 首次冷启动可能等几十秒。这里在 render 前就发起请求，与 React 启动并行，
+// 让编译/下载提前开始（生产构建里只是命中预加载，代价可忽略）。
+void import('./components/features/Home/index').catch(() => {
+  /* 预热失败不影响正常路由加载：lazy() 会自己重试并走 Suspense fallback */
+})
 
 // 平台标记：给 <html> 打 data-os，供 CSS 区分 macOS 交通灯避让与滚动条样式。
 // 同样必须早于 render——晚一步会在 macOS 上闪一帧无避让的布局。

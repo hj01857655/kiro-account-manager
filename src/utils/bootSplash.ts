@@ -20,11 +20,14 @@ export const BOOT_SPLASH_FALLBACK_MS = 8000
  */
 export function scheduleBootSplashFallback(
   doc = document,
-  timeoutMs: number = BOOT_SPLASH_FALLBACK_MS
+  timeoutMs: number = BOOT_SPLASH_FALLBACK_MS,
+  onFallback?: () => void
 ) {
   if (typeof doc?.getElementById !== 'function') return
   if (typeof setTimeout !== 'function') return
   setTimeout(() => {
-    dismissBootSplash(doc)
+    // 已被 React 正常撤卡 → 不重复处理（也不会重复点亮窗口）
+    if (!dismissBootSplash(doc)) return
+    onFallback?.()
   }, timeoutMs)
 }

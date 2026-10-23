@@ -14,13 +14,14 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 820,
+        "height": 788,
         "resizable": true,
         "title": "Kiro Account Manager",
         "width": 1400,
-        "minWidth": 960,
-        "minHeight": 640,
+        "minWidth": 1280,
+        "minHeight": 720,
         "visible": false,
+        "backgroundColor": "#0b1220",
         "center": true,
         "decorations": true,
         "shadow": true,

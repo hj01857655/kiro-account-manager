@@ -267,9 +267,9 @@ static FRONTEND_READY: AtomicBool = AtomicBool::new(false);
 
 /// 把主窗口带到前台并按当前屏幕可用区收一次尺寸。
 ///
-/// 窗口在 tauri.conf.json 里就是 visible，启动卡由 index.html 的 #boot-splash 盖住，
-/// 所以这里不再是「首次显示」——前端首屏 ready 后调用它，是为了在 splash 撤掉的
-/// 同一时刻完成 fit + focus，避免用户看到一次尺寸跳变。
+/// 窗口在 tauri.conf.json 里是 `visible: false`，唯一让它可见的入口就是这里：
+/// 前端等路由 chunk 挂载完成后调用，那一刻启动卡后面的内容已经可读。
+/// 同时做 fit + focus，避免用户看到尺寸跳变。
 /// 调用即视为前端已就绪，供启动兜底任务判断是否需要强制拉起。
 #[tauri::command]
 fn show_main_window(app: tauri::AppHandle) {
@@ -284,38 +284,50 @@ fn show_main_window(app: tauri::AppHandle) {
 
 /// 把窗口尺寸收进当前屏幕可用区。
 ///
-/// `tauri.conf.json` 里写死 1400×820，而 13 寸 MacBook 默认缩放的可用高度
+/// `tauri.conf.json` 里写死 1400×788（16:9），而 13 寸 MacBook 默认缩放的可用高度
 /// 只有约 800px——窗口会被挤出屏幕，用户看到的是「打不开」或只能拖出来。
 /// 这里在首次显示前按 monitor 可用区收缩，保留原尺寸意图（大屏不受影响）。
+///
+/// 用 `work_area()` 而不是 `size()`：前者已经排除了任务栏 / Dock / 菜单栏
+/// （Windows 是 GetMonitorInfoW 的 rcWork，macOS 是 visibleFrame）。之前拿整屏
+/// 尺寸减固定的 80/120 去「估」任务栏，在 1920×1080@125% 这类屏幕上会白丢
+/// 几十像素：真实可用区约 824 高，原本 820 高的窗口本不需缩，却被压到 744。
+///
+/// 收缩必须等比：1400×788 是 16:9 的设计比例，只压一边会变成扁窗口，
+/// 左侧导航与内容区的比例跟着走样。取两轴缩放系数中更小的那个整体缩放，
+/// 保证长边贴住可用区、短边按原比例跟随。
 ///
 /// 只在窗口超出屏幕时收缩，不放大：放大反而会改变大屏上的观感。
 fn fit_window_to_screen(window: &tauri::WebviewWindow) {
     let Ok(Some(monitor)) = window.current_monitor() else {
         return;
     };
-    let work = monitor.size().to_logical::<u32>(monitor.scale_factor());
-    // 留出余量：dock / menu bar / 窗口阴影
-    let max_w = work.width.saturating_sub(80);
-    let max_h = work.height.saturating_sub(120);
+    let scale = monitor.scale_factor();
+    let work = monitor.work_area().size.to_logical::<u32>(scale);
     let Ok(size) = window.inner_size() else {
         return;
     };
-    let logical = size.to_logical::<u32>(monitor.scale_factor());
-    let target_w = logical.width.min(max_w);
-    let target_h = logical.height.min(max_h);
-    if target_w != logical.width || target_h != logical.height {
-        log::info!(
-            "主窗口尺寸 {}x{} 超出屏幕可用区 {}x{}，收缩为 {}x{}",
-            logical.width,
-            logical.height,
-            max_w,
-            max_h,
-            target_w,
-            target_h
-        );
-        let _ = window.set_size(tauri::LogicalSize::new(target_w, target_h));
-        let _ = window.center();
+    let logical = size.to_logical::<u32>(scale);
+    if logical.width <= work.width && logical.height <= work.height {
+        return;
     }
+
+    let factor = (work.width as f64 / logical.width as f64)
+        .min(work.height as f64 / logical.height as f64);
+    let target_w = (logical.width as f64 * factor).floor() as u32;
+    let target_h = (logical.height as f64 * factor).floor() as u32;
+
+    log::info!(
+        "主窗口尺寸 {}x{} 超出屏幕可用区 {}x{}，等比收缩为 {}x{}",
+        logical.width,
+        logical.height,
+        work.width,
+        work.height,
+        target_w,
+        target_h
+    );
+    let _ = window.set_size(tauri::LogicalSize::new(target_w, target_h));
+    let _ = window.center();
 }
 
 /// 应用 setup 回调
@@ -375,21 +387,24 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // 监听窗口关闭事件
     setup_window_close_handler(app)?;
 
-    // 主窗口始终可见（启动卡由 index.html 的 #boot-splash 盖住，不藏窗口）。
-    // 前端首屏 ready 后调 show_main_window 做 fit + focus；这里仍保留一次兜底：
-    // 若前端始终没就绪（打包损坏、JS 抛异常），3 秒后强制收一次尺寸并聚焦，
-    // 配合 index.html 里 8 秒强制撤 splash，保证用户至少能拿到一个可操作的窗口。
+    // 主窗口在 tauri.conf.json 里是 visible:false。官方对「启动白屏」的推荐做法
+    // 就是这条：窗口先藏，前端加载完成后再 show（tauri#5170）。
     //
-    // 判定用「前端是否已 ready」而不是「窗口是否聚焦」：焦点在启动后 3 秒内
-    // 切到别处（终端、浏览器）是正常操作，按焦点判会抢焦点并误报 WARN。
+    // 本项目的具体契约：
+    // 1. 正常路径：路由 chunk 就绪 → App.tsx 调 show_main_window 做 fit + focus；
+    // 2. 兜底：8 秒后仍未就绪（打包损坏、JS 抛异常）则强显，配合 index.html
+    //    里 8 秒强制撤 splash，保证窗口总能操作。
+    //
+    // 窗口底色由 tauri.conf.json 的 backgroundColor 控制（与启动卡同色），
+    // WebView 未绘制时露的是深色而不是系统白底。
     let app_handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
         if FRONTEND_READY.load(Ordering::Relaxed) {
             return;
         }
         if let Some(window) = app_handle.get_webview_window("main") {
-            log::warn!("前端 3s 内未就绪（未调用 show_main_window），强制 fit + focus");
+            log::warn!("前端 8s 内未就绪，强制 fit + focus");
             fit_window_to_screen(&window);
             let _ = window.show();
             let _ = window.set_focus();
