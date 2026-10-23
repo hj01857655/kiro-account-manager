@@ -427,8 +427,11 @@ pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
         }
 
         if !name.is_empty() {
-            log::debug!(
-                "[Tool Use] 发送 ToolUseStart: id={}, name={}",
+            // 上游会在同一工具的多个增量事件里重复携带 name，本函数无状态、
+            // 每个事件都会走到这里——降为 trace，避免同一 id 被反复刷屏。
+            // 真正的「只开一个块」由 streaming.rs 的 tool_block_indexes 保证。
+            log::trace!(
+                "[Tool Use] 解析 ToolUseStart: id={}, name={}",
                 tool_use_id,
                 name
             );

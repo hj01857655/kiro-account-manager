@@ -71,6 +71,11 @@ export function openGatewayLogDir() {
   return invoke<string>('open_gateway_log_dir')
 }
 
+/** 读取某个请求的 SSE 逐事件明细（流式请求专用，按 request_id 过滤）。 */
+export function readGatewaySseLog(requestId: string, endpoint?: string) {
+  return invoke<string[]>('read_gateway_sse_log', { requestId, endpoint: endpoint ?? null })
+}
+
 export function getGatewayRequestLogs<T = any[]>(limit = 120) {
   return invoke<T>('get_gateway_request_logs', { limit })
 }

@@ -1344,6 +1344,46 @@ pub fn open_gateway_log_dir(app: &AppHandle) -> Result<String, String> {
     Ok(dir.to_string_lossy().to_string())
 }
 
+/// 读取某个请求的 SSE 逐事件明细。
+///
+/// SSE 明细体积不可控（一次流式请求可达数万条），所以只落文件、不进内存
+/// 日志。日志行自 2026-10-23 起带 `req=<request_id>`；更早的行没有该字段，
+/// 无法归属到具体请求（返回空而非误匹配）。
+///
+/// `endpoint` 用于定位文件：三个协议各写各的（见
+/// `proxy::logging::get_client_sse_log_file`）。
+pub fn read_gateway_sse_log_inner(
+    app: &AppHandle,
+    request_id: &str,
+    endpoint: Option<&str>,
+) -> Result<Vec<String>, String> {
+    let request_id = request_id.trim();
+    if request_id.is_empty() {
+        return Err("request_id 不能为空".to_string());
+    }
+    let dir = gateway_log_dir(app)?;
+    let file_name = match endpoint.unwrap_or_default() {
+        p if p.contains("/responses") => "openai-responses-response-sse.log",
+        p if p.contains("/chat/completions") => "openai-chat-response-sse.log",
+        _ => "anthropic-messages-response-sse.log",
+    };
+    let path = dir.join(file_name);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    // 按 `req=<id>` 精确匹配：不能只查 substring，否则 request_id 前缀相同的
+    // 另一条请求会被误带进来。
+    let needle = format!("req={request_id} ");
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("读取 SSE 日志失败: {e}"))?;
+    Ok(content
+        .lines()
+        .filter(|line| line.contains(&needle))
+        .map(str::to_string)
+        .collect())
+}
+
 async fn health_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<RouterState>,

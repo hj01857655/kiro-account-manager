@@ -3,7 +3,7 @@ import { AlertCircle, AlertTriangle, Copy, KeyRound, TestTube2, ChevronRight } f
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/hooks/useApp'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { formatGatewayRequestDuration, type ClientRecipe } from './gatewayPageUtils'
+import { formatGatewayRequestDuration, shortClientLabel, type ClientRecipe } from './gatewayPageUtils'
 import { renderResponseBody, type ResponseView } from './gatewayResponseView'
 
 /// 概览「最近请求」表的一行：与日志 tab 同源，只取少量字段
@@ -17,6 +17,10 @@ export interface RecentRequestLog {
   durationMs: number
   model?: string
   error?: string
+  /** 客户端 User-Agent：概览里就能看出是哪个客户端在打 */
+  clientUserAgent?: string
+  inputTokens?: number
+  outputTokens?: number
   /** 原始请求体 / 响应体（后端已截断到 64KB），供行内展开查看 */
   requestBody?: string
   responseBody?: string
@@ -225,8 +229,10 @@ export function GatewayOverview({
                 <tr className="text-left text-muted-foreground">
                   <th className="py-1 pr-2 font-medium">{t('gateway.time')}</th>
                   <th className="py-1 pr-2 font-medium">{t('gateway.endpoint')}</th>
+                  <th className="py-1 pr-2 font-medium">{t('gatewayLogs.colClient')}</th>
                   <th className="py-1 pr-2 font-medium">{t('gateway.model')}</th>
                   <th className="py-1 pr-2 font-medium">{t('gateway.status')}</th>
+                  <th className="py-1 pr-2 text-right font-medium">{t('gateway.tokens')}</th>
                   <th className="py-1 pr-2 text-right font-medium">{t('gateway.duration')}</th>
                 </tr>
               </thead>
@@ -252,15 +258,23 @@ export function GatewayOverview({
                           </span>
                         </td>
                         <td className="py-1 pr-2 text-foreground">{log.endpoint}</td>
+                        <td className="max-w-[100px] truncate py-1 pr-2 text-muted-foreground" title={log.clientUserAgent || '-'}>
+                          {shortClientLabel(log.clientUserAgent)}
+                        </td>
                         <td className="max-w-[120px] truncate py-1 pr-2 text-foreground" title={log.model}>{log.model || '-'}</td>
                         <td className={`py-1 pr-2 font-medium ${failed ? 'text-red-500' : 'text-green-600'}`}>
                           {log.statusCode}
+                        </td>
+                        <td className="py-1 pr-2 text-right text-muted-foreground">
+                          {log.inputTokens || log.outputTokens
+                            ? `${log.inputTokens ?? 0}/${log.outputTokens ?? 0}`
+                            : '-'}
                         </td>
                         <td className="py-1 pr-2 text-right text-muted-foreground">{formatGatewayRequestDuration(log.durationMs)}</td>
                       </tr>
                       {expanded && (
                         <tr className="border-t border-border/50">
-                          <td colSpan={5} className="p-0">
+                          <td colSpan={7} className="p-0">
                             <div className="flex flex-col gap-2 bg-muted/20 px-3 py-2">
                               {log.error && (
                                 <div className="break-all text-[11px] text-red-500">{log.error}</div>

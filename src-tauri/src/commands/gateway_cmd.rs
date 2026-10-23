@@ -13,6 +13,7 @@ use crate::gateway::{
     get_gateway_request_stats as get_gateway_request_stats_inner,
     get_gateway_status as get_gateway_status_inner, load_balancer, log_store,
     open_gateway_log_dir as open_gateway_log_dir_inner,
+    read_gateway_sse_log_inner,
     save_gateway_config as save_gateway_config_inner, start_gateway as start_gateway_inner,
     stop_gateway as stop_gateway_inner, GatewayConfig, GatewayRequestLogEntry, GatewayRequestStats,
     GatewayStatus,
@@ -101,6 +102,16 @@ pub async fn get_gateway_client_stats(
 #[tauri::command]
 pub async fn open_gateway_log_dir(app: AppHandle) -> Result<String, String> {
     open_gateway_log_dir_inner(&app)
+}
+
+/// 读取某个请求的 SSE 逐事件明细（面板展开流式请求时用）。
+#[tauri::command]
+pub async fn read_gateway_sse_log(
+    app: AppHandle,
+    request_id: String,
+    endpoint: Option<String>,
+) -> Result<Vec<String>, String> {
+    read_gateway_sse_log_inner(&app, &request_id, endpoint.as_deref())
 }
 
 #[tauri::command]

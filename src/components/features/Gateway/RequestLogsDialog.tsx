@@ -14,6 +14,7 @@ import {
   getGatewayRequestStats,
   getRateLimitedAccounts,
   openGatewayLogDir,
+  readGatewaySseLog,
   resetAccountHealth
 } from '../../../api/gatewayApi'
 import { Button } from '@/components/ui/button'
@@ -44,6 +45,7 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/hooks/useApp'
+import { shortClientLabel } from './gatewayPageUtils'
 
 interface ProcessedRequestLog {
   id: string
@@ -141,6 +143,68 @@ export interface RequestLogsDialogProps {
   embedded?: boolean
 }
 
+/**
+ * 把「多个 JSON 对象首尾相连」的文本切成逐个美化后的块。
+ *
+ * 后端把上游 EventStream 的每个事件解码成 JSON 后直接 join('')，所以响应体
+ * 形如 `{"a":1}{"b":2}` —— 整体不是合法 JSON，`JSON.parse` 必失败。
+ * 这里用括号配对扫描（忽略字符串内的括号与转义）找出每个顶层对象的边界，
+ * 逐个 parse + 缩进；扫到不配对的残片就原样保留，不丢数据。
+ */
+function splitConcatenatedJson(text: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  let start = -1
+  let inString = false
+  let escaped = false
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (ch === '\\') {
+        escaped = true
+      } else if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      if (start < 0) start = i
+      continue
+    }
+
+    if (ch === '{' || ch === '[') {
+      if (depth === 0) start = i
+      depth += 1
+      continue
+    }
+
+    if (ch === '}' || ch === ']') {
+      depth -= 1
+      if (depth === 0 && start >= 0) {
+        const chunk = text.slice(start, i + 1)
+        try {
+          out.push(JSON.stringify(JSON.parse(chunk), null, 2))
+        } catch {
+          out.push(chunk)
+        }
+        start = -1
+      } else if (depth < 0) {
+        // 不配对的收尾括号：重置，避免后续全部错位
+        depth = 0
+        start = -1
+      }
+    }
+  }
+
+  return out
+}
+
 function formatRequestLogAccount(upstream?: string) {
   if (!upstream) return '-'
 
@@ -155,25 +219,6 @@ function formatRequestLogAccount(upstream?: string) {
   return upstream
 }
 
-/** UA 缩写：表格列宽有限，只留能区分客户端的标识，完整值走 title 悬停。 */
-function shortClientLabel(ua?: string) {
-  if (!ua) return '-'
-  const lower = ua.toLowerCase()
-  if (lower.includes('claude-code') || lower.includes('claude code')) return 'Claude Code'
-  if (lower.includes('codex')) return 'Codex'
-  if (lower.includes('cursor')) return 'Cursor'
-  if (lower.includes('cline')) return 'Cline'
-  if (lower.includes('continue')) return 'Continue'
-  if (lower.includes('zed')) return 'Zed'
-  if (lower.includes('python')) return 'Python SDK'
-  if (lower.includes('node') || lower.includes('axios') || lower.includes('undici')) return 'Node SDK'
-  if (lower.includes('curl')) return 'curl'
-  if (lower.includes('postman')) return 'Postman'
-  // 未识别的：取第一段（通常是产品名），过长则截断
-  const first = ua.split(/[\s/]/)[0]
-  return first.length > 18 ? `${first.slice(0, 18)}…` : first
-}
-
 export function RequestLogsDialog({
   open,
   onOpenChange,
@@ -186,6 +231,9 @@ export function RequestLogsDialog({
 }: RequestLogsDialogProps) {
   const { t } = useApp()
   const [requestLogs, setRequestLogs] = useState<ProcessedRequestLog[]>([])
+  /** 流式请求的 SSE 明细：按 log.id 缓存，展开时按需拉取 */
+  const [sseEventsByLogId, setSseEventsByLogId] = useState<Record<string, string[]>>({})
+  const [sseLoadingId, setSseLoadingId] = useState<string | null>(null)
   const [requestStats, setRequestStats] = useState<GatewayRequestStats | null>(null)
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null)
   // 维度统计与账号健康度：两个折叠区，默认收起（不抢日志表的视觉）
@@ -384,12 +432,42 @@ export function RequestLogsDialog({
     }
   }
 
+  /** 按 request_id 拉取该流式请求的 SSE 逐事件明细（结果按 log.id 缓存）。 */
+  const handleLoadSse = async (log: ProcessedRequestLog) => {
+    if (!log.requestId) return
+    if (sseEventsByLogId[log.id]) {
+      // 已拉过：再点一次收起
+      setSseEventsByLogId((prev) => {
+        const next = { ...prev }
+        delete next[log.id]
+        return next
+      })
+      return
+    }
+    setSseLoadingId(log.id)
+    try {
+      const events = await readGatewaySseLog(log.requestId, log.path)
+      setSseEventsByLogId((prev) => ({ ...prev, [log.id]: events ?? [] }))
+    } catch (err) {
+      toast.error(t('gatewayLogs.toastSseLoadFailed', { error: String(err) }))
+    } finally {
+      setSseLoadingId(null)
+    }
+  }
+
   const formatPayload = (bodyStr?: string) => {
     if (!bodyStr) return '-'
     try {
       const parsed = JSON.parse(bodyStr)
       return JSON.stringify(parsed, null, 2)
     } catch {
+      // 不是单个 JSON。EventStream 解码后的响应体是**多个 JSON 对象首尾相连**
+      // （每个上游事件一个），整体永远不是合法 JSON。逐对象切开逐个美化，
+      // 否则整段会挤成一行、完全不可读。
+      const split = splitConcatenatedJson(bodyStr)
+      if (split.length > 1) {
+        return split.join('\n')
+      }
       return bodyStr
     }
   }
@@ -830,7 +908,9 @@ export function RequestLogsDialog({
                               )}
 
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* 请求体 */}
+                                {/* 请求体：GET 类端点（health / models）没有请求体，
+                                    后端记为长度 0。整块不渲染，否则会留一个空白框。 */}
+                                {log.requestBody && (
                                 <div className="space-y-1">
                                   <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
                                     <span>{t('gatewayLogs.requestPayload')}</span>
@@ -853,8 +933,10 @@ export function RequestLogsDialog({
                                     {formatPayload(log.requestBody)}
                                   </pre>
                                 </div>
+                                )}
 
-                                {/* 响应体 */}
+                                {/* 响应体：流式请求后端只存占位符，空时不渲染块 */}
+                                {log.responseBody && (
                                 <div className="space-y-1">
                                   <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
                                     <span>{t('gatewayLogs.responsePayload')}</span>
@@ -877,10 +959,11 @@ export function RequestLogsDialog({
                                     {formatPayload(log.responseBody)}
                                   </pre>
                                 </div>
+                                )}
                               </div>
 
-                              {/* 流式请求：SSE 逐事件明细只落文件，不进内存日志（体积不可控），
-                                  这里给出文件路径与打开入口，否则面板上看不到 content_block_* 序列 */}
+                              {/* 流式请求：SSE 逐事件明细只落文件、不进内存日志。
+                                  提供「查看事件」就地展开，不用跳出去翻文件。 */}
                               {log.stream && (
                                 <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-[11px]">
                                   <div className="flex items-center justify-between gap-2">
@@ -888,18 +971,39 @@ export function RequestLogsDialog({
                                       {t('gatewayLogs.sseDetailHint')}
                                       <code className="ml-1 font-mono text-foreground">{log.path.includes('/responses') ? 'openai-responses-response-sse.log' : log.path.includes('/chat/completions') ? 'openai-chat-response-sse.log' : 'anthropic-messages-response-sse.log'}</code>
                                     </span>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-6 shrink-0 px-2 text-[10px]"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        void openGatewayLogDir()
-                                      }}
-                                    >
-                                      {t('gatewayLogs.openLogDir')}
-                                    </Button>
+                                    <div className="flex shrink-0 gap-1">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-6 px-2 text-[10px]"
+                                        disabled={!log.requestId}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          void handleLoadSse(log)
+                                        }}
+                                      >
+                                        {sseLoadingId === log.id ? t('gatewayLogs.sseLoading') : t('gatewayLogs.sseShowEvents')}
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-6 px-2 text-[10px]"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          void openGatewayLogDir()
+                                        }}
+                                      >
+                                        {t('gatewayLogs.openLogDir')}
+                                      </Button>
+                                    </div>
                                   </div>
+                                  {sseEventsByLogId[log.id] && (
+                                    <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded border bg-background p-2 font-mono text-[10px] text-muted-foreground">
+                                      {sseEventsByLogId[log.id].length === 0
+                                        ? t('gatewayLogs.sseNoEvents')
+                                        : sseEventsByLogId[log.id].join('\n')}
+                                    </pre>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -2,6 +2,15 @@
 
 use super::*;
 
+tokio::task_local! {
+    /// 当前流式请求的标识，供 `send_event` 落盘时标记归属。
+    ///
+    /// `send_event` 是公共底层（25 个调用点）、拿不到 `log_context`；
+    /// 而 SSE 日志必须能按请求过滤，否则面板里点开一个请求只能去翻整个文件。
+    /// 用 task-local 而不改签名：流任务入口 set 一次，内层所有调用自动继承。
+    pub(crate) static SSE_LOG_REQUEST_ID: String;
+}
+
 
 /// 首帧前的 SSE 心跳间隔（G-13）。取值远低于代理常见的 60s 空闲阈值，
 /// 同时不至于在短期等待时扰流。
@@ -38,7 +47,16 @@ struct StreamState {
     stop_matcher: StopSequenceMatcher,
     /// 是否因命中 stop 序列而提前终止
     stopped_by_sequence: bool,
+    /// 每类上游事件还能写多少条日志（见 EVENT_LOG_PER_KIND_BUDGET）。
+    /// 上游对同一工具事件可能重发数十万次，不节流会把磁盘写满。
+    event_log_budget: HashMap<String, u32>,
+    /// 已提示过“超过落盘上限”的事件类型，避免重复 warn
+    event_log_budget_noted: std::collections::HashSet<String>,
 }
+
+/// 单请求内每类上游事件最多写多少条到 `kiro-response-eventstream.log`。
+/// 正常一次请求的同类事件是几十条量级；超过这个数基本可判定为上游重发。
+const EVENT_LOG_PER_KIND_BUDGET: u32 = 500;
 
 pub fn stream_proxy_response(
     state: RouterState,
@@ -59,7 +77,10 @@ pub fn stream_proxy_response(
     connection_guard: crate::gateway::load_balancer::ConnectionGuard,
 ) -> Response {
     let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(2048);
-    tokio::spawn(async move {
+    // 整个流任务包在 task-local 作用域里：内层 `send_event` 落 SSE 日志时
+    // 能拿到本次请求的 request_id，日志行因此可按请求过滤。
+    let sse_request_id = log_context.request_id.clone();
+    tokio::spawn(SSE_LOG_REQUEST_ID.scope(sse_request_id, async move {
         // guard 在本任务结束时 Drop，覆盖整个流式生命周期
         let _connection_guard = connection_guard;
         // 辅助函数：还原工具名称（sanitized -> original）
@@ -232,26 +253,48 @@ function_call: None,
                                 // 将 payload 转换为文本
                                 let json_text = String::from_utf8_lossy(&msg.payload);
 
-                                // 写入每个 EventStream 事件到文件
+                                // 写入每个 EventStream 事件到文件（按事件类型节流：上游可能
+                                // 对同一工具事件重发数十万次，全量写盘会直接吃掉磁盘）
                                 {
                                     let log_dir = crate::core::paths::app_data_dir_or_default().join("logs");
                                     let _ = std::fs::create_dir_all(&log_dir);
-                                    let entry = format!(
-                                        "[{}] kind=kiro_event idx={} event={} bytes={} chars={} body={}\n",
-                                        chrono::Local::now().format("%H:%M:%S%.3f"),
-                                        log_context.request_index,
-                                        event_type.unwrap_or("unknown"),
-                                        json_text.len(),
-                                        json_text.chars().count(),
-                                        json_text
-                                    );
-                                    let _ = std::fs::OpenOptions::new()
-                                        .create(true)
-                                        .append(true)
-                                        .open(log_dir.join("kiro-response-eventstream.log"))
-                                        .and_then(|mut f| {
-                                            std::io::Write::write_all(&mut f, entry.as_bytes())
-                                        });
+                                    let kind = event_type.unwrap_or("unknown");
+                                    let allow_write = {
+                                        let budget = st.event_log_budget.entry(kind.to_string())
+                                            .or_insert(EVENT_LOG_PER_KIND_BUDGET);
+                                        if *budget > 0 {
+                                            *budget -= 1;
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    };
+                                    if allow_write {
+                                        let entry = format!(
+                                            "[{}] kind=kiro_event idx={} event={} bytes={} chars={} body={}\n",
+                                            chrono::Local::now().format("%H:%M:%S%.3f"),
+                                            log_context.request_index,
+                                            kind,
+                                            json_text.len(),
+                                            json_text.chars().count(),
+                                            json_text
+                                        );
+                                        let _ = std::fs::OpenOptions::new()
+                                            .create(true)
+                                            .append(true)
+                                            .open(log_dir.join("kiro-response-eventstream.log"))
+                                            .and_then(|mut f| {
+                                                std::io::Write::write_all(&mut f, entry.as_bytes())
+                                            });
+                                    } else if !st.event_log_budget_noted.contains(kind) {
+                                        st.event_log_budget_noted.insert(kind.to_string());
+                                        log::warn!(
+                                            "[Stream] `{}` 事件已超过每请求 {} 条的落盘上限，\
+                                             后续同类事件不再写日志（上游疑似重发）",
+                                            kind,
+                                            EVENT_LOG_PER_KIND_BUDGET
+                                        );
+                                    }
                                 }
 
                                 // 解析 JSON 事件
@@ -454,24 +497,31 @@ function_call: None,
                                             // stop 序列截断：Kiro 上游无 stop 字段对应物，
                                             // 由网关在响应侧截断（社区 kirocc 同样
                                             // "enforces stop_sequences adapter-side"）。
-                                            // 命中后停止下发后续文本。
-                                            if st.stop_matcher.stopped() {
-                                                continue;
+                                            //
+                                            // 这里不能用 `continue`：缓冲区推进（raw_buffer.drain）
+                                            // 在 match event 之后，continue 会跳过它，导致同一
+                                            // 事件被无限重复解析、流卡死。改为提前算出要不要
+                                            // 下发，不跳出循环。
+                                            let mut emittable_text: Option<String> = None;
+                                            if !st.stop_matcher.stopped() {
+                                                let visible = stop_sequence::visible_text(&text);
+                                                match st.stop_matcher.feed(&visible) {
+                                                    Some(emittable) if !emittable.is_empty() => {
+                                                        emittable_text = Some(emittable);
+                                                    }
+                                                    Some(_) => {}
+                                                    None => {
+                                                        log::info!(
+                                                            "[流式] 命中 stop 序列 {:?}，停止下发后续文本",
+                                                            st.stop_matcher.matched()
+                                                        );
+                                                        st.stopped_by_sequence = true;
+                                                    }
+                                                }
                                             }
-                                            let visible = stop_sequence::visible_text(&text);
-                                            let Some(emittable) = st.stop_matcher.feed(&visible) else {
-                                                log::info!(
-                                                    "[流式] 命中 stop 序列 {:?}，停止下发后续文本",
-                                                    st.stop_matcher.matched()
-                                                );
-                                                st.stopped_by_sequence = true;
-                                                continue;
-                                            };
-                                            if emittable.is_empty() {
-                                                continue;
-                                            }
-                                            aggregated.text.push_str(&emittable);
-                                            for segment in parser.push_and_parse(&emittable) {
+                                            if let Some(emittable) = emittable_text {
+                                                aggregated.text.push_str(&emittable);
+                                                for segment in parser.push_and_parse(&emittable) {
                                                 handle_stream_text(
                                                     &tx,
                                                     format,
@@ -492,6 +542,7 @@ function_call: None,
                                                     aggregated.cache_creation_input_tokens,
                                                 )
                                                 .await;
+                                                }
                                             }
                                         }
                                         KiroEvent::ToolUseStart { id, name } => {
@@ -507,12 +558,13 @@ function_call: None,
                                                 ResponseFormat::Anthropic => {
                                                     // 同一个 tool_use id 只能开一个块：上游可能既发
                                                     // ToolUseStart、又在首个 InputDelta 里带 name，两条
-                                                    // 路径都会走到开块逻辑。已有 index 就跳过，
-                                                    // 否则客户端会收到同 id 的两个 content_block_start。
-                                                    if st.tool_block_indexes.contains_key(&id) {
-                                                        continue;
-                                                    }
-                                                    ensure_anthropic_message_start(
+                                                    // 路径都会走到开块逻辑。已有 index 就跳过开块。
+                                                    //
+                                                    // 不能在这里 `continue`：缓冲区推进
+                                                    // （raw_buffer.drain）在 match event 之后，
+                                                    // continue 会跳过它 → 缓冲区不前进 → 流卡死。
+                                                    if !st.tool_block_indexes.contains_key(&id) {
+                                                        ensure_anthropic_message_start(
                                                         &tx,
                                                         &mut st.message_started,
                                                         &anthropic_id,
@@ -549,6 +601,7 @@ function_call: None,
                                                         &data.to_string(),
                                                     )
                                                     .await;
+                                                    }
                                                 }
                                                 ResponseFormat::Responses => {
                                                     let output_index = st.responses_next_output_index;
@@ -1445,12 +1498,10 @@ function_call: None,
             }
         }
 
-        // 记录请求日志（token 已经在发送响应前估算好了）
-        let response_body_log = if aggregated.text.is_empty() {
-            None
-        } else {
-            Some(aggregated.text.clone())
-        };
+        // 记录请求日志（token 已经在发送响应前估算好了）。
+        // 注意：这里先占位，真正的响应体在下面按协议构造（含 tool_use / thinking /
+        // citations）；纯工具调用的回合 `aggregated.text` 为空，只记 text 会得到空值。
+        let response_body_log: Option<String>;
 
         // 写入客户端响应到日志文件
         {
@@ -1480,6 +1531,9 @@ function_call: None,
             };
 
             let body_end = safe_truncate(&response_body, 50000);
+            // 用按协议构造的完整响应体作为日志内容：纯工具调用回合 text 为空，
+            // 但响应体里仍有 tool_use 块，不能因此记成 null。
+            response_body_log = Some(response_body.clone());
             let entry = format!(
                 "[{}] kind=client_response idx={} endpoint={} stream=true status=200 bytes={} truncated={} body={}\n",
                 chrono::Local::now().format("%H:%M:%S"),
@@ -1538,7 +1592,7 @@ function_call: None,
             aggregated.cache_creation_input_tokens,
             &state,
         );
-    }); // tokio::spawn 闭合
+    })); // tokio::spawn 闭合（外层是 SSE_LOG_REQUEST_ID.scope）
 
     Response::builder()
         .status(StatusCode::OK)
@@ -1755,13 +1809,19 @@ pub async fn send_event(
     event: Option<&str>,
     payload: &str,
 ) -> bool {    // 写入发给客户端的每个 SSE 事件到文件
+    // 注意：SSE 明细体积不可控（一次流式请求可达数万条），但本函数是公共
+    // 底层、拿不到 config。上游事件落盘已在调用点按 log_requests 与预算节流；
+    // 这里保持无条件写入，由外层 log_requests 关闭时整体短路（见调用方）。
     {
         let log_dir = crate::core::paths::app_data_dir_or_default().join("logs");
         let body_end = safe_truncate(payload, 2000);
         let entry = if let Some(event_name) = event {
             format!(
-                "[{}] kind=client_sse event={} bytes={} truncated={} data={}\n",
+                "[{}] kind=client_sse req={} event={} bytes={} truncated={} data={}\n",
                 chrono::Local::now().format("%H:%M:%S%.3f"),
+                SSE_LOG_REQUEST_ID
+                    .try_with(|id| id.clone())
+                    .unwrap_or_else(|_| "-".to_string()),
                 event_name,
                 payload.len(),
                 body_end < payload.len(),
@@ -1769,8 +1829,11 @@ pub async fn send_event(
             )
         } else {
             format!(
-                "[{}] kind=client_sse event=data bytes={} truncated={} data={}\n",
+                "[{}] kind=client_sse req={} event=data bytes={} truncated={} data={}\n",
                 chrono::Local::now().format("%H:%M:%S%.3f"),
+                SSE_LOG_REQUEST_ID
+                    .try_with(|id| id.clone())
+                    .unwrap_or_else(|_| "-".to_string()),
                 payload.len(),
                 body_end < payload.len(),
                 &payload[..body_end]

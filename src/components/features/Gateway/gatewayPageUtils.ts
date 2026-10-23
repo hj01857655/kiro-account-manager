@@ -587,6 +587,31 @@ export const formatGatewayRequestDuration = (durationMs: number): string => {
   return `${(duration / 1000).toFixed(duration >= 10_000 ? 0 : 2)} s`
 }
 
+/**
+ * 把客户端 User-Agent 缩成表格里能认出的短标签。
+ *
+ * 日志 tab 与概览「最近请求」共用：两处展示同一份数据，规则不能各维护一套，
+ * 否则同一个请求在两处显示成不同客户端会被当成 bug。
+ * 完整 UA 走 title 悬停。
+ */
+export const shortClientLabel = (ua?: string): string => {
+  if (!ua) return '-'
+  const lower = ua.toLowerCase()
+  if (lower.includes('claude-code') || lower.includes('claude code')) return 'Claude Code'
+  if (lower.includes('codex')) return 'Codex'
+  if (lower.includes('cursor')) return 'Cursor'
+  if (lower.includes('cline')) return 'Cline'
+  if (lower.includes('continue')) return 'Continue'
+  if (lower.includes('zed')) return 'Zed'
+  if (lower.includes('python')) return 'Python SDK'
+  if (lower.includes('node') || lower.includes('axios') || lower.includes('undici')) return 'Node SDK'
+  if (lower.includes('curl')) return 'curl'
+  if (lower.includes('postman')) return 'Postman'
+  // 未识别的：取第一段（通常是产品名），过长则截断
+  const first = ua.split(/[\s/]/)[0]
+  return first.length > 18 ? `${first.slice(0, 18)}…` : first
+}
+
 export const getGatewayRequestOutcomeColor = (outcome: string): string => {
   if (outcome === 'success') return 'teal'
   if (outcome === 'stream') return 'blue'

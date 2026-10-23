@@ -20,6 +20,7 @@ use auth::AuthState;
 use core::account::{AccountStore, GroupTagStore};
 use services::session_storage::SessionStorage;
 use state::AppState;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Listener, Manager};
 
@@ -72,6 +73,7 @@ use commands::gateway_cmd::{
     // 负载均衡 API
     get_rate_limited_accounts,
     open_gateway_log_dir,
+    read_gateway_sse_log,
     reset_account_health,
     save_gateway_config,
     start_gateway,
@@ -256,13 +258,22 @@ fn handle_deep_link_event(app_handle: &tauri::AppHandle, payload: &str) {
     auth::handle_incoming_deep_link(app_handle, &url);
 }
 
+/// 前端首屏是否已就绪（已调用 `show_main_window`）。
+///
+/// 启动兜底任务的判定依据：它要回答的是「前端是否真的起来了」，而不是
+/// 「窗口此刻有没有焦点」——用户在启动后 3 秒内把焦点切到终端/浏览器是
+/// 完全正常的，用焦点判定会在每次开发调试时抢焦点并误报 WARN。
+static FRONTEND_READY: AtomicBool = AtomicBool::new(false);
+
 /// 把主窗口带到前台并按当前屏幕可用区收一次尺寸。
 ///
 /// 窗口在 tauri.conf.json 里就是 visible，启动卡由 index.html 的 #boot-splash 盖住，
 /// 所以这里不再是「首次显示」——前端首屏 ready 后调用它，是为了在 splash 撤掉的
 /// 同一时刻完成 fit + focus，避免用户看到一次尺寸跳变。
+/// 调用即视为前端已就绪，供启动兜底任务判断是否需要强制拉起。
 #[tauri::command]
 fn show_main_window(app: tauri::AppHandle) {
+    FRONTEND_READY.store(true, Ordering::Relaxed);
     if let Some(window) = app.get_webview_window("main") {
         fit_window_to_screen(&window);
         let _ = window.unminimize();
@@ -366,18 +377,22 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // 主窗口始终可见（启动卡由 index.html 的 #boot-splash 盖住，不藏窗口）。
     // 前端首屏 ready 后调 show_main_window 做 fit + focus；这里仍保留一次兜底：
-    // 若前端始终没调用（打包损坏、JS 抛异常），3 秒后强制收一次尺寸并聚焦，
+    // 若前端始终没就绪（打包损坏、JS 抛异常），3 秒后强制收一次尺寸并聚焦，
     // 配合 index.html 里 8 秒强制撤 splash，保证用户至少能拿到一个可操作的窗口。
+    //
+    // 判定用「前端是否已 ready」而不是「窗口是否聚焦」：焦点在启动后 3 秒内
+    // 切到别处（终端、浏览器）是正常操作，按焦点判会抢焦点并误报 WARN。
     let app_handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        if FRONTEND_READY.load(Ordering::Relaxed) {
+            return;
+        }
         if let Some(window) = app_handle.get_webview_window("main") {
-            if !window.is_focused().unwrap_or(false) {
-                log::warn!("主窗口 3s 内未聚焦，强制 fit + focus");
-                fit_window_to_screen(&window);
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            log::warn!("前端 3s 内未就绪（未调用 show_main_window），强制 fit + focus");
+            fit_window_to_screen(&window);
+            let _ = window.show();
+            let _ = window.set_focus();
         }
     });
 
@@ -639,6 +654,7 @@ fn main() {
             get_gateway_endpoint_stats,
             get_gateway_client_stats,
             open_gateway_log_dir,
+            read_gateway_sse_log,
             clear_gateway_request_logs,
             test_account_proxy,
             // Gateway 负载均衡 API

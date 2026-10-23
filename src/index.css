@@ -398,3 +398,10 @@ html {
     scroll-behavior: auto !important;
   }
 }
+
+/* 折叠列表箭头：折叠态朝右（▶）、展开后转 90° 朝下（▼）。
+   不用 Tailwind 的命名组变体（group-data-[state=open]/…）：Tailwind v4
+   扫不到它，生成的 CSS 里没有对应规则，箭头会永远朝右。 */
+[data-slot="accordion-trigger"][data-state="open"] [data-slot="accordion-trigger-icon"] {
+  transform: rotate(90deg);
+}
