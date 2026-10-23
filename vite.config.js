@@ -26,8 +26,13 @@ export default defineConfig({
       overlay: false, // 禁用错误覆盖层，减少渲染开销
     },
     // 预热常用文件，加快首次加载
+    //
+    // 注意：不要在这里列 App.tsx。它会 import 全部路由（懒加载 chunk 的
+    // import 语句仍然会被解析），warmup 会把整条依赖链在 dev server
+    // 就绪前同步预转换，导致 index.html 首次响应等 14-50 秒（实测）。
+    // 只预热入口本身，其余交给按需编译。
     warmup: {
-      clientFiles: ['./src/main.tsx', './src/App.tsx'],
+      clientFiles: ['./src/main.tsx'],
     },
   },
   // 优化依赖预构建
