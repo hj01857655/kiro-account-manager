@@ -1629,6 +1629,8 @@
   "gatewayLogs.colPath": "Эндпоинт",
   "gatewayLogs.colAccount": "Аккаунт",
   "gatewayLogs.colModel": "Целевая модель",
+  "gatewayLogs.colClient": "Клиент",
+  "gatewayLogs.colClientTitle": "User-Agent клиента (наведите для полного значения)",
   "gatewayLogs.colStatusTitle": "Код состояния HTTP",
   "gatewayLogs.colStatus": "Код",
   "gatewayLogs.colInput": "Вход",

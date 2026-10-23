@@ -1629,6 +1629,8 @@
   "gatewayLogs.colPath": "Endpoint",
   "gatewayLogs.colAccount": "Account",
   "gatewayLogs.colModel": "Target model",
+  "gatewayLogs.colClient": "Client",
+  "gatewayLogs.colClientTitle": "Client User-Agent (hover for the full value)",
   "gatewayLogs.colStatusTitle": "HTTP status code",
   "gatewayLogs.colStatus": "Status",
   "gatewayLogs.colInput": "Input",

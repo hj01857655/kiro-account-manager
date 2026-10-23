@@ -1629,6 +1629,8 @@
   "gatewayLogs.colPath": "接口路径",
   "gatewayLogs.colAccount": "账号",
   "gatewayLogs.colModel": "目标模型",
+  "gatewayLogs.colClient": "客户端",
+  "gatewayLogs.colClientTitle": "客户端 User-Agent（悬停查看完整值）",
   "gatewayLogs.colStatusTitle": "HTTP 响应状态码",
   "gatewayLogs.colStatus": "响应码",
   "gatewayLogs.colInput": "输入",

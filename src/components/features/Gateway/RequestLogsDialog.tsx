@@ -63,6 +63,8 @@ interface ProcessedRequestLog {
   errorType?: string
   outcome?: string
   stream?: boolean
+  /** 客户端发来的 User-Agent（区分 Claude Code / Codex / 自建客户端） */
+  clientUserAgent?: string
   requestBody?: string
   responseBody?: string
 }
@@ -151,6 +153,25 @@ function formatRequestLogAccount(upstream?: string) {
   }
 
   return upstream
+}
+
+/** UA 缩写：表格列宽有限，只留能区分客户端的标识，完整值走 title 悬停。 */
+function shortClientLabel(ua?: string) {
+  if (!ua) return '-'
+  const lower = ua.toLowerCase()
+  if (lower.includes('claude-code') || lower.includes('claude code')) return 'Claude Code'
+  if (lower.includes('codex')) return 'Codex'
+  if (lower.includes('cursor')) return 'Cursor'
+  if (lower.includes('cline')) return 'Cline'
+  if (lower.includes('continue')) return 'Continue'
+  if (lower.includes('zed')) return 'Zed'
+  if (lower.includes('python')) return 'Python SDK'
+  if (lower.includes('node') || lower.includes('axios') || lower.includes('undici')) return 'Node SDK'
+  if (lower.includes('curl')) return 'curl'
+  if (lower.includes('postman')) return 'Postman'
+  // 未识别的：取第一段（通常是产品名），过长则截断
+  const first = ua.split(/[\s/]/)[0]
+  return first.length > 18 ? `${first.slice(0, 18)}…` : first
 }
 
 export function RequestLogsDialog({
@@ -246,6 +267,7 @@ export function RequestLogsDialog({
         errorType: log.errorType,
         outcome: log.outcome,
         stream: log.stream,
+        clientUserAgent: log.clientUserAgent,
         requestBody: log.requestBody,
         responseBody: log.responseBody
       })))
@@ -728,6 +750,7 @@ export function RequestLogsDialog({
                 <th className="px-2 py-2 text-left w-[100px] font-sans">{t('gatewayLogs.colPath')}</th>
                 <th className="px-2 py-2 text-left w-[140px] font-sans">{t('gatewayLogs.colAccount')}</th>
                 <th className="px-2 py-2 text-left w-[150px] font-sans">{t('gatewayLogs.colModel')}</th>
+                <th className="px-2 py-2 text-left w-[110px] font-sans" title={t('gatewayLogs.colClientTitle')}>{t('gatewayLogs.colClient')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colStatusTitle')}>{t('gatewayLogs.colStatus')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colInput')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colOutput')}</th>
@@ -739,7 +762,7 @@ export function RequestLogsDialog({
             <tbody>
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-16 text-muted-foreground font-sans text-sm">
+                  <td colSpan={12} className="text-center py-16 text-muted-foreground font-sans text-sm">
                     {requestLogs.length === 0 ? t('gatewayLogs.waitingTraffic') : t('gatewayLogs.noMatch')}
                   </td>
                 </tr>
@@ -767,6 +790,9 @@ export function RequestLogsDialog({
                           {formatRequestLogAccount(log.upstream)}
                         </td>
                         <td className="px-2 py-2 truncate max-w-[120px]" title={log.model}>{log.model || '-'}</td>
+                        <td className="px-2 py-2 truncate max-w-[110px] text-muted-foreground" title={log.clientUserAgent || '-'}>
+                          {shortClientLabel(log.clientUserAgent)}
+                        </td>
                         <td className="px-2 py-2 text-center">
                           <span className={cn(
                             "px-1.5 py-0.5 rounded text-[10px] font-semibold",
