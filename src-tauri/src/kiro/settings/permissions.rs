@@ -18,7 +18,7 @@
 //   项目： ~/.kiro/workspace-roots/<workspace-id>/permissions.yaml  (回退 permissions.json)
 //
 // 自 1.1.14 适配起同时支持**全局**与**项目**两级作用域。项目级的 workspace-id
-// 算法由 IDE 构建产物逆向得出并经本机实测校验，见 `workspace_id_for`。
+// 算法由 IDE 构建产物分析得出并经本机实测校验，见 `workspace_id_for`。
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -48,7 +48,7 @@ impl PermissionScope {
     }
 }
 
-/// 复刻 Kiro IDE 的 workspace-id 算法（1.1.14 逆向 + 本机实测）：
+/// 复刻 Kiro IDE 的 workspace-id 算法（1.1.14 分析 + 本机实测）：
 ///
 /// ```text
 /// workspace_id = sha256( 路径转小写 且 分隔符统一为 '/' )[:16]

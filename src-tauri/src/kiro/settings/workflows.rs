@@ -1,7 +1,7 @@
 // Workflows 管理（读取/编辑 <project>/.kiro/workflows/*.workflow.{json,yaml,yml}
 // 以及 ~/.kiro/workflows/*）
 //
-// 逆向依据（Kiro 1.1.14，见 docs/Kiro 1.1.14/未覆盖功能与权限预设.md）：
+// 协议依据（Kiro 1.1.14，见 docs/Kiro 1.1.14/未覆盖功能与权限预设.md）：
 // - 文件：`.workflow.json` / `.workflow.yaml` / `.workflow.yml`（产物中分别 5/6 次）
 // - 四个合法根目录（优先级）：工作区 `.kiro/workflows/` > `~/.kiro/workflows/` >
 //   `~/.kiro/cloud-cache/<scope>/config/workflows/`（云端只读）> bundled（`bundled://<name>`）

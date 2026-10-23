@@ -486,7 +486,7 @@ impl SteeringManager {
 
 // ---------- 嵌套 AGENTS.md（Kiro 1.1.14）----------
 //
-// 逆向结论（详见 docs/Kiro 1.1.14/嵌套AGENTS.md加载机制.md）：
+// 结论（详见 docs/Kiro 1.1.14/嵌套AGENTS.md加载机制.md）：
 // `AGENTS.md` 与 `.kiro/steering/*.md` 同属 Steering 子系统，Kiro 会递归找出
 // 工作区里**每一层目录**的 AGENTS.md，与 steering 文档合并成同一份清单，且排序为
 //   根 AGENTS.md  →  嵌套 AGENTS.md  →  .kiro/steering/*.md  →  全局 steering

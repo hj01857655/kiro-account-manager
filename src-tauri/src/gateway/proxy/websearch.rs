@@ -1,6 +1,6 @@
 //! Claude Code WebSearch 强制工具调用子请求的处理。
 //!
-//! ## 背景（逆向结论，2026-09-28 实测）
+//! ## 背景（协议取证结论，2026-09-28 实测）
 //!
 //! Claude Code（`cc_entrypoint=claude-desktop-3p`）执行内置 WebSearch 时，会向
 //! Anthropic 兼容端点发起一个独立子请求：

@@ -1,7 +1,7 @@
 // Specs 管理（读取/编辑 ~/.kiro/specs/<name>/{requirements,design,tasks}.md
 // 以及 <project>/.kiro/specs/<name>/...）
 //
-// 逆向依据（Kiro 1.1.14，见 docs/Kiro 1.1.14/未覆盖功能与权限预设.md）：
+// 协议依据（Kiro 1.1.14，见 docs/Kiro 1.1.14/未覆盖功能与权限预设.md）：
 // - 目录常量 `.kiro/specs`，每个 spec 一个子目录 `<name>/`
 // - 子目录内固定三个约定命名的 Markdown：requirements.md(112 次) / design.md(109) / tasks.md(94)
 // - 无 JSON schema，纯 Markdown，故实现门槛低
