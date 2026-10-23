@@ -505,6 +505,13 @@ function_call: None,
                                                 .or_insert((original_name.clone(), String::new()));
                                             match format {
                                                 ResponseFormat::Anthropic => {
+                                                    // 同一个 tool_use id 只能开一个块：上游可能既发
+                                                    // ToolUseStart、又在首个 InputDelta 里带 name，两条
+                                                    // 路径都会走到开块逻辑。已有 index 就跳过，
+                                                    // 否则客户端会收到同 id 的两个 content_block_start。
+                                                    if st.tool_block_indexes.contains_key(&id) {
+                                                        continue;
+                                                    }
                                                     ensure_anthropic_message_start(
                                                         &tx,
                                                         &mut st.message_started,
