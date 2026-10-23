@@ -748,9 +748,9 @@ export function RequestLogsDialog({
                 <th className="px-2 py-2 text-left w-[10px] font-sans"></th>
                 <th className="px-2 py-2 text-left w-[100px] font-sans">{t('gatewayLogs.colTime')}</th>
                 <th className="px-2 py-2 text-left w-[100px] font-sans">{t('gatewayLogs.colPath')}</th>
+                <th className="px-2 py-2 text-left w-[110px] font-sans" title={t('gatewayLogs.colClientTitle')}>{t('gatewayLogs.colClient')}</th>
                 <th className="px-2 py-2 text-left w-[140px] font-sans">{t('gatewayLogs.colAccount')}</th>
                 <th className="px-2 py-2 text-left w-[150px] font-sans">{t('gatewayLogs.colModel')}</th>
-                <th className="px-2 py-2 text-left w-[110px] font-sans" title={t('gatewayLogs.colClientTitle')}>{t('gatewayLogs.colClient')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colStatusTitle')}>{t('gatewayLogs.colStatus')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colInput')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colOutput')}</th>
@@ -786,13 +786,13 @@ export function RequestLogsDialog({
                           {log.outcome?.includes('cache') && <span className="text-blue-500 mr-1" title={t('gatewayLogs.cacheHitTitle')}>⚡</span>}
                           {log.path}
                         </td>
+                        <td className="px-2 py-2 truncate max-w-[110px] text-muted-foreground" title={log.clientUserAgent || '-'}>
+                          {shortClientLabel(log.clientUserAgent)}
+                        </td>
                         <td className="px-2 py-2 truncate max-w-[140px] text-muted-foreground" title={log.upstream || '-'}>
                           {formatRequestLogAccount(log.upstream)}
                         </td>
                         <td className="px-2 py-2 truncate max-w-[120px]" title={log.model}>{log.model || '-'}</td>
-                        <td className="px-2 py-2 truncate max-w-[110px] text-muted-foreground" title={log.clientUserAgent || '-'}>
-                          {shortClientLabel(log.clientUserAgent)}
-                        </td>
                         <td className="px-2 py-2 text-center">
                           <span className={cn(
                             "px-1.5 py-0.5 rounded text-[10px] font-semibold",
