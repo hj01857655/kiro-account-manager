@@ -123,7 +123,8 @@ function GatewayConfig({
     config.responseCacheEnabled
       ? `${t('gateway.enabled')} · TTL ${config.responseCacheTtl}s`
       : t('gateway.disabled'),
-    config.webSearchEnabled ? t('gateway.webSearchOn') : t('gateway.webSearchOff')
+    config.webSearchEnabled ? t('gateway.webSearchOn') : t('gateway.webSearchOff'),
+    config.toolSearchEnabled ? t('gateway.toolSearchOn') : t('gateway.toolSearchOff')
   ].join(' · ')
   const accessSummary = `${config.localOnly ? t('gateway.localOnly') : t('gateway.allowRemote')} · ${config.enabled ? t('gateway.autoStartOn') : t('gateway.autoStartOff')}`
 
@@ -371,6 +372,10 @@ function GatewayConfig({
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
                   <Label className="text-sm">{t('gateway.webSearchToggle')}</Label>
                   <Switch checked={!!config.webSearchEnabled} onCheckedChange={(checked: boolean) => setField('webSearchEnabled', checked)} />
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                  <Label className="text-sm">{t('gateway.toolSearchToggle')}</Label>
+                  <Switch checked={!!config.toolSearchEnabled} onCheckedChange={(checked: boolean) => setField('toolSearchEnabled', checked)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs text-muted-foreground">{t('gateway.cacheTTLSeconds')}</Label>

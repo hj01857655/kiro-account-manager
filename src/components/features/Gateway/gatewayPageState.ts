@@ -35,6 +35,7 @@ export interface GatewayConfig {
   responseCacheEnabled: boolean;
   responseCacheTtl: number;
   webSearchEnabled: boolean;
+  toolSearchEnabled: boolean;
   upstreamProxy: string;
   maxToolDescriptionLength: number;
 }
@@ -93,6 +94,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   responseCacheEnabled: true,
   responseCacheTtl: 180,
   webSearchEnabled: true,
+  toolSearchEnabled: true,
   upstreamProxy: '',
   maxToolDescriptionLength: 10237
 }
@@ -175,6 +177,7 @@ export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
   responseCacheEnabled: gatewayConfig?.responseCacheEnabled ?? true,
   responseCacheTtl: gatewayConfig?.responseCacheTtl ?? 180,
   webSearchEnabled: gatewayConfig?.webSearchEnabled ?? true,
+  toolSearchEnabled: gatewayConfig?.toolSearchEnabled ?? true,
   upstreamProxy: typeof gatewayConfig?.upstreamProxy === 'string' ? gatewayConfig.upstreamProxy : '',
   maxToolDescriptionLength: gatewayConfig?.maxToolDescriptionLength ?? 10237
 })
@@ -210,6 +213,7 @@ export const buildGatewayPayload = (config: GatewayConfig) => ({
   responseCacheEnabled: !!config.responseCacheEnabled,
   responseCacheTtl: Number(config.responseCacheTtl) || 3600,
   webSearchEnabled: config.webSearchEnabled !== false,
+  toolSearchEnabled: config.toolSearchEnabled !== false,
   // 空串归一为 null：后端将空串视为非法（upstreamProxy 必须是有效 URL 或缺失）
   upstreamProxy: config.upstreamProxy?.trim() ? config.upstreamProxy.trim() : null,
   maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0

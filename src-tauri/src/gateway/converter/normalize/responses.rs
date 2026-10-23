@@ -471,8 +471,16 @@ pub fn convert_responses_tools(
 
     let converted: Vec<Tool> = items
         .iter()
-        .filter_map(|item| {
-            let (tool, mapping) = convert_responses_tool(item)?;
+        .flat_map(|item| {
+            // `namespace` 是官方「把一组 function/custom 工具包在共享命名空间下」
+            // 的形状：`{ description, name, tools, type: "namespace" }`。
+            // 整项跳过会让命名空间里的所有工具消失，必须把成员逐个展开。
+            if item.get("type").and_then(Value::as_str) == Some("namespace") {
+                return expand_namespace_tool(item, &mut tool_name_map, &mut deferred_tool_names);
+            }
+            let Some((tool, mapping)) = convert_responses_tool(item) else {
+                return Vec::new();
+            };
             if let Some((sanitized, original)) = mapping {
                 tool_name_map.insert(sanitized, original);
             }
@@ -481,7 +489,7 @@ pub fn convert_responses_tools(
                 // 消费约定一致（proxy/tool_search.rs）
                 deferred_tool_names.push(tool.function.name.clone());
             }
-            Some(tool)
+            vec![tool]
         })
         .collect();
 
@@ -490,6 +498,78 @@ pub fn convert_responses_tools(
     } else {
         (Some(converted), tool_name_map, deferred_tool_names)
     }
+}
+
+/// 展开官方 `Namespace object { description, name, tools, type }`。
+///
+/// 命名空间是「把一组 function/custom 工具包在共享名前缀下」的声明容器，
+/// 本身不是可调用工具——成员才是。展开后每个成员都变成普通工具；成员的
+/// `defer_loading` 逐个收集（官方允许成员各自延迟加载）。
+///
+/// 成员名前缀：官方说命名空间名「用于 tool calls」（例如 `crm`），但没说成员
+/// 调用名是否要拼接。为了不让两个命名空间的同名成员撞车（且模型要能区分），
+/// 这里统一拼成 `namespace__member`，与 MCP 的 `mcp__server__tool` 习惯一致。
+fn expand_namespace_tool(
+    item: &Value,
+    tool_name_map: &mut std::collections::HashMap<String, String>,
+    deferred_tool_names: &mut Vec<String>,
+) -> Vec<Tool> {
+    let namespace = item
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("namespace");
+    let namespace_desc = item.get("description").and_then(Value::as_str);
+
+    let Some(members) = item.get("tools").and_then(Value::as_array) else {
+        log::warn!("[Responses] namespace `{namespace}` 缺少 tools 数组，已跳过");
+        return Vec::new();
+    };
+
+    let mut out = Vec::with_capacity(members.len());
+    for member in members {
+        let Some((mut tool, _)) = convert_responses_tool(member) else {
+            log::warn!(
+                "[Responses] namespace `{namespace}` 中的成员无法转换（type={:?}），已跳过",
+                member.get("type")
+            );
+            continue;
+        };
+        // 响应侧要把工具名还原成客户端声明的原名（不带命名空间前缀），
+        // 否则客户端认不出自己声明的工具。
+        let raw_member_name = member
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let qualified = shorten_tool_name(&sanitize_tool_name(&format!(
+            "{namespace}__{raw_member_name}"
+        )));
+        if qualified != raw_member_name && !raw_member_name.is_empty() {
+            tool_name_map.insert(qualified.clone(), raw_member_name);
+        }
+        // 命名空间描述与成员描述合并：上游只看到普通工具，丢掉了命名空间的
+        // 分组语义，保留一层上下文能帮模型判断何时用哪个成员。
+        tool.function.description = match (namespace_desc, tool.function.description) {
+            (Some(ns), Some(desc)) => Some(format!("[{namespace}] {ns}\n{desc}")),
+            (Some(ns), None) => Some(format!("[{namespace}] {ns}")),
+            (None, Some(desc)) => Some(format!("[{namespace}] {desc}")),
+            (None, None) => None,
+        };
+        tool.function.name = qualified.clone();
+
+        // defer_loading 从成员自身读取（官方定义在成员层，不在 namespace 层）
+        if member.get("defer_loading") == Some(&Value::Bool(true)) {
+            deferred_tool_names.push(qualified);
+        }
+        out.push(tool);
+    }
+
+    if out.is_empty() {
+        log::warn!("[Responses] namespace `{namespace}` 无可用成员，已跳过");
+    }
+    out
 }
 
 pub fn convert_responses_tool(item: &Value) -> Option<(Tool, Option<(String, String)>)> {
@@ -635,5 +715,62 @@ mod tests {
         let params = tool.function.parameters.unwrap();
         assert_eq!(params["type"], "object");
         assert!(params["properties"].get("input").is_some());
+    }
+
+    /// 官方 `Namespace object { description, name, tools, type }`：整项跳过会
+    /// 让命名空间里的所有工具消失，必须展开成逐个成员。
+    #[test]
+    fn namespace_tool_expands_members() {
+        let tools = serde_json::json!([
+            {
+                "type": "namespace",
+                "name": "crm",
+                "description": "Customer relationship tools",
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "find_customer",
+                        "description": "Find a customer",
+                        "parameters": {"type": "object", "properties": {"q": {"type": "string"}}}
+                    },
+                    {
+                        "type": "custom",
+                        "name": "draft_email",
+                        "description": "Draft an email",
+                        "defer_loading": true
+                    }
+                ]
+            }
+        ]);
+
+        let (converted, map, deferred) = convert_responses_tools(Some(&tools));
+        let list = converted.expect("namespace must expand");
+        assert_eq!(list.len(), 2, "两个成员都应展开");
+
+        let names: Vec<&str> = list.iter().map(|t| t.function.name.as_str()).collect();
+        // sanitize_tool_name 会把 `crm__find_customer` 归一成 camelCase
+        assert!(names.iter().any(|n| n.to_lowercase().contains("find")), "actual: {names:?}");
+        assert!(names.iter().any(|n| n.to_lowercase().contains("draft")), "actual: {names:?}");
+
+        // 命名空间描述要保留在成员描述里（上游没有分组概念）
+        assert!(list
+            .iter()
+            .all(|t| t.function.description.as_deref().unwrap_or("").contains("crm")));
+
+        // 成员的 defer_loading 逐个收集，且用展开后的限定名
+        assert_eq!(deferred.len(), 1, "只有 draft_email 标了 defer_loading");
+        assert!(deferred[0].to_lowercase().contains("draft"));
+
+        // 限定名要能从 sanitize 后的名字映射回原名
+        assert!(map.values().any(|v| v == "draft_email"));
+    }
+
+    /// 命名空间缺 tools 数组时不能 panic，也不应产生工具。
+    #[test]
+    fn namespace_without_tools_is_skipped() {
+        let tools = serde_json::json!([{"type": "namespace", "name": "empty"}]);
+        let (converted, _, deferred) = convert_responses_tools(Some(&tools));
+        assert!(converted.is_none());
+        assert!(deferred.is_empty());
     }
 }

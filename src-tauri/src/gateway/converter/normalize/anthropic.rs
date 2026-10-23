@@ -62,9 +62,6 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
     // tools 里，由 upstream 挂载点统一拆分（含 tool_choice 保护），见
     // proxy/tool_search.rs。
     let mut deferred_tool_names = Vec::new();
-    // client toolset 展开出的成员工具，追加在末尾（不扰动客户端已有工具的
-    // 缓存顺序）。展开后模型才能看到 `screenshot`/`navigate` 等成员并调用。
-    let mut toolset_members: Vec<Tool> = Vec::new();
     let tools = request.tools.as_ref().map(|tools| {
         tools
             .iter()
@@ -75,54 +72,34 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
                     ));
                     return None;
                 }
-                // client toolset（computer/browser）：官方定义为「一个无名条目，
-                // 声明一组固定成员」，上游只认普通工具定义——必须展开成逐个
-                // 成员下发，否则模型看不到任何成员，功能在网关后直接失效。
+                // client toolset（computer/browser）：官方 schema-less 工具——成员
+                // schema 内置在模型里、不对外提供（官方文档明确"the schema is
+                // built into Claude's model and can't be modified"），展开成普通
+                // 工具还必须伪造 schema；且成员调用的 toolset_name 元数据由
+                // Anthropic API 端渲染，展开后客户端按 (toolset_name, name) 分发
+                // 依然失败。网关无法保真，跳过并告警。
                 if tool.name.is_empty() {
-                    let Some(tool_type) = tool.r#type.as_deref() else {
-                        log::warn!("[Anthropic] 无名且无 type 的工具条目，已跳过");
-                        return None;
-                    };
-                    match crate::gateway::converter::expand_toolset(
-                        tool_type,
-                        tool.configs.as_ref(),
-                    ) {
-                        Some(members) => {
-                            log::info!(
-                                "[Anthropic] toolset `{tool_type}` 展开为 {} 个成员工具",
-                                members.len()
-                            );
-                            for (name, description, parameters) in members {
-                                toolset_members.push(Tool {
-                                    tool_type: "function".to_string(),
-                                    function: ToolFunction {
-                                        name: name.to_string(),
-                                        description: Some(description.to_string()),
-                                        parameters: Some(parameters),
-                                    },
-                                    cache_control: tool.cache_control.clone(),
-                                });
-                            }
-                        }
-                        None => {
-                            // 全部成员被 configs 禁用，或未知 toolset 类型。
-                            log::warn!(
-                                "[Anthropic] toolset `{tool_type}` 无可展开成员（全部禁用或未知类型），已跳过"
-                            );
-                        }
-                    }
+                    log::warn!(
+                        "[Anthropic] client toolset 未支持（成员 schema 内置模型，展开需伪造且\
+                         toolset_name 元数据无法保真），type={:?}，该条目已跳过",
+                        tool.r#type
+                    );
                     return None;
                 }
-                // 只允许代码执行沙箱调用的工具：上游无该环境，模型永远调不到。
+                // 只允许代码执行沙箱调用的工具（allowed_callers 不含 direct）：
+                // 上游 Kiro 无代码执行沙箱，模型永远无法合法调用。下发它只会让
+                // 模型尝试一次注定失败的调用（客户端拿到无法处理的 tool_use），
+                // 因此直接不声明——与官方「不在上下文中就别调」的语义一致。
                 if let Some(callers) = tool.allowed_callers.as_ref() {
                     let has_direct = callers.iter().any(|c| c == "direct");
                     if !has_direct && !callers.is_empty() {
                         log::warn!(
                             "[Anthropic] 工具 `{}` 的 allowed_callers={:?} 不含 direct：\
-                             上游 Kiro 无代码执行沙箱，该工具实际不可调用",
+                             上游 Kiro 无代码执行沙箱，该工具不下发（模型无法合法调用）",
                             tool.name,
                             callers
                         );
+                        return None;
                     }
                 }
                 if tool.defer_loading == Some(true) {
@@ -137,17 +114,6 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
                 Some(converted_tool)
             })
             .collect()
-    });
-
-    // toolset 成员追加在末尾：它们与客户端已有工具同名时以客户端定义为准
-    // （客户端自建的同名工具可能参数不同，保留先出现的那个）。
-    let tools: Option<Vec<Tool>> = tools.map(|mut list: Vec<Tool>| {
-        for member in toolset_members {
-            if !list.iter().any(|t| t.function.name == member.function.name) {
-                list.push(member);
-            }
-        }
-        list
     });
 
     let mut normalized = NormalizedRequest {

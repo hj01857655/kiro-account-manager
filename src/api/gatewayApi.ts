@@ -35,6 +35,8 @@ export interface GatewayConfigPayload {
   responseCacheEnabled: boolean
   responseCacheTtl: number
   webSearchEnabled: boolean
+  /** Tool Search（Anthropic defer_loading 工具发现规范）；关闭后 defer_loading 被忽略，全量下发 */
+  toolSearchEnabled: boolean
   /** 网关上游（Kiro API）显式代理；空 = 走账号/应用代理链 */
   upstreamProxy: string | null
   /** 工具描述最大长度；0 = 不截断 */
