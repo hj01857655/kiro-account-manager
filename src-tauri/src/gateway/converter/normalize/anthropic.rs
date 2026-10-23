@@ -47,24 +47,88 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
     }
 
     let mut tool_name_map = std::collections::HashMap::new();
-    // Anthropic 服务端工具（type 非 "custom" 的具名类型，如 web_search_20250305）：
-    // 记录 sanitized 名单，payload 构建时剥离（Kiro 上游无服务端执行环境）。
-    // 保留在 request.tools 中是为了 tool_choice 校验与 WebSearch 子请求检测。
+    // Anthropic 服务端工具（在 Anthropic 基础设施上执行，Kiro 上游无执行环境）：
+    // 记录 sanitized 名单，payload 构建时剥离。保留在 request.tools 中是为了
+    // tool_choice 校验与 WebSearch 子请求检测。
+    //
+    // 判别必须按官方执行方，不能"type != custom 即 server"一刀切：官方另有
+    // **client tool**（schema 由 Anthropic 定义、执行在客户端），它们同样带
+    // 日期化 type，却必须原样下发，否则模型看不到工具、客户端功能失效。
+    // 参见 tool-reference：Server = web_search / web_fetch / code_execution /
+    // advisor / tool_search_tool / mcp_toolset；Client = memory / bash /
+    // text_editor / computer_toolset / browser_toolset。
     let mut server_tool_names = Vec::new();
+    // Tool Search 规范：defer_loading 工具的 sanitized 名单。工具本体保留在
+    // tools 里，由 upstream 挂载点统一拆分（含 tool_choice 保护），见
+    // proxy/tool_search.rs。
+    let mut deferred_tool_names = Vec::new();
+    // client toolset 展开出的成员工具，追加在末尾（不扰动客户端已有工具的
+    // 缓存顺序）。展开后模型才能看到 `screenshot`/`navigate` 等成员并调用。
+    let mut toolset_members: Vec<Tool> = Vec::new();
     let tools = request.tools.as_ref().map(|tools| {
         tools
             .iter()
             .filter_map(|tool| {
-                let is_server_tool = tool
-                    .r#type
-                    .as_deref()
-                    .map(|t| !t.is_empty() && t != "custom")
-                    .unwrap_or(false);
-                if is_server_tool {
+                if is_server_executed_tool(tool.r#type.as_deref()) {
                     server_tool_names.push(crate::gateway::converter::sanitize_tool_name(
                         &tool.name,
                     ));
                     return None;
+                }
+                // client toolset（computer/browser）：官方定义为「一个无名条目，
+                // 声明一组固定成员」，上游只认普通工具定义——必须展开成逐个
+                // 成员下发，否则模型看不到任何成员，功能在网关后直接失效。
+                if tool.name.is_empty() {
+                    let Some(tool_type) = tool.r#type.as_deref() else {
+                        log::warn!("[Anthropic] 无名且无 type 的工具条目，已跳过");
+                        return None;
+                    };
+                    match crate::gateway::converter::expand_toolset(
+                        tool_type,
+                        tool.configs.as_ref(),
+                    ) {
+                        Some(members) => {
+                            log::info!(
+                                "[Anthropic] toolset `{tool_type}` 展开为 {} 个成员工具",
+                                members.len()
+                            );
+                            for (name, description, parameters) in members {
+                                toolset_members.push(Tool {
+                                    tool_type: "function".to_string(),
+                                    function: ToolFunction {
+                                        name: name.to_string(),
+                                        description: Some(description.to_string()),
+                                        parameters: Some(parameters),
+                                    },
+                                    cache_control: tool.cache_control.clone(),
+                                });
+                            }
+                        }
+                        None => {
+                            // 全部成员被 configs 禁用，或未知 toolset 类型。
+                            log::warn!(
+                                "[Anthropic] toolset `{tool_type}` 无可展开成员（全部禁用或未知类型），已跳过"
+                            );
+                        }
+                    }
+                    return None;
+                }
+                // 只允许代码执行沙箱调用的工具：上游无该环境，模型永远调不到。
+                if let Some(callers) = tool.allowed_callers.as_ref() {
+                    let has_direct = callers.iter().any(|c| c == "direct");
+                    if !has_direct && !callers.is_empty() {
+                        log::warn!(
+                            "[Anthropic] 工具 `{}` 的 allowed_callers={:?} 不含 direct：\
+                             上游 Kiro 无代码执行沙箱，该工具实际不可调用",
+                            tool.name,
+                            callers
+                        );
+                    }
+                }
+                if tool.defer_loading == Some(true) {
+                    deferred_tool_names.push(crate::gateway::converter::sanitize_tool_name(
+                        &tool.name,
+                    ));
                 }
                 let (converted_tool, mapping) = convert_anthropic_tool(tool);
                 if let Some((sanitized, original)) = mapping {
@@ -73,6 +137,17 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
                 Some(converted_tool)
             })
             .collect()
+    });
+
+    // toolset 成员追加在末尾：它们与客户端已有工具同名时以客户端定义为准
+    // （客户端自建的同名工具可能参数不同，保留先出现的那个）。
+    let tools: Option<Vec<Tool>> = tools.map(|mut list: Vec<Tool>| {
+        for member in toolset_members {
+            if !list.iter().any(|t| t.function.name == member.function.name) {
+                list.push(member);
+            }
+        }
+        list
     });
 
     let mut normalized = NormalizedRequest {
@@ -101,6 +176,8 @@ pub fn normalize_anthropic_request(request: &AnthropicMessagesRequest) -> Normal
         include_usage: false,
         tool_name_map,
         server_tool_names,
+        deferred_tool_names,
+        deferred_tools: Vec::new(),
     };
 
     // 检测模型名是否包含 "thinking" 后缀，若包含则自动启用 thinking

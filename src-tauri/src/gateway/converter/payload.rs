@@ -9,11 +9,33 @@ use super::*;
 /// medium），语义上更接近「不改变客户端可见行为，只保证思考意图送达后端」。
 pub const DEFAULT_THINKING_EFFORT_LEVEL: &str = "high";
 
+/// 工具描述默认截断上限（字节），与现有 TOOL_DESCRIPTION_MAX_LENGTH 常量同源：
+/// 未配置时行为与旧版完全一致。
+pub const DEFAULT_MAX_TOOL_DESCRIPTION_LENGTH: u32 = TOOL_DESCRIPTION_MAX_LENGTH as u32;
+
+/// 兼容入口：未显式传工具描述上限时用默认值，供测试与旧调用方使用。
 pub async fn build_kiro_payload(
     client: &Client,
     request: &NormalizedRequest,
     profile_arn: Option<String>,
     available_models: Option<&[Value]>,
+) -> Result<KiroPayload, String> {
+    build_kiro_payload_with_tool_limit(
+        client,
+        request,
+        profile_arn,
+        available_models,
+        DEFAULT_MAX_TOOL_DESCRIPTION_LENGTH,
+    )
+    .await
+}
+
+pub async fn build_kiro_payload_with_tool_limit(
+    client: &Client,
+    request: &NormalizedRequest,
+    profile_arn: Option<String>,
+    available_models: Option<&[Value]>,
+    max_tool_description_length: u32,
 ) -> Result<KiroPayload, String> {
     // 校验 tool_choice（如果指定了 function，则必须在 tools 列表中存在）
     // 虽然 Kiro 上游请求不包含 tool_choice 字段，但网关层仍需做入参校验，
@@ -271,7 +293,8 @@ pub async fn build_kiro_payload(
         .clone()
         .unwrap_or_else(|| Uuid::new_v4().to_string());
     let agent_continuation_id = conversation_id.clone();
-    let (processed_tools, tool_docs) = process_tools_with_long_descriptions(&request.tools);
+    let (processed_tools, tool_docs) =
+        process_tools_with_long_descriptions(&request.tools, max_tool_description_length);
     let tool_docs_for_current = tool_docs.clone();
 
     let mut system_prompt = String::new();

@@ -14,13 +14,15 @@ pub fn normalize_openai_chat_payload(payload: &Value) -> Result<NormalizedReques
         return Err("chat.completions 请求缺少可转换的 messages".to_string());
     }
 
-    let (tools, tool_name_map) = convert_openai_chat_tools(payload.get("tools"));
+    let (tools, tool_name_map, deferred_tool_names) =
+        convert_openai_chat_tools(payload.get("tools"));
     Ok(build_normalized_request_from_payload(
         payload,
         model,
         messages,
         tools,
         tool_name_map,
+        deferred_tool_names,
     ))
 }
 
@@ -246,6 +248,9 @@ pub fn normalize_openai_chat_request(request: &OpenAIChatRequest) -> Result<Norm
         tool_name_map,
         // OpenAI Chat 协议无 Anthropic 式服务端工具
         server_tool_names: Vec::new(),
+        // OpenAI Chat 无 defer_loading 形态（Anthropic Tool Search 规范专属）
+        deferred_tool_names: Vec::new(),
+        deferred_tools: Vec::new(),
     })
 }
 
@@ -359,6 +364,10 @@ pub fn convert_openai_chat_content(content: &Value) -> Value {
 
 pub fn convert_openai_chat_tools(
     tools: Option<&Value>,
-) -> (Option<Vec<Tool>>, std::collections::HashMap<String, String>) {
+) -> (
+    Option<Vec<Tool>>,
+    std::collections::HashMap<String, String>,
+    Vec<String>,
+) {
     convert_responses_tools(tools)
 }

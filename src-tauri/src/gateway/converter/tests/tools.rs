@@ -22,6 +22,9 @@ fn convert_anthropic_tool_truncates_multibyte_description_without_panic() {
         description: Some(multibyte_desc),
         input_schema: json!({ "type": "object" }),
         cache_control: None,
+        defer_loading: None,
+        allowed_callers: None,
+        configs: None,
     };
 
     // 不 panic 即通过；同时校验截断后的描述本身是合法 UTF-8（隐含于 String 类型）

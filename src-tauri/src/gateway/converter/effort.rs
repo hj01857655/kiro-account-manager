@@ -300,12 +300,8 @@ impl ModelEffortProfile {
             .unwrap_or(false)
     }
 
-    /// 把客户端请求的档位归一化到该模型允许的档位（thinking 开启时的口径）。
-    pub fn resolve_level(&self, model_id: &str, requested: &str) -> Option<String> {
-        clamp_to_levels(requested, self.allowed_levels(model_id)?)
-    }
-
-    /// 同 `resolve_level`，但 thinking 关闭时走官方 `ySe` 降级（G-1）。
+    /// 把客户端请求的档位归一化到该模型允许的档位：thinking 关闭时走官方
+    /// `ySe` 降级（G-1），开启时直接 clamp 到枚举。
     pub fn resolve_level_with_thinking_state(
         &self,
         model_id: &str,

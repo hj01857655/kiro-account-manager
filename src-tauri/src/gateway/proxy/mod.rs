@@ -27,8 +27,9 @@ use crate::{
     clients::{
         http_client::{
             build_kiro_custom_user_agent, build_kiro_x_amz_user_agent,
-            build_streaming_http_client_for_account, resolve_kiro_upstream_region,
-            should_add_redirect_for_internal, should_send_codewhisperer_optout,
+            build_streaming_http_client_for_account_with_upstream_proxy,
+            resolve_kiro_upstream_region, should_add_redirect_for_internal,
+            should_send_codewhisperer_optout,
         },
         kiro_client::{build_generate_assistant_response_url, build_kiro_runtime_host, KiroClient},
     },
@@ -51,8 +52,9 @@ const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 1.15;
 use super::{
     append_gateway_request_log,
     converter::{
-        build_kiro_payload, extract_model_ids, get_available_models, normalize_anthropic_request,
-        normalize_openai_chat_payload, normalize_openai_responses_request,
+        build_kiro_payload_with_tool_limit, extract_model_ids, get_available_models,
+        normalize_anthropic_request, normalize_openai_chat_payload,
+        normalize_openai_responses_request,
     },
     eventstream::decode_message,
     models::{
@@ -77,6 +79,7 @@ mod errors;
 mod upstream;
 mod streaming;
 mod websearch;
+mod tool_search;
 
 pub use auth::*;
 pub use tokens::*;

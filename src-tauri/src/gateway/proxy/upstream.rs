@@ -436,6 +436,21 @@ pub async fn proxy_handler(
         super::websearch::handle_forced_web_search(&upstream, &mut request).await;
     }
 
+    // ===== Tool Search 拆分（Anthropic defer_loading 工具发现规范）=====
+    // 把 defer_loading 工具挪到 deferred_tools（响应侧代答环的检索池），并
+    // 注入合成 tool_search 工具。非流式走下方代答环；流式走缓冲代答环
+    // （见流式分支 run_tool_search_buffered_loop），客户端仍收标准 SSE，
+    // 仅首包延迟增加缓冲与代答耗时。
+    if state.config.tool_search_enabled && !request.deferred_tool_names.is_empty() {
+        if let Some(tools) = request.tools.as_mut() {
+            request.deferred_tools = super::tool_search::split_deferred_tools(
+                tools,
+                &request.deferred_tool_names,
+                request.tool_choice.as_ref(),
+            );
+        }
+    }
+
     let request_log_context = RequestLogContext {
         request: Some(&request),
         ..base_log_context.clone()
@@ -468,11 +483,12 @@ pub async fn proxy_handler(
         }
     };
 
-    let upstream_payload = match build_kiro_payload(
+    let upstream_payload = match build_kiro_payload_with_tool_limit(
         &state.http,
         &request,
         upstream.profile_arn.clone(),
         available_models.as_deref(),
+        state.config.max_tool_description_length,
     )
     .await
     {
@@ -1091,12 +1107,53 @@ pub async fn proxy_handler(
             request_id: upstream_payload_log_context.request_id.clone(),
         };
 
+        // ===== Tool Search 缓冲代答环（流式）=====
+        // defer_loading 工具存在时：先缓冲整轮上游 EventStream，执行与非流式
+        // 同构的代答环（模型 tool_search 调用由网关检索回灌后重发），最后一轮
+        // 的原始字节重建为上游响应交既有流式管线增量转换——客户端仍收标准
+        // SSE，仅首包延迟包含缓冲与代答耗时。working 为 owned 副本，不与
+        // 日志上下文的共享借用冲突。
+        let (upstream_resp, stream_messages) = if !request.deferred_tools.is_empty() {
+            let mut working = request.clone();
+            let resp = match run_tool_search_buffered_loop(
+                &state,
+                &mut working,
+                upstream_resp,
+                &successful_upstream,
+                available_models.as_deref(),
+                request_index,
+                &request_id,
+            )
+            .await
+            {
+                Ok(resp) => resp,
+                Err(message) => {
+                    let sanitized = sanitize_error(&message);
+                    return gateway_error_with_log(
+                        &state,
+                        format,
+                        &upstream_payload_log_context,
+                        GatewayErrorDetails {
+                            status: StatusCode::BAD_GATEWAY,
+                            error_type: "api_error",
+                            message: &sanitized,
+                            response_body: None,
+                        },
+                    )
+                    .await;
+                }
+            };
+            (resp, working.messages.clone())
+        } else {
+            (upstream_resp, request.messages.clone())
+        };
+
         return stream_proxy_response(
             state.clone(),
             upstream_resp,
             format,
             request.model.clone(),
-            request.messages.clone(),
+            stream_messages,
             request.tools.clone(),
             request.tool_choice.clone(),
             request.previous_response_id.clone(),
@@ -1225,7 +1282,7 @@ pub async fn proxy_handler(
     }
 
     // 用于调试日志的拼接字符串
-    let body = json_payloads.join("");
+    let mut body = json_payloads.join("");
 
     // 添加调试日志：只记录解码后的 JSON 数量和长度，不打印内容
     log::info!(
@@ -1236,11 +1293,166 @@ pub async fn proxy_handler(
 
     let mut aggregated = stream::aggregate_kiro_response_from_payloads(&json_payloads);
 
+    // ===== Tool Search 代答环（非流式）=====
+    // 模型调用合成 tool_search 工具时由网关执行检索，把 tool_use + tool_result
+    // 追加进消息后重发上游；最多 3 轮，防止模型反复检索打转。环退出后
+    // aggregated 即最终响应，沿用下方既有转换管线（token 估算 / 停止序列 /
+    // 协议转换对环无感知：输入 token 估算会自动计上环内追加的消息）。
+    // 重发失败按 502 上抛——此时把 tool_search tool_use 透传给客户端只会得到
+    // "未知工具"错误，两者都失败，5xx 至少可诊断。
+    //
+    // 借用约束：request_log_context 持有 &request 直到函数尾，环内**不得
+    // 可变借用 request**——所有变更落在 owned 副本（final_messages /
+    // re_request），消费点（token 估算 / responses 会话持久化）统一读
+    // final_messages。每轮只追加本轮的 tool_use/tool_result 对：跨轮
+    // 累积会把同一对消息重复发给上游（重复 tool_use_id）。
+    let mut final_messages = request.messages.clone();
+    if !request.deferred_tools.is_empty() {
+        const TOOL_SEARCH_MAX_ROUNDS: usize = 3;
+        for round in 0..TOOL_SEARCH_MAX_ROUNDS {
+            let Some((call_id, call_name, args_json)) = aggregated
+                .tool_calls
+                .iter()
+                .find(|(_, name, _)| super::tool_search::is_tool_search_call(name))
+                .cloned()
+            else {
+                break;
+            };
+
+            let args: Value = serde_json::from_str(&args_json).unwrap_or_else(|_| json!({}));
+            let answer = super::tool_search::execute_tool_search(&args, &request.deferred_tools);
+            log::info!(
+                "[Tool Search] 第 {} 轮代答：回灌 {} 字节",
+                round + 1,
+                answer.len()
+            );
+
+            // assistant(tool_use) + user(tool_result)：形状对齐 normalize 层产出
+            // （tool_result 的 content 数组原样保留，历史构建器按 tool_call_id
+            // 关联，见 converter/history.rs 的消费点）。直接落 final_messages，
+            // 本轮消息下一轮整份重发，不另做累积容器。
+            final_messages.push(NormalizedMessage {
+                role: "assistant".to_string(),
+                content: None,
+                tool_calls: Some(vec![ToolCall {
+                    id: call_id.clone(),
+                    call_type: "function".to_string(),
+                    function: ToolCallFunction {
+                        // 保留模型实际调用的名字（可能是官方别名
+                        // tool_search_tool_*），保证 assistant 消息保真
+                        name: call_name,
+                        arguments: args_json,
+                    },
+                }]),
+                tool_call_id: None,
+                metadata: None,
+            });
+            final_messages.push(NormalizedMessage {
+                role: "user".to_string(),
+                content: Some(json!([{
+                    "type": "tool_result",
+                    "tool_use_id": call_id,
+                    "content": [{"type": "text", "text": answer}]
+                }])),
+                tool_calls: None,
+                tool_call_id: Some(call_id),
+                metadata: None,
+            });
+
+            // 重发请求视图：原始请求 + 环内追加（owned，不碰 request）
+            let mut re_request = request.clone();
+            re_request.messages = final_messages.clone();
+
+            // 重建 payload（同账号单次重发，不进限流换号环）
+            let re_payload = match build_kiro_payload_with_tool_limit(
+                &state.http,
+                &re_request,
+                successful_upstream.profile_arn.clone(),
+                available_models.as_deref(),
+                state.config.max_tool_description_length,
+            )
+            .await
+            {
+                Ok(payload) => payload,
+                Err(message) => {
+                    let sanitized = sanitize_error(&message);
+                    return gateway_error_with_log(
+                        &state,
+                        format,
+                        &upstream_payload_log_context,
+                        GatewayErrorDetails {
+                            status: StatusCode::BAD_GATEWAY,
+                            error_type: "api_error",
+                            message: &sanitized,
+                            response_body: None,
+                        },
+                    )
+                    .await;
+                }
+            };
+            let mut re_value = serde_json::to_value(&re_payload).unwrap_or_else(|_| json!({}));
+            if get_payload_size(&re_value) > MAX_KIRO_PAYLOAD_SIZE {
+                trim_kiro_payload_history(&mut re_value, MAX_KIRO_PAYLOAD_SIZE);
+            }
+
+            match call_generate_assistant_response(
+                &successful_upstream,
+                &re_value,
+                request_index as usize,
+                &request_id,
+            )
+            .await
+            {
+                Ok(re_resp) => match re_resp.bytes().await {
+                    Ok(bytes) => {
+                        // 重解码 EventStream 并聚合（与首响解码同构；错误路径
+                        // 收敛为 break 上浮错误日志，不做换号重试）
+                        json_payloads = decode_event_payloads(&bytes);
+                        body = json_payloads.join("");
+                        aggregated =
+                            stream::aggregate_kiro_response_from_payloads(&json_payloads);
+                    }
+                    Err(error) => {
+                        let message = sanitize_error(&format!("读取上游响应失败: {error}"));
+                        return gateway_error_with_log(
+                            &state,
+                            format,
+                            &upstream_payload_log_context,
+                            GatewayErrorDetails {
+                                status: StatusCode::BAD_GATEWAY,
+                                error_type: "api_error",
+                                message: &message,
+                                response_body: None,
+                            },
+                        )
+                        .await;
+                    }
+                },
+                Err(error) => {
+                    let message =
+                        sanitize_error(&format!("Tool Search 代答重发失败: {}", error.message));
+                    return gateway_error_with_log(
+                        &state,
+                        format,
+                        &upstream_payload_log_context,
+                        GatewayErrorDetails {
+                            status: StatusCode::BAD_GATEWAY,
+                            error_type: "api_error",
+                            message: &message,
+                            response_body: None,
+                        },
+                    )
+                    .await;
+                }
+            }
+        }
+    }
+
     // 直接使用本地估算 token（不依赖响应中的 token 信息）
     log::info!("[非流式响应] 使用本地 token 估算");
 
     // 估算输入 tokens（从请求消息中）
-    let request_text = serde_json::to_string(&request.messages).unwrap_or_default();
+    let request_text = serde_json::to_string(&final_messages).unwrap_or_default();
     aggregated.input_tokens =
         crate::gateway::token_estimator::estimate_tokens(&request_text, &request.model);
 
@@ -1358,7 +1570,7 @@ pub async fn proxy_handler(
         persist_responses_session_entry(
             &state,
             &response_id,
-            request.messages.clone(),
+            final_messages.clone(),
             request.tools.clone(),
             request.tool_choice.clone(),
             request.previous_response_id.clone(),
@@ -1421,6 +1633,142 @@ pub async fn proxy_handler(
         &state,
     );
     Json(response).into_response()
+}
+
+/// EventStream 字节流 → JSON event payload 列表（只取 `:event-type` 消息）。
+/// 非流式代答环与流式缓冲环共用。
+fn decode_event_payloads(raw: &[u8]) -> Vec<String> {
+    let mut buf = raw.to_vec();
+    let mut payloads = Vec::new();
+    loop {
+        match decode_message(&buf) {
+            Ok(Some((msg, consumed))) => {
+                if matches!(
+                    msg.headers.get(":message-type").map(String::as_str),
+                    Some("event")
+                ) {
+                    payloads.push(String::from_utf8_lossy(&msg.payload).to_string());
+                }
+                buf.drain(..consumed);
+            }
+            _ => break,
+        }
+    }
+    payloads
+}
+
+/// Tool Search 缓冲代答环（流式）：缓冲整轮上游 EventStream，执行与非流式
+/// 同构的代答循环（模型调用合成 tool_search 时由网关检索、回灌、重发），
+/// 返回最后一轮原始字节重建的上游响应，交既有流式管线增量转换。
+///
+/// `working` 为请求的 owned 副本（调用方持有，不与日志上下文的共享借用
+/// 冲突）；环内追加的 tool 交互写回其 messages，随流式管线的 token 估算
+/// 与日志一起生效。最多 3 轮，防止模型反复检索打转。
+async fn run_tool_search_buffered_loop(
+    state: &RouterState,
+    working: &mut NormalizedRequest,
+    first_resp: reqwest::Response,
+    upstream: &UpstreamCredentials,
+    available_models: Option<&[Value]>,
+    request_index: u64,
+    request_id: &str,
+) -> Result<reqwest::Response, String> {
+    const TOOL_SEARCH_MAX_ROUNDS: usize = 3;
+    let mut raw = first_resp
+        .bytes()
+        .await
+        .map_err(|e| format!("读取上游响应失败: {e}"))?
+        .to_vec();
+
+    for round in 0..TOOL_SEARCH_MAX_ROUNDS {
+        let json_payloads = decode_event_payloads(&raw);
+        let aggregated = stream::aggregate_kiro_response_from_payloads(&json_payloads);
+        let Some((call_id, call_name, args_json)) = aggregated
+            .tool_calls
+            .iter()
+            .find(|(_, name, _)| super::tool_search::is_tool_search_call(name))
+            .cloned()
+        else {
+            break; // 无 tool_search 调用：当前轮即最终轮
+        };
+
+        let args: Value = serde_json::from_str(&args_json).unwrap_or_else(|_| json!({}));
+        let answer = super::tool_search::execute_tool_search(&args, &working.deferred_tools);
+        log::info!(
+            "[Tool Search] 流式第 {} 轮代答：回灌 {} 字节",
+            round + 1,
+            answer.len()
+        );
+
+        // assistant(tool_use) + user(tool_result)：形状对齐 normalize 层产出
+        // （tool_result 的 content 数组原样保留，历史构建器按 tool_call_id 关联）
+        working.messages.push(NormalizedMessage {
+            role: "assistant".to_string(),
+            content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: call_id.clone(),
+                call_type: "function".to_string(),
+                function: ToolCallFunction {
+                    // 保留模型实际调用的名字（可能是官方别名）
+                    name: call_name,
+                    arguments: args_json,
+                },
+            }]),
+            tool_call_id: None,
+            metadata: None,
+        });
+        working.messages.push(NormalizedMessage {
+            role: "user".to_string(),
+            content: Some(json!([{
+                "type": "tool_result",
+                "tool_use_id": call_id,
+                "content": [{"type": "text", "text": answer}]
+            }])),
+            tool_calls: None,
+            tool_call_id: Some(call_id),
+            metadata: None,
+        });
+
+        // 重建 payload（同账号单次重发，不进限流换号环）
+        let re_payload = build_kiro_payload_with_tool_limit(
+            &state.http,
+            working,
+            upstream.profile_arn.clone(),
+            available_models,
+            state.config.max_tool_description_length,
+        )
+        .await?;
+        let mut re_value = serde_json::to_value(&re_payload).unwrap_or_else(|_| json!({}));
+        if get_payload_size(&re_value) > MAX_KIRO_PAYLOAD_SIZE {
+            trim_kiro_payload_history(&mut re_value, MAX_KIRO_PAYLOAD_SIZE);
+        }
+
+        let re_resp = call_generate_assistant_response(
+            upstream,
+            &re_value,
+            request_index as usize,
+            request_id,
+        )
+        .await
+        .map_err(|e| format!("Tool Search 代答重发失败: {}", e.message))?;
+
+        raw = re_resp
+            .bytes()
+            .await
+            .map_err(|e| format!("读取上游响应失败: {e}"))?
+            .to_vec();
+    }
+
+    // 回放：最后一轮原始字节重建为上游响应，交既有流式管线
+    let replay = axum::http::Response::builder()
+        .status(axum::http::StatusCode::OK)
+        .header(
+            axum::http::header::CONTENT_TYPE,
+            "application/vnd.amazon.eventstream",
+        )
+        .body(reqwest::Body::from(raw))
+        .map_err(|e| format!("重建流式响应失败: {e}"))?;
+    Ok(reqwest::Response::from(replay))
 }
 
 /// 服务端限流窗口上限（毫秒）：防病态值导致重试环长时间挂起

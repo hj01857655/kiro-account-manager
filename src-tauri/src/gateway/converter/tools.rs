@@ -47,6 +47,42 @@ pub fn sanitize_tool_name(name: &str) -> String {
     }
 }
 
+/// 判定 Anthropic 工具是否由 **服务端** 执行（因此必须从下发清单剥离）。
+///
+/// 判别依据是官方 tool-reference 的 Execution 列，不是 `type != "custom"`：
+/// 官方另有 client tool，它们同样带日期化 `type`，但 schema 由 Anthropic 定义、
+/// 执行在客户端——剥掉会让模型看不到工具，客户端功能直接失效。
+///
+/// - Server：`web_search_*` / `web_fetch_*` / `code_execution_*` / `advisor_*` /
+///   `tool_search_tool_*` / `mcp_toolset`
+/// - Client：`memory_*` / `bash_*` / `text_editor_*` / `computer_*` /
+///   `computer_toolset_*` / `browser_toolset_*`
+///
+/// `type` 为空或 `custom` 是客户端自定义工具，不剥离。未知 `type` 按客户端工具
+/// 保留：官方会持续新增版本，剥错（功能消失）比留着（上游多一个普通工具）更糟。
+pub fn is_server_executed_tool(tool_type: Option<&str>) -> bool {
+    const SERVER_PREFIXES: &[&str] = &[
+        "web_search",
+        "web_fetch",
+        "code_execution",
+        "advisor",
+        "tool_search_tool",
+        "mcp_toolset",
+    ];
+    let Some(tool_type) = tool_type.map(str::trim).filter(|t| !t.is_empty()) else {
+        return false;
+    };
+    if tool_type == "custom" {
+        return false;
+    }
+    SERVER_PREFIXES.iter().any(|prefix| {
+        tool_type == *prefix
+            || tool_type
+                .strip_prefix(prefix)
+                .is_some_and(|rest| rest.starts_with('_'))
+    })
+}
+
 /// 缩短工具名称以符合 Kiro API 的 64 字符限制
 ///
 /// 对于 MCP 工具（格式：mcp__server__tool），尝试缩短为 mcp__tool
@@ -307,17 +343,23 @@ pub fn clean_schema(schema: &mut Map<String, Value>) {
 
 pub fn process_tools_with_long_descriptions(
     tools: &Option<Vec<Tool>>,
+    max_len: u32,
 ) -> (Option<Vec<Tool>>, Option<String>) {
     let Some(tools) = tools else {
         return (None, None);
     };
+
+    // 0 = 不限制：描述原样随工具送上游，不外移到系统提示
+    if max_len == 0 {
+        return (Some(tools.clone()), None);
+    }
 
     let mut processed = Vec::new();
     let mut long_docs = Vec::new();
 
     for tool in tools {
         let description = tool.function.description.clone().unwrap_or_default();
-        if description.len() > TOOL_DESCRIPTION_MAX_LENGTH {
+        if description.len() > max_len as usize {
             long_docs.push(format!(
                 "## Tool: {}\n\n{}",
                 tool.function.name, description
@@ -349,4 +391,79 @@ pub fn process_tools_with_long_descriptions(
     };
 
     (Some(processed), docs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 官方 tool-reference 的 Execution 列：Server 侧必须剥离，Client 侧必须保留。
+    #[test]
+    fn server_tools_are_detected_and_client_tools_are_not() {
+        // Server：Kiro 上游无执行环境，必须剥
+        for ty in [
+            "web_search_20250305",
+            "web_search_20260209",
+            "web_search_20260318",
+            "web_fetch_20250910",
+            "web_fetch_20260318",
+            "code_execution_20260120",
+            "code_execution_20260521",
+            "advisor_20260301",
+            "tool_search_tool_regex_20251119",
+            "tool_search_tool_bm25",
+            "mcp_toolset",
+        ] {
+            assert!(is_server_executed_tool(Some(ty)), "{ty} should be server");
+        }
+
+        // Client：执行在客户端，剥了功能就没了
+        for ty in [
+            "memory_20250818",
+            "bash_20250124",
+            "text_editor_20250728",
+            "text_editor_20250124",
+            "computer_20250124",
+            "computer_20251124",
+            "computer_toolset_20260801",
+            "browser_toolset_20260801",
+            "custom",
+        ] {
+            assert!(!is_server_executed_tool(Some(ty)), "{ty} should be client");
+        }
+
+        // 空 / 缺省 / 未知：保留（剥错的代价更大）
+        assert!(!is_server_executed_tool(None));
+        assert!(!is_server_executed_tool(Some("")));
+        assert!(!is_server_executed_tool(Some("some_future_tool_20990101")));
+    }
+
+    /// 前缀判定不能跨词误伤：`web_searches` 不是 web_search 的版本。
+    #[test]
+    fn server_prefix_requires_underscore_boundary() {
+        assert!(!is_server_executed_tool(Some("web_searches")));
+        assert!(is_server_executed_tool(Some("web_search")));
+    }
+
+    /// 官方新增的工具属性必须能反序列化，不能因为多一个字段就让整个请求 400。
+    #[test]
+    fn new_tool_properties_are_parsed() {
+        let tool: crate::gateway::models::AnthropicTool = serde_json::from_value(serde_json::json!({
+            "type": "computer_toolset_20260801",
+            "configs": { "screenshot": { "enabled": true } },
+            "allowed_callers": ["direct"]
+        }))
+        .expect("toolset entry without name must parse");
+        assert!(tool.name.is_empty(), "toolset 条目官方规定无 name");
+        assert_eq!(tool.allowed_callers.as_deref(), Some(&["direct".to_string()][..]));
+        assert!(tool.configs.is_some());
+
+        // 普通工具不受影响
+        let plain: crate::gateway::models::AnthropicTool = serde_json::from_value(
+            serde_json::json!({"name": "get_weather", "input_schema": {"type": "object"}}),
+        )
+        .expect("plain tool must parse");
+        assert_eq!(plain.name, "get_weather");
+        assert!(plain.allowed_callers.is_none());
+    }
 }

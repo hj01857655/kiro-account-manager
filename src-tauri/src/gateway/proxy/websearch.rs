@@ -414,6 +414,8 @@ mod tests {
             include_usage: false,
             tool_name_map: HashMap::new(),
             server_tool_names: Vec::new(),
+            deferred_tool_names: Vec::new(),
+            deferred_tools: Vec::new(),
         }
     }
 

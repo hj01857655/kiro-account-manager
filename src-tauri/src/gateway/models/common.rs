@@ -84,6 +84,14 @@ pub struct NormalizedRequest {
     /// 执行的 tool_use —— 在 payload 构建时按此清单剥离。
     #[serde(default, skip)]
     pub server_tool_names: Vec<String>,
+    /// Anthropic 工具定义带 `defer_loading: true` 的 sanitized 名单
+    /// （normalize 层收集；Tool Search 工具发现规范，见 proxy/tool_search.rs）。
+    #[serde(default, skip)]
+    pub deferred_tool_names: Vec<String>,
+    /// 请求侧拆分后被 defer 的工具（响应侧 tool_search 代答的检索池）。
+    /// 非流式与流式（缓冲代答环）均会填充。
+    #[serde(default, skip)]
+    pub deferred_tools: Vec<Tool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

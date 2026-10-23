@@ -253,7 +253,10 @@ pub async fn resolve_managed_account_credentials(
                     &state.config.region,
                 );
                 let available_models_profile_arn = ctx.profile_arn.clone();
-                let http = match build_streaming_http_client_for_account(&account) {
+                let http = match build_streaming_http_client_for_account_with_upstream_proxy(
+                    &account,
+                    state.config.upstream_proxy.as_deref(),
+                ) {
                     Ok(http) => http,
                     Err(error) => {
                         return Err(format!(
@@ -451,7 +454,11 @@ pub fn build_upstream_credentials_from_refresh(
         &config.region,
     );
 
-    let http = build_streaming_http_client_for_account(account).map_err(|error| {
+    let http = build_streaming_http_client_for_account_with_upstream_proxy(
+        account,
+        config.upstream_proxy.as_deref(),
+    )
+    .map_err(|error| {
         format!(
             "创建账号 {} 的 kiro2api HTTP 客户端失败: {}",
             account.label,

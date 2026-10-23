@@ -32,13 +32,15 @@ pub fn normalize_openai_responses_request(payload: &Value) -> Result<NormalizedR
         return Err("Responses 请求缺少可转换的 input".to_string());
     }
 
-    let (tools, tool_name_map) = convert_responses_tools(payload.get("tools"));
+    let (tools, tool_name_map, deferred_tool_names) =
+        convert_responses_tools(payload.get("tools"));
     Ok(build_normalized_request_from_payload(
         payload,
         model,
         messages,
         tools,
         tool_name_map,
+        deferred_tool_names,
     ))
 }
 
@@ -452,11 +454,19 @@ pub fn extract_responses_message_metadata(item: &Value, role: &str) -> Option<Va
 
 pub fn convert_responses_tools(
     tools: Option<&Value>,
-) -> (Option<Vec<Tool>>, std::collections::HashMap<String, String>) {
+) -> (
+    Option<Vec<Tool>>,
+    std::collections::HashMap<String, String>,
+    Vec<String>,
+) {
     let mut tool_name_map = std::collections::HashMap::new();
+    // Tool Search 规范：defer_loading 工具的 sanitized 名单。三种工具形状
+    // （嵌套 function / MCP / 扁平 function）统一从原始 item 顶层读取，
+    // 语义对齐 Anthropic 侧（见 normalize/anthropic.rs 与 proxy/tool_search.rs）。
+    let mut deferred_tool_names = Vec::new();
 
     let Some(items) = tools.and_then(Value::as_array) else {
-        return (None, tool_name_map);
+        return (None, tool_name_map, deferred_tool_names);
     };
 
     let converted: Vec<Tool> = items
@@ -466,14 +476,19 @@ pub fn convert_responses_tools(
             if let Some((sanitized, original)) = mapping {
                 tool_name_map.insert(sanitized, original);
             }
+            if item.get("defer_loading") == Some(&Value::Bool(true)) {
+                // tool.function.name 已是 sanitize 后的名字，与请求侧拆分的
+                // 消费约定一致（proxy/tool_search.rs）
+                deferred_tool_names.push(tool.function.name.clone());
+            }
             Some(tool)
         })
         .collect();
 
     if converted.is_empty() {
-        (None, tool_name_map)
+        (None, tool_name_map, deferred_tool_names)
     } else {
-        (Some(converted), tool_name_map)
+        (Some(converted), tool_name_map, deferred_tool_names)
     }
 }
 
@@ -533,6 +548,46 @@ pub fn convert_responses_tool(item: &Value) -> Option<(Tool, Option<(String, Str
         ));
     }
 
+    // OpenAI `custom` 工具（free-form 文本输入/输出）：官方形状
+    // `{ "type": "custom", "name": "...", "description": "...", "format": {...} }`。
+    // 没有 `parameters`——上游 Kiro 只认 JSON Schema 工具，因此用单字段对象
+    // 包住自由文本输入，让模型仍能发起调用（内容走 `input` 字符串）。
+    // 直接丢弃会让客户端声明的 custom 工具彻底消失。
+    if item_type == "custom" {
+        let original_name = item.get("name").and_then(Value::as_str)?.to_string();
+        let sanitized_name = shorten_tool_name(&sanitize_tool_name(&original_name));
+        let description = item
+            .get("description")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let mapping = if sanitized_name != original_name {
+            Some((sanitized_name.clone(), original_name))
+        } else {
+            None
+        };
+        return Some((
+            Tool {
+                tool_type: "function".to_string(),
+                function: ToolFunction {
+                    name: sanitized_name,
+                    description,
+                    parameters: Some(json!({
+                        "type": "object",
+                        "properties": {
+                            "input": {
+                                "type": "string",
+                                "description": "Free-form text input for this custom tool."
+                            }
+                        },
+                        "required": ["input"]
+                    })),
+                },
+                cache_control: None,
+            },
+            mapping,
+        ));
+    }
+
     if item_type != "function" {
         return None;
     }
@@ -561,4 +616,24 @@ pub fn convert_responses_tool(item: &Value) -> Option<(Tool, Option<(String, Str
         },
         mapping,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// OpenAI free-form custom tool：无 parameters，不能静默丢弃
+    #[test]
+    fn custom_tool_is_not_dropped() {
+        let item = serde_json::json!({
+            "type": "custom",
+            "name": "my_custom",
+            "description": "free form tool"
+        });
+        let (tool, _) = convert_responses_tool(&item).expect("custom tool must be converted");
+        assert_eq!(tool.function.name, "myCustom");
+        let params = tool.function.parameters.unwrap();
+        assert_eq!(params["type"], "object");
+        assert!(params["properties"].get("input").is_some());
+    }
 }

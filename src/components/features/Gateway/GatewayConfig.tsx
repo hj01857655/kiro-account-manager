@@ -122,7 +122,8 @@ function GatewayConfig({
     `${promptSwitchesOn} ${t('gateway.switchesOn')}`,
     config.responseCacheEnabled
       ? `${t('gateway.enabled')} · TTL ${config.responseCacheTtl}s`
-      : t('gateway.disabled')
+      : t('gateway.disabled'),
+    config.webSearchEnabled ? t('gateway.webSearchOn') : t('gateway.webSearchOff')
   ].join(' · ')
   const accessSummary = `${config.localOnly ? t('gateway.localOnly') : t('gateway.allowRemote')} · ${config.enabled ? t('gateway.autoStartOn') : t('gateway.autoStartOff')}`
 
@@ -367,6 +368,10 @@ function GatewayConfig({
                   <Label className="text-sm">{t('gateway.responseCache')}</Label>
                   <Switch checked={!!config.responseCacheEnabled} onCheckedChange={(checked: boolean) => setField('responseCacheEnabled', checked)} />
                 </div>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                  <Label className="text-sm">{t('gateway.webSearchToggle')}</Label>
+                  <Switch checked={!!config.webSearchEnabled} onCheckedChange={(checked: boolean) => setField('webSearchEnabled', checked)} />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs text-muted-foreground">{t('gateway.cacheTTLSeconds')}</Label>
                   <Input
@@ -377,6 +382,17 @@ function GatewayConfig({
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('responseCacheTtl', Number(e.target.value) || 180)}
                     disabled={!config.responseCacheEnabled}
                   />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs text-muted-foreground">{t('gateway.maxToolDescLabel')}</Label>
+                  <Input
+                    type="number"
+                    value={config.maxToolDescriptionLength}
+                    min={0}
+                    max={100000}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('maxToolDescriptionLength', Number(e.target.value) || 0)}
+                  />
+                  <span className="text-[11px] text-muted-foreground">{t('gateway.maxToolDescHint')}</span>
                 </div>
               </div>
               </div>
@@ -426,6 +442,23 @@ function GatewayConfig({
                       : <span className="text-[11px] text-muted-foreground">{t('gateway.ipWhitelistHint')}</span>}
                   </div>
                 )}
+
+                <div className="flex flex-col gap-1.5">
+                  <Label>{t('gateway.upstreamProxyLabel')}</Label>
+                  <input
+                    type="text"
+                    value={config.upstreamProxy ?? ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField('upstreamProxy', e.target.value)}
+                    placeholder="http://127.0.0.1:7890"
+                    className={
+                      'h-9 w-full rounded-md border border-border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ' +
+                      (fieldErrors.upstreamProxy ? 'border-red-500' : '')
+                    }
+                  />
+                  {fieldErrors.upstreamProxy
+                    ? <div className="text-xs text-red-500">{fieldErrors.upstreamProxy}</div>
+                    : <span className="text-[11px] text-muted-foreground">{t('gateway.upstreamProxyHint')}</span>}
+                </div>
               </div>
             </AccordionContent>
           </AccordionItem>

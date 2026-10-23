@@ -26,6 +26,77 @@ fn rejects_local_account_mode_for_gateway() {
 }
 
 #[test]
+fn upstream_proxy_validation_rejects_blank_and_bad_scheme() {
+    let base = || GatewayConfig {
+        account_mode: "single".to_string(),
+        account_id: Some("test-account".to_string()),
+        ..GatewayConfig::default()
+    };
+
+    // 空白字符串非法：留空应存 null，而不是 ""
+    let config = GatewayConfig {
+        upstream_proxy: Some("   ".to_string()),
+        ..base()
+    };
+    let err = ensure_config_valid(&config).expect_err("blank proxy should fail");
+    assert!(err.contains("upstreamProxy"), "unexpected error: {err}");
+
+    // 无 scheme（裸 host:port）非法：与前端占位符一致，必须带 http:// 前缀
+    let config = GatewayConfig {
+        upstream_proxy: Some("127.0.0.1:7890".to_string()),
+        ..base()
+    };
+    let err = ensure_config_valid(&config).expect_err("schemeless proxy should fail");
+    assert!(err.contains("http/https/socks5"), "unexpected error: {err}");
+
+    // 不支持的 scheme 拒绝
+    let config = GatewayConfig {
+        upstream_proxy: Some("ftp://127.0.0.1:21".to_string()),
+        ..base()
+    };
+    let err = ensure_config_valid(&config).expect_err("ftp proxy should fail");
+    assert!(err.contains("http/https/socks5"), "unexpected error: {err}");
+}
+
+#[test]
+fn upstream_proxy_validation_accepts_supported_schemes() {
+    for proxy in [
+        "http://127.0.0.1:7890",
+        "https://proxy.example.com:8443",
+        "socks5://127.0.0.1:1080",
+        "socks5h://proxy.internal:1080",
+    ] {
+        let config = GatewayConfig {
+            upstream_proxy: Some(proxy.to_string()),
+            account_mode: "single".to_string(),
+            account_id: Some("test-account".to_string()),
+            ..GatewayConfig::default()
+        };
+        ensure_config_valid(&config)
+            .unwrap_or_else(|err| panic!("proxy {proxy} should pass: {err}"));
+    }
+}
+
+#[test]
+fn normalize_config_trims_and_clears_blank_upstream_proxy() {
+    // 归一化把空白归成 None，避免前端清空输入框后残留 \"\" 触发校验失败
+    let config = GatewayConfig {
+        upstream_proxy: Some("  ".to_string()),
+        ..GatewayConfig::default()
+    };
+    assert_eq!(normalize_config(&config).upstream_proxy, None);
+
+    let config = GatewayConfig {
+        upstream_proxy: Some(" http://127.0.0.1:7890 ".to_string()),
+        ..GatewayConfig::default()
+    };
+    assert_eq!(
+        normalize_config(&config).upstream_proxy,
+        Some("http://127.0.0.1:7890".to_string())
+    );
+}
+
+#[test]
 fn accepts_known_regions() {
     let mut config = GatewayConfig {
         account_mode: "single".to_string(),

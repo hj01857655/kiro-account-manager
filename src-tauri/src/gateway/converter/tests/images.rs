@@ -39,6 +39,8 @@ async fn build_kiro_payload_extracts_base64_images() {
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
+        deferred_tool_names: Vec::new(),
+        deferred_tools: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -133,6 +135,8 @@ async fn build_kiro_payload_rejects_private_remote_images() {
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
+        deferred_tool_names: Vec::new(),
+        deferred_tools: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -184,6 +188,8 @@ async fn build_kiro_payload_rejects_oversized_data_url_images() {
         include_usage: false,
         tool_name_map: Default::default(),
         server_tool_names: Vec::new(),
+        deferred_tool_names: Vec::new(),
+        deferred_tools: Vec::new(),
     };
 
     let payload = build_kiro_payload(&Client::new(), &request, None, None)

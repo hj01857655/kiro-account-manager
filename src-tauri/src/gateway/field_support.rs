@@ -76,8 +76,20 @@ static ANTHROPIC_MESSAGES_FIELDS: &[(&str, FieldSupport)] = &[
     ("system", FieldSupport::Consumed),
     ("max_tokens", FieldSupport::Consumed),
     ("stream", FieldSupport::Consumed),
-    ("temperature", FieldSupport::Consumed),
-    ("top_p", FieldSupport::Consumed),
+    // 采样参数：Anthropic API 2026-10-21 起携带即 400（即使等于默认值），
+    // 上游 Kiro 也没有对应字段——既未生效又会让客户端误判，直接跟随官方拒绝。
+    (
+        "temperature",
+        FieldSupport::Rejected {
+            reason: "temperature 已由 Anthropic API 2026-10-21 移除：携带即 400，请从请求中删除",
+        },
+    ),
+    (
+        "top_p",
+        FieldSupport::Rejected {
+            reason: "top_p 已由 Anthropic API 2026-10-21 移除：携带即 400，请从请求中删除",
+        },
+    ),
     ("stop_sequences", FieldSupport::Consumed),
     ("tools", FieldSupport::Consumed),
     ("tool_choice", FieldSupport::Consumed),
@@ -85,11 +97,12 @@ static ANTHROPIC_MESSAGES_FIELDS: &[(&str, FieldSupport)] = &[
     // 官方 effort 档位在顶层 output_config.effort（与 thinking 正交），
     // 归一化阶段已消费进 NormalizedRequest.effort
     ("output_config", FieldSupport::Consumed),
-    // 上游 Kiro 不接受 top_k，转发会被忽略，不如明说
+    // 上游 Kiro 不接受 top_k，转发会被忽略，不如明说；
+    // Anthropic API 2026-10-21 也把 top_k 一并移除（携带即 400），方向一致。
     (
         "top_k",
         FieldSupport::Rejected {
-            reason: "top_k 暂不支持：上游 Kiro 未暴露该参数",
+            reason: "top_k 暂不支持：上游 Kiro 未暴露该参数（Anthropic API 2026-10-21 起亦已移除）",
         },
     ),
     (
@@ -393,6 +406,33 @@ mod tests {
         let found = find_rejected_field(Protocol::AnthropicMessages, &payload)
             .expect("top_k should be rejected");
         assert_eq!(found.0, "top_k");
+    }
+
+    /// Anthropic API 2026-10-21 移除了三个采样参数：携带即 400。
+    /// 上游 Kiro 本来也不消费它们，拒绝比静默丢弃更接近官方语义。
+    #[test]
+    fn anthropic_sampling_parameters_are_rejected() {
+        for field in ["temperature", "top_p", "top_k"] {
+            let payload = json!({ "model": "m", field: 0.5 });
+            let found = find_rejected_field(Protocol::AnthropicMessages, &payload)
+                .unwrap_or_else(|| panic!("{field} should be rejected"));
+            assert_eq!(found.0, field);
+        }
+    }
+
+    /// OpenAI 两个协议没有移除采样参数，不能跟着 Anthropic 一起拒。
+    #[test]
+    fn openai_sampling_parameters_stay_accepted() {
+        let payload = json!({ "temperature": 0.5, "top_p": 0.9 });
+        for protocol in [
+            Protocol::OpenAIChatCompletions,
+            Protocol::OpenAIResponses,
+        ] {
+            assert!(
+                find_rejected_field(protocol, &payload).is_none(),
+                "{protocol:?} must keep accepting sampling parameters"
+            );
+        }
     }
 
     /// R5：Anthropic 表收录 output_config（effort 真实消费）；

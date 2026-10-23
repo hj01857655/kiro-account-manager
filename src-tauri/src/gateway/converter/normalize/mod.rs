@@ -38,6 +38,7 @@ pub fn build_normalized_request_from_payload(
     mut messages: Vec<NormalizedMessage>,
     tools: Option<Vec<Tool>>,
     tool_name_map: std::collections::HashMap<String, String>,
+    deferred_tool_names: Vec<String>,
 ) -> NormalizedRequest {
     // 处理 response_format：注入 system prompt 让模型按格式返回
     if let Some(response_format) = payload.get("response_format").and_then(|v| v.as_object()) {
@@ -195,6 +196,8 @@ pub fn build_normalized_request_from_payload(
         tool_name_map,
         // Responses 协议的服务端工具项（web_search_call 等）是消息内容而非工具定义
         server_tool_names: Vec::new(),
+        deferred_tool_names,
+        deferred_tools: Vec::new(),
     }
 }
 

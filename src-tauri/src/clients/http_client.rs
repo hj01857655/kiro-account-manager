@@ -509,15 +509,44 @@ pub fn build_http_client() -> Result<Client, String> {
     build_http_client_with_timeout(30, 10)
 }
 
-/// 构建用于流式请求的 HTTP 客户端（无总超时限制）
-pub fn build_streaming_http_client() -> Result<Client, String> {
-    apply_app_proxy(base_http_client_builder(None, 30))?
+/// 网关上游专用：显式代理优先，未配置时退回隐式解析链。
+/// 显式代理来自网关自身配置（GatewayConfig.upstream_proxy），语义上独立于
+/// 账号代理与 Kiro IDE 代理，避免「网关跟 IDE 走」的隐式耦合。
+pub fn build_streaming_http_client_with_upstream_proxy(
+    upstream_proxy: Option<&str>,
+) -> Result<Client, String> {
+    let explicit = upstream_proxy.map(str::trim).filter(|value| !value.is_empty());
+    let builder = base_http_client_builder(None, 30);
+    let builder = match normalize_proxy_url(explicit.unwrap_or_default()) {
+        Some(proxy_url) => {
+            log::info!("[HttpClient] 网关上游显式代理: {proxy_url}");
+            let proxy = Proxy::all(&proxy_url)
+                .map_err(|e| format!("网关上游代理配置错误: {e}"))?;
+            builder.no_proxy().proxy(proxy)
+        }
+        None => apply_app_proxy(builder)?,
+    };
+    builder
         .build()
         .map_err(|e| format!("Failed to create streaming HTTP client: {e}"))
 }
 
-pub fn build_streaming_http_client_for_account(account: &Account) -> Result<Client, String> {
-    apply_account_or_app_proxy(base_http_client_builder(None, 30), account)?
+pub fn build_streaming_http_client_for_account_with_upstream_proxy(
+    account: &Account,
+    upstream_proxy: Option<&str>,
+) -> Result<Client, String> {
+    let explicit = upstream_proxy.map(str::trim).filter(|value| !value.is_empty());
+    let builder = base_http_client_builder(None, 30);
+    let builder = match normalize_proxy_url(explicit.unwrap_or_default()) {
+        Some(proxy_url) => {
+            log::info!("[HttpClient] 网关上游显式代理（账号链路）: {proxy_url}");
+            let proxy = Proxy::all(&proxy_url)
+                .map_err(|e| format!("网关上游代理配置错误: {e}"))?;
+            builder.no_proxy().proxy(proxy)
+        }
+        None => apply_account_or_app_proxy(builder, account)?,
+    };
+    builder
         .build()
         .map_err(|e| format!("Failed to create account streaming HTTP client: {e}"))
 }

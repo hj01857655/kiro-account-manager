@@ -45,7 +45,9 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::clients::http_client::{build_streaming_http_client, is_supported_kiro_region};
+use crate::clients::http_client::{
+    build_streaming_http_client_with_upstream_proxy, is_supported_kiro_region,
+};
 use crate::gateway::token_cache::TokenCache;
 
 /// 获取可用模型列表（仅用于前端展示，返回 model ID 列表）
@@ -123,6 +125,15 @@ pub struct GatewayConfig {
     /// 自定义提示过滤规则
     #[serde(default)]
     pub prompt_filter_rules: Vec<PromptFilterRule>,
+    /// 网关上游（Kiro API）显式代理：非空时优先于账号代理与应用代理链。
+    /// 支持 http/https/socks5 URL；空 = 维持原隐式解析（账号代理 > 应用代理模式 > 环境变量）。
+    #[serde(default)]
+    pub upstream_proxy: Option<String>,
+    /// 工具描述长度上限（字节）。超过的描述外移到系统提示的 Tool Documentation 段，
+    /// 防止超长工具描述触发上游 4xx（社区 kiro2api 同款配置项）。
+    /// 默认 10237 = 与旧版硬编码一致，行为不变；0 = 不限制。
+    #[serde(default = "default_max_tool_desc_len")]
+    pub max_tool_description_length: u32,
     /// 是否记录请求日志
     #[serde(default = "default_true_val")]
     pub log_requests: bool,
@@ -137,10 +148,20 @@ pub struct GatewayConfig {
     /// 关闭后此类子请求会因 tool_choice 无法映射而被拒绝。
     #[serde(default = "default_true_val")]
     pub web_search_enabled: bool,
+    /// Tool Search 工具发现规范（Anthropic defer_loading）：拆分 defer_loading
+    /// 工具并注入合成 tool_search 工具，模型按需检索定义（见
+    /// proxy/tool_search.rs）。非流式直改请求；流式经缓冲代答环处理，
+    /// 客户端仍收标准 SSE。关闭后 defer_loading 字段被忽略，行为与旧版一致。
+    #[serde(default = "default_true_val")]
+    pub tool_search_enabled: bool,
 }
 
 fn default_cache_ttl() -> u64 {
     180
+}
+
+fn default_max_tool_desc_len() -> u32 {
+    crate::gateway::converter::TOOL_DESCRIPTION_MAX_LENGTH as u32
 }
 
 /// 自定义提示过滤规则
@@ -411,10 +432,13 @@ impl Default for GatewayConfig {
             filter_strip_boundaries: false,
             filter_env_noise: false,
             prompt_filter_rules: Vec::new(),
+            upstream_proxy: None,
+            max_tool_description_length: default_max_tool_desc_len(),
             log_requests: true,
             response_cache_enabled: true,
             response_cache_ttl: default_cache_ttl(),
             web_search_enabled: true,
+            tool_search_enabled: true,
         }
     }
 }
@@ -487,12 +511,34 @@ fn ensure_config_valid(config: &GatewayConfig) -> Result<(), String> {
     ) {
         return Err("logLevel 必须是 debug/info/warn/error".to_string());
     }
+    if config.max_tool_description_length > 100_000 {
+        return Err("maxToolDescriptionLength 不能超过 100000".to_string());
+    }
     if !config.local_only && config.allowed_ips.is_empty() {
         return Err("允许远程访问时必须至少配置一个白名单来源 IP".to_string());
     }
     for entry in &config.allowed_ips {
         if !is_valid_allowlist_entry(entry) {
             return Err(format!("白名单条目无效: {entry}"));
+        }
+    }
+    if let Some(proxy) = config.upstream_proxy.as_deref() {
+        let proxy = proxy.trim();
+        if proxy.is_empty() {
+            return Err("upstreamProxy 不能是空白字符串，留空请设为 null".to_string());
+        }
+        let scheme = proxy
+            .split("://")
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let has_scheme = proxy.contains("://");
+        if !has_scheme
+            || !matches!(scheme.as_str(), "http" | "https" | "socks5" | "socks5h")
+        {
+            return Err(format!(
+                "upstreamProxy 仅支持 http/https/socks5 URL，收到: {proxy}"
+            ));
         }
     }
     Ok(())
@@ -531,6 +577,12 @@ fn normalize_config(config: &GatewayConfig) -> GatewayConfig {
             }
             acc
         });
+    // 空串归一成 None，避免前端清空输入框后残留 "" 触发校验失败
+    normalized.upstream_proxy = normalized
+        .upstream_proxy
+        .take()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     normalized
 }
 
@@ -1163,7 +1215,10 @@ async fn spawn_runtime(
     let responses_sessions = Arc::new(AsyncMutex::new(HashMap::new()));
     let token_cache = Arc::new(AsyncMutex::new(TokenCache::new()));
 
-    let http = build_streaming_http_client().map_err(|e| format!("初始化 HTTP 客户端失败: {e}"))?;
+    let http = build_streaming_http_client_with_upstream_proxy(
+        config.upstream_proxy.as_deref(),
+    )
+    .map_err(|e| format!("初始化 HTTP 客户端失败: {e}"))?;
 
     // 初始化负载均衡器
     let strategy = load_balancer::LoadBalancerStrategy::from_str(&config.strategy);

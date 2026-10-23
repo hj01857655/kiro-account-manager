@@ -35,6 +35,8 @@ export interface GatewayConfig {
   responseCacheEnabled: boolean;
   responseCacheTtl: number;
   webSearchEnabled: boolean;
+  upstreamProxy: string;
+  maxToolDescriptionLength: number;
 }
 
 export interface PromptFilterRule {
@@ -90,7 +92,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   logRequests: true,
   responseCacheEnabled: true,
   responseCacheTtl: 180,
-  webSearchEnabled: true
+  webSearchEnabled: true,
+  upstreamProxy: '',
+  maxToolDescriptionLength: 10237
 }
 
 export const DEFAULT_GATEWAY_STATUS: GatewayStatus = {
@@ -119,7 +123,9 @@ export const buildGatewayConfigSnapshot = (config: GatewayConfig) => JSON.string
   filterClaudeCode: !!config.filterClaudeCode,
   filterStripBoundaries: !!config.filterStripBoundaries,
   filterEnvNoise: !!config.filterEnvNoise,
-  promptFilterRules: config.promptFilterRules || []
+  promptFilterRules: config.promptFilterRules || [],
+  upstreamProxy: config.upstreamProxy || '',
+  maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0
 })
 
 export const buildGatewayRuntimeSnapshot = (config: GatewayConfig) => JSON.stringify({
@@ -138,7 +144,9 @@ export const buildGatewayRuntimeSnapshot = (config: GatewayConfig) => JSON.strin
   filterClaudeCode: !!config.filterClaudeCode,
   filterStripBoundaries: !!config.filterStripBoundaries,
   filterEnvNoise: !!config.filterEnvNoise,
-  promptFilterRules: config.promptFilterRules || []
+  promptFilterRules: config.promptFilterRules || [],
+  upstreamProxy: config.upstreamProxy || '',
+  maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0
 })
 
 export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
@@ -166,7 +174,9 @@ export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
   logRequests: gatewayConfig?.logRequests ?? true,
   responseCacheEnabled: gatewayConfig?.responseCacheEnabled ?? true,
   responseCacheTtl: gatewayConfig?.responseCacheTtl ?? 180,
-  webSearchEnabled: gatewayConfig?.webSearchEnabled ?? true
+  webSearchEnabled: gatewayConfig?.webSearchEnabled ?? true,
+  upstreamProxy: typeof gatewayConfig?.upstreamProxy === 'string' ? gatewayConfig.upstreamProxy : '',
+  maxToolDescriptionLength: gatewayConfig?.maxToolDescriptionLength ?? 10237
 })
 
 export const buildGatewayStatusState = (gatewayStatus: any, gatewayConfig: any, fallbackConfig: GatewayConfig = DEFAULT_GATEWAY_CONFIG): GatewayStatus => ({
@@ -199,7 +209,10 @@ export const buildGatewayPayload = (config: GatewayConfig) => ({
   logRequests: config.logRequests !== false,
   responseCacheEnabled: !!config.responseCacheEnabled,
   responseCacheTtl: Number(config.responseCacheTtl) || 3600,
-  webSearchEnabled: config.webSearchEnabled !== false
+  webSearchEnabled: config.webSearchEnabled !== false,
+  // 空串归一为 null：后端将空串视为非法（upstreamProxy 必须是有效 URL 或缺失）
+  upstreamProxy: config.upstreamProxy?.trim() ? config.upstreamProxy.trim() : null,
+  maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0
 })
 
 export const loadGatewayPageData = async () => {

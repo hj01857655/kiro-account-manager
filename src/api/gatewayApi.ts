@@ -1,6 +1,46 @@
 // 网关（反代）相关 API 调用
 import { invoke } from '@tauri-apps/api/core'
 
+/**
+ * 与后端 `gateway::GatewayConfig`（serde camelCase）对应的载荷形状。
+ * 类型真相在 `gatewayPageState.ts` 的页面状态层，这里只收口写路径，
+ * 读路径（getGatewayConfig/getGatewayStatus）仍返回后端原始结构，由 hydrate 处理。
+ */
+export interface GatewayConfigPayload {
+  enabled: boolean
+  host: string
+  port: number
+  region: string
+  accountMode: string
+  accountId: string | null
+  groupId: string | null
+  poolAccountIds: string[]
+  strategy: string
+  threshold: number
+  localOnly: boolean
+  allowedIps: string[]
+  logLevel: string
+  filterClaudeCode: boolean
+  filterStripBoundaries: boolean
+  filterEnvNoise: boolean
+  promptFilterRules: Array<{
+    id: string
+    name: string
+    enabled: boolean
+    ruleType: string
+    matchPattern: string
+    replace: string
+  }>
+  logRequests: boolean
+  responseCacheEnabled: boolean
+  responseCacheTtl: number
+  webSearchEnabled: boolean
+  /** 网关上游（Kiro API）显式代理；空 = 走账号/应用代理链 */
+  upstreamProxy: string | null
+  /** 工具描述最大长度；0 = 不截断 */
+  maxToolDescriptionLength: number
+}
+
 export function getGatewayConfig<T = any>() {
   return invoke<T>('get_gateway_config')
 }
@@ -9,11 +49,11 @@ export function getGatewayStatus<T = any>() {
   return invoke<T>('get_gateway_status')
 }
 
-export function saveGatewayConfig(config: any) {
+export function saveGatewayConfig(config: GatewayConfigPayload) {
   return invoke('save_gateway_config', { config })
 }
 
-export function startGateway<T = any>(config: any) {
+export function startGateway<T = any>(config: GatewayConfigPayload) {
   return invoke<T>('start_gateway', { config })
 }
 
