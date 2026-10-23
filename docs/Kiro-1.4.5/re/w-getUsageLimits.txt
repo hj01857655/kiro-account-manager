@@ -1,0 +1,121 @@
+=====
+--- pos=13688425 ---
+overageEnabled && e17.overageCapable && t18.push("enableOverages"), e17.upgradeCapable && t18.push("upgradePlan"), t18.length === 0 && t18.push("viewUsage"), t18;
+}
+async function ur8(s27) {
+  const { authProvider: e17, controlPlaneEndpointOverride: t18, regionOverride: i29, origin: r23, customUserAgent: o29, signal: n27, transport: a34 = Cu2 } = s27;
+  if (n27?.aborted) throw n27.reason instanceof Error ? n27.reason : /* @__PURE__ */ new Error("getUsageLimits aborted");
+  return a34({
+    authProvider: e17,
+    controlPlaneEndpointOverride: t18,
+    regionOverride: i29,
+    origin: r23,
+    customUserAgent: o29,
+    signal: n27
+  });
+}
+function xu2(s27, e17, t18 = Date.now()) {
+  const i29 = s27.subscriptionInfo?.subscriptionTitle ?? "Unknown";
+  let r23 = "Unknown";
+  if (s27.nextDateReset) {
+    const h53 = s27.nextDateReset;
+    isNaN(h53.getTime()) || (r23 = h53.toISOString().slice(0, 10));
+  }
+  const o29 = s27.overageConfiguration?.overageStatus === "ENABLED", n27 = s27.subscriptionInfo?.overageCapability === jl2.OVERAGE_CAPABLE, a34 = s27.usageBreakdownList ?? [], c39 = a34.map((h53) => Pu
+
+=====
+--- pos=20433985 ---
+  () => exports2.GetTransformationRequest$,
+      () => exports2.GetTransformationResponse$
+    ];
+    exports2.GetTransformationPlan$ = [
+      9,
+      n1,
+      _GTP,
+      { [_ht]: ["GET", "/getTransformationPlan/{transformationJobId+}", 200] },
+      () => exports2.GetTransformationPlanRequest$,
+      () => exports2.GetTransformationPlanResponse$
+    ];
+    exports2.GetUsageLimits$ = [
+      9,
+      n1,
+      _GUL,
+      { [_ht]: ["GET", "/getUsageLimits", 200] },
+      () => exports2.GetUsageLimitsRequest$,
+      () => exports2.GetUsageLimitsResponse$
+    ];
+    exports2.ListAvailableCustomizations$ = [
+      9,
+      n1,
+      _LAC,
+      { [_ht]: ["POST", "/ListAvailableCustomizations", 200] },
+      () => exports2.ListAvailableCustomizationsRequest$,
+      () => exports2.ListAvailableCustomizationsResponse$
+    ];
+    exports2.ListAvailableModels$ = [
+      9,
+      n1,
+      _LAM,
+      { [_ht]: ["GET", "/ListAvailableModels", 200] },
+      () => exports2.ListAvailableModelsRequest$,
+      () => exports2.ListAvailableModelsResponse$
+    ];
+    exports2.ListAvailableProfiles$ = [
+      9
+
+=====
+--- pos=20569313 ---
+, message, timeoutMs, actions) {
+  if (actions && actions.length > 0 && type !== "informational") {
+    const userActions = mapAgentActionsToUserActions(actions);
+    const show = type === "warn" ? vscode130.window.showWarningMessage : vscode130.window.showErrorMessage;
+    const picked = await show(message, ...userActions);
+    if (picked) {
+      try {
+        const result2 = await vscode130.commands.executeCommand(
+          "kiro.usageLimits.getUsageLimits"
+        );
+        const subscriptionInfo = result2.data?.subscriptionInfo;
+        if (subscriptionInfo) {
+          await executeNotificationAction(picked, subscriptionInfo);
+        } else {
+          await vscode130.commands.executeCommand("kiro.accountDashboard.showDashboard");
+        }
+      } catch (e17) {
+        logger11.error("[showMessage] failed to execute notification action", e17);
+      }
+    }
+    return;
+  }
+  switch (type) {
+    case "informational": {
+      const notificationPromise = vscode130.window.showInformationMessage(message);
+      if (timeoutMs) {
+        const timeoutPromise = new Promise((resolve12) => setTime
+
+=====
+--- pos=24331921 ---
+;
+function shouldSuppressError(error47) {
+  if (!(error47 instanceof Error) || !("$metadata" in error47)) return false;
+  const { name: name2, $metadata, reason } = error47;
+  return name2 === "AccessDeniedException" && $metadata.httpStatusCode === 403 && reason === "FEATURE_NOT_SUPPORTED";
+}
+__name(shouldSuppressError, "shouldSuppressError");
+function register28(context3) {
+  const disposable = registerInstrumentedCommand(
+    "kiro.usageLimits.getUsageLimits",
+    async (isEmailRequired) => {
+      return Metrics16.callWithTrace("GetUsageLimits", async () => {
+        const usageIsEnabled = usageLimitsAvailabilityCache.isUsageEnabled();
+        const shouldRetry2 = usageLimitsAvailabilityCache.shouldRetryDisabledUsageLimits();
+        if (usageIsEnabled === false && !shouldRetry2) {
+          const cachedResponse = usageLimitsAvailabilityCache.getCachedErrorResponse();
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+        }
+        const profileArn = await resolveProfileArn({ required: true });
+        const { provider } = authProvider.readToken() ?? {};
+        
+

@@ -1,0 +1,35 @@
+ = i29;
+    if (await xi3(o29), n27 === "GenerateAssistantResponseCommand") {
+      const c39 = o29.headers["x-amzn-kiro-conversation-id"] ?? "";
+      return {
+        response: o29,
+        output: {
+          $metadata: { httpStatusCode: o29.statusCode },
+          conversationId: c39,
+          generateAssistantResponseResponse: Q11(o29.body, n27)
+        }
+      };
+    }
+    if (n27 === "InvokeMCPStreamCommand") {
+      const c39 = o29.headers["content-type"] ?? "", d47 = c39.includes("application/vnd.amazon.eventstream");
+      return {
+        response: o29,
+        output: {
+          $metadata: { httpStatusCode: o29.statusCode },
+          contentType: c39,
+          stream: (async function* () {
+            if (d47) yield* Q11(o29.body, n27);
+            else for await (const p46 of Ai3(o29.body, n27)) yield { message: p46 };
+          })()
+        }
+      };
+    }
+    return r23(s27);
+  }, {
+    step: "deserialize",
+    priority: "high"
+  });
+}
+async function wi2(e17) {
+  const { authProvider: r23, endpoint: a34, origin: s27, version: n27, customUserAgent: i29, signal: o29 } = e17;
+  if (o29?.aborted) throw o29.reason instanceof Error ? o29.reason : /* @__PURE__ */ new E

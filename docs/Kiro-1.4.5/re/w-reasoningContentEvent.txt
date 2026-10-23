@@ -1,0 +1,168 @@
+=====
+--- pos=9636346 ---
+ "message";
+    ts4 = "metadataEvent";
+    rs4 = "meteringEvent";
+    he12 = "modelId";
+    as4 = "messageId";
+    L17 = "method";
+    R16 = "name";
+    ns6 = "normalizedTokenUsage";
+    F15 = "origin";
+    ss4 = "operatingSystem";
+    os5 = "outputTokens";
+    w13 = "profileArn";
+    ge11 = "programmingLanguage";
+    H13 = "params";
+    is4 = "position";
+    I16 = "reason";
+    vs4 = "retryAfterSeconds";
+    cs4 = "reasoningContent";
+    ds4 = "reasoningContentEvent";
+    us4 = "recommendationContentSpan";
+    _e9 = "redactedContent";
+    ls4 = "relevantDocuments";
+    fe11 = "relativeFilePath";
+    ps4 = "recommendedModel";
+    ms4 = "reasoningText";
+    hs4 = "range";
+    gs4 = "references";
+    _s4 = "refusal";
+    fs6 = "repository";
+    Se10 = "result";
+    Ee9 = "smithy.ts.sdk.synthetic.com.amazon.kiro.runtimeservice";
+    Ss4 = "sourceContent";
+    Es4 = "stopDetails";
+    Cs4 = "systemPrompt";
+    ys4 = "stopReason";
+    Rs4 = "searchResultIndex";
+    Is4 = "searchResult";
+    Ts4 = "serviceUnavailableError";
+    Ce10 = "server";
+    ye12 = "signature";
+    b16 = "source";
+    Ps4 = "stream";
+  
+
+=====
+--- pos=9668024 ---
+  return le14;
+  }
+}
+function ar5(e17) {
+  return ye13.includes(e17);
+}
+function yt3(e17) {
+  if (typeof e17 != "object" || e17 === null) return [];
+  const t18 = e17, r23 = [], o29 = M19(t18.assistantResponseEvent);
+  o29 && typeof o29.content == "string" && o29.content.length > 0 && r23.push({
+    kind: "assistant_response",
+    content: o29.content,
+    modelId: typeof o29.modelId == "string" ? o29.modelId : void 0
+  });
+  const a34 = M19(t18.reasoningContentEvent);
+  if (a34) {
+    const n27 = typeof a34.text == "string" ? a34.text : void 0, y45 = typeof a34.signature == "string" ? a34.signature : void 0;
+    (n27 || y45) && r23.push({
+      kind: "reasoning_content",
+      text: n27,
+      signature: y45
+    });
+  }
+  const c39 = M19(t18.toolUseEvent);
+  c39 && r23.push({
+    kind: "tool_use",
+    toolUseId: typeof c39.toolUseId == "string" ? c39.toolUseId : void 0,
+    name: typeof c39.name == "string" ? c39.name : void 0,
+    input: typeof c39.input == "string" ? c39.input : void 0,
+    stop: c39.stop === true
+  });
+  const s27 = M19(t18.meteringEvent);
+  s27 && r23.push({
+    kind: "metering",
+  
+
+=====
+--- pos=13617149 ---
+gSystem";
+    yv = "outputTokens";
+    Rv = "options";
+    Tv = "overview";
+    Ae20 = "params";
+    z26 = "profileArn";
+    Pv = "propertyContext";
+    ke18 = "programmingLanguage";
+    Av = "propertyName";
+    kv = "planningResponseStream";
+    xv = "propertyValue";
+    Iv = "payload";
+    wv = "position";
+    xt8 = "progress";
+    Dv = "primary";
+    $v = "questions";
+    bv = "question";
+    b43 = "reason";
+    Ov = "responseCode";
+    Mv = "reasoningContentEvent";
+    Lv = "recommendationContentSpan";
+    Nv = "reasoningContent";
+    It7 = "redactedContent";
+    Uv = "relevantDocuments";
+    Fv = "runtimeDiagnostic";
+    wt9 = "relativeFilePath";
+    Wv = "relatedInformation";
+    jv = "resourceJsonString";
+    Dt9 = "resourceList";
+    zv = "reasoningText";
+    ae22 = "range";
+    $t8 = "references";
+    Bv = "region";
+    Gv = "repository";
+    bt7 = "result";
+    Ot10 = "resource";
+    Mt10 = "smithy.ts.sdk.synthetic.com.amazon.aws.codewhisperer.streaming";
+    Hv = "sourceContent";
+    Vv = "serviceConsolePage";
+    qv = "shellHistory";
+    Jv = "serviceId";
+    Qv = "sendMessageResponse";
+    K
+
+=====
+--- pos=21215400 ---
+ar _oT = "outputTokens";
+    var _ov = "overview";
+    var _p3 = "params";
+    var _pA = "profileArn";
+    var _pC = "propertyContext";
+    var _pL = "programmingLanguage";
+    var _pN = "propertyName";
+    var _pRS = "planningResponseStream";
+    var _pV = "propertyValue";
+    var _pa = "payload";
+    var _po = "position";
+    var _pr = "progress";
+    var _pri = "primary";
+    var _r11 = "reason";
+    var _rC2 = "responseCode";
+    var _rCE = "reasoningContentEvent";
+    var _rCS = "recommendationContentSpan";
+    var _rCe = "reasoningContent";
+    var _rCed = "redactedContent";
+    var _rD = "relevantDocuments";
+    var _rDu = "runtimeDiagnostic";
+    var _rFP = "relativeFilePath";
+    var _rI = "relatedInformation";
+    var _rJS = "resourceJsonString";
+    var _rL = "resourceList";
+    var _rT4 = "reasoningText";
+    var _ra = "range";
+    var _re = "references";
+    var _reg = "region";
+    var _rep = "repository";
+    var _res = "result";
+    var _reso = "resource";
+    var _s13 = "smithy.ts.sdk.synthetic.com.amazon.aws.codewhisperer.streaming";
+    var _sC = "sourceContent";
+    var _sCP = "servic
+

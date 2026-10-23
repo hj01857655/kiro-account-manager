@@ -1,0 +1,192 @@
+=====
+--- pos=9619768 ---
+mand" && n27 !== "InvokeMCPStreamCommand") return r23(s27);
+    const { response: i29 } = await e17.config.requestHandler.handle(s27.request, {}), o29 = i29;
+    if (await xi3(o29), n27 === "GenerateAssistantResponseCommand") {
+      const c39 = o29.headers["x-amzn-kiro-conversation-id"] ?? "";
+      return {
+        response: o29,
+        output: {
+          $metadata: { httpStatusCode: o29.statusCode },
+          conversationId: c39,
+          generateAssistantResponseResponse: Q11(o29.body, n27)
+        }
+      };
+    }
+    if (n27 === "InvokeMCPStreamCommand") {
+      const c39 = o29.headers["content-type"] ?? "", d47 = c39.includes("application/vnd.amazon.eventstream");
+      return {
+        response: o29,
+        output: {
+          $metadata: { httpStatusCode: o29.statusCode },
+          contentType: c39,
+          stream: (async function* () {
+            if (d47) yield* Q11(o29.body, n27);
+            else for await (const p46 of Ai3(o29.body, n27)) yield { message: p46 };
+          })()
+        }
+      };
+    }
+    return r23(s27);
+  }, {
+    step: "deserialize",
+    priority: "high"
+  });
+}
+async
+
+=====
+--- pos=9635487 ---
+  de12 = "description";
+    wn2 = "documentChar";
+    bn2 = "documentCitationEvent";
+    On = "documentChunk";
+    Mn2 = "documentIndex";
+    Un2 = "documentPage";
+    ue12 = "documentSymbols";
+    Nn = "data";
+    Fn2 = "domain";
+    Bn2 = "document";
+    Ln2 = "documents";
+    l12 = "error";
+    Hn2 = "editorState";
+    Gn2 = "envState";
+    jn2 = "environmentVariables";
+    x17 = "end";
+    Vn2 = "explanation";
+    le13 = "format";
+    qn2 = "generateAssistantResponseResponse";
+    Kn2 = "history";
+    y20 = "httpError";
+    S19 = "httpHeader";
+    W15 = "httpQuery";
+    k17 = "http";
+    pe11 = "input";
+    zn2 = "innerContext";
+    Wn2 = "inputSchema";
+    D16 = "id";
+    Jn2 = "images";
+    $14 = "jsonrpc";
+    me12 = "json";
+    Qn2 = "key";
+    Yn2 = "location";
+    Xn2 = "languageName";
+    Zn2 = "licenseName";
+    es4 = "line";
+    h18 = "message";
+    ts4 = "metadataEvent";
+    rs4 = "meteringEvent";
+    he12 = "modelId";
+    as4 = "messageId";
+    L17 = "method";
+    R16 = "name";
+    ns6 = "normalizedTokenUsage";
+    F15 = "origin";
+    ss4 = "operatingSystem";
+    os5 = "outputTokens";
+    w13 
+
+=====
+--- pos=9651093 ---
+a2,
+      8,
+      [ms4, _e9],
+      [[() => Uo, 0], 21]
+    ];
+    gi3 = [
+      4,
+      t11,
+      Ba2,
+      0,
+      [_s4],
+      [() => Fo]
+    ];
+    _i3 = [
+      4,
+      t11,
+      sn3,
+      0,
+      [Ms4],
+      [[() => qo, 0]]
+    ];
+    fi3 = [
+      4,
+      t11,
+      Ya2,
+      0,
+      [T12, me12],
+      [[() => v20, 0], [() => m17, 0]]
+    ];
+    Vi2 = [
+      9,
+      t11,
+      na3,
+      { [k17]: [
+        "POST",
+        "/generateAssistantResponse",
+        200
+      ] },
+      () => yo,
+      () => Ro
+    ];
+    Si3 = [
+      9,
+      t11,
+      ia3,
+      { [k17]: [
+        "GET",
+        "/featureConfiguration",
+        200
+      ] },
+      () => Io,
+      () => To
+    ];
+    qi2 = [
+      9,
+      t11,
+      la3,
+      { [k17]: [
+        "POST",
+        "/mcp",
+        200
+      ] },
+      () => Ao,
+      () => xo
+    ];
+    Ki2 = [
+      9,
+      t11,
+      ha3,
+      { [k17]: [
+        "POST",
+        "/mcp/stream",
+        200
+      ] },
+      () => ko,
+      () => Do
+    ];
+    Ei2 = /* @__PURE__ */ __name((e17) => ({
+      apiVersion: "2026-01-13",
+      base64Decoder: e17?.b
+
+=====
+--- pos=9699031 ---
+ditionalModelRequestFields,
+          agentMode: this.agentMode,
+          systemPrompt: o29
+        });
+        O.info(`[q-developer-converse] Sending GenerateAssistantResponse modelId=${this.modelType || "<empty>"} agentMode=${this.agentMode} origin=${this.getOrigin()} streaming=false conversationId=${a34.conversationId ?? "<none>"}`);
+        try {
+          const s27 = await (await this.getKrsClient()).send(c39), i29 = [];
+          if (!s27.generateAssistantResponseResponse) throw new te13();
+          for await (const n27 of s27.generateAssistantResponseResponse) i29.push(n27);
+          const g45 = i29.filter((n27) => "assistantResponseEvent" in n27 && n27.assistantResponseEvent !== void 0);
+          g45.filter((n27) => n27.assistantResponseEvent.modelId).forEach((n27) => this.log.debug(`Invoked with model ${n27.assistantResponseEvent.modelId}`));
+          const f52 = unescape2(g45.map((n27) => n27.assistantResponseEvent.content).join(""));
+          return { generations: [{
+            message: new AIMessageChunk({ content: f52 }),
+            text: f52
+          }] };
+        } catch (s27) {
+     
+

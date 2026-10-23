@@ -1,0 +1,66 @@
+=====
+--- pos=11137771 ---
+ted the message.
+       */
+      model: string2(),
+      /**
+       * The reason why sampling stopped, if known.
+       *
+       * Standard values:
+       * - "endTurn": Natural end of the assistant's turn
+       * - "stopSequence": A stop sequence was encountered
+       * - "maxTokens": Maximum token limit was reached
+       *
+       * This field is an open string to allow for provider-specific stop reasons.
+       */
+      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens"]).or(string2())),
+      role: RoleSchema,
+      /**
+       * Response content. Single content block (text, image, or audio).
+       */
+      content: SamplingContentSchema
+    });
+    CreateMessageResultWithToolsSchema = ResultSchema.extend({
+      /**
+       * The name of the model that generated the message.
+       */
+      model: string2(),
+      /**
+       * The reason why sampling stopped, if known.
+       *
+       * Standard values:
+       * - "endTurn": Natural end of the assistant's turn
+       * - "stopSequence": A stop sequence was encountered
+       * - "maxTokens": Maximum token limit was reached
+    
+
+=====
+--- pos=11138626 ---
+     * The reason why sampling stopped, if known.
+       *
+       * Standard values:
+       * - "endTurn": Natural end of the assistant's turn
+       * - "stopSequence": A stop sequence was encountered
+       * - "maxTokens": Maximum token limit was reached
+       * - "toolUse": The model wants to use one or more tools
+       *
+       * This field is an open string to allow for provider-specific stop reasons.
+       */
+      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens", "toolUse"]).or(string2())),
+      role: RoleSchema,
+      /**
+       * Response content. May be a single block or array. May include ToolUseContent if stopReason is "toolUse".
+       */
+      content: union([SamplingMessageContentBlockSchema, array(SamplingMessageContentBlockSchema)])
+    });
+    BooleanSchemaSchema = object({
+      type: literal("boolean"),
+      title: string2().optional(),
+      description: string2().optional(),
+      default: boolean2().optional()
+    });
+    StringSchemaSchema = object({
+      type: literal("string"),
+      title: string2().optional(),
+      description: string2().optional
+

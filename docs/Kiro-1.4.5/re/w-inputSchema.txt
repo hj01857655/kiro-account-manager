@@ -1,0 +1,108 @@
+=====
+--- pos=8297523 ---
+in/core/dist/utils/json_schema.js
+function toJsonSchema(schema, params) {
+  const canCache = !params && schema != null && typeof schema === "object";
+  if (canCache) {
+    const cached2 = _jsonSchemaCache.get(schema);
+    if (cached2) return cached2;
+  }
+  let result2;
+  if (isStandardJsonSchema(schema) && !isZodSchemaV4(schema)) result2 = schema["~standard"].jsonSchema.input({ target: "draft-07" });
+  else if (isZodSchemaV4(schema)) {
+    const inputSchema = interopZodTransformInputSchema(schema, true);
+    if (isZodObjectV4(inputSchema)) result2 = toJSONSchema(interopZodObjectStrict(inputSchema, true), params);
+    else result2 = toJSONSchema(schema, params);
+  } else if (isZodSchemaV3(schema)) result2 = zodToJsonSchema(schema);
+  else result2 = schema;
+  if (canCache && result2 != null && typeof result2 === "object") _jsonSchemaCache.set(schema, result2);
+  return result2;
+}
+function validatesOnlyStrings(schema) {
+  if (!schema || typeof schema !== "object" || Object.keys(schema).length === 0 || Array.isArray(schema)) return false;
+  if ("type" in schema) {
+    if (typeof schema.type === "st
+
+=====
+--- pos=8297605 ---
+canCache = !params && schema != null && typeof schema === "object";
+  if (canCache) {
+    const cached2 = _jsonSchemaCache.get(schema);
+    if (cached2) return cached2;
+  }
+  let result2;
+  if (isStandardJsonSchema(schema) && !isZodSchemaV4(schema)) result2 = schema["~standard"].jsonSchema.input({ target: "draft-07" });
+  else if (isZodSchemaV4(schema)) {
+    const inputSchema = interopZodTransformInputSchema(schema, true);
+    if (isZodObjectV4(inputSchema)) result2 = toJSONSchema(interopZodObjectStrict(inputSchema, true), params);
+    else result2 = toJSONSchema(schema, params);
+  } else if (isZodSchemaV3(schema)) result2 = zodToJsonSchema(schema);
+  else result2 = schema;
+  if (canCache && result2 != null && typeof result2 === "object") _jsonSchemaCache.set(schema, result2);
+  return result2;
+}
+function validatesOnlyStrings(schema) {
+  if (!schema || typeof schema !== "object" || Object.keys(schema).length === 0 || Array.isArray(schema)) return false;
+  if ("type" in schema) {
+    if (typeof schema.type === "string") return schema.type === "string";
+    if (Array.isArray(schema.type)) return
+
+=====
+--- pos=8297665 ---
+bject";
+  if (canCache) {
+    const cached2 = _jsonSchemaCache.get(schema);
+    if (cached2) return cached2;
+  }
+  let result2;
+  if (isStandardJsonSchema(schema) && !isZodSchemaV4(schema)) result2 = schema["~standard"].jsonSchema.input({ target: "draft-07" });
+  else if (isZodSchemaV4(schema)) {
+    const inputSchema = interopZodTransformInputSchema(schema, true);
+    if (isZodObjectV4(inputSchema)) result2 = toJSONSchema(interopZodObjectStrict(inputSchema, true), params);
+    else result2 = toJSONSchema(schema, params);
+  } else if (isZodSchemaV3(schema)) result2 = zodToJsonSchema(schema);
+  else result2 = schema;
+  if (canCache && result2 != null && typeof result2 === "object") _jsonSchemaCache.set(schema, result2);
+  return result2;
+}
+function validatesOnlyStrings(schema) {
+  if (!schema || typeof schema !== "object" || Object.keys(schema).length === 0 || Array.isArray(schema)) return false;
+  if ("type" in schema) {
+    if (typeof schema.type === "string") return schema.type === "string";
+    if (Array.isArray(schema.type)) return schema.type.every((t18) => t18 === "string");
+    return fa
+
+=====
+--- pos=8757657 ---
+s(schemas) {
+        const zodSchema = external_exports.object(Object.fromEntries(Object.entries(schemas).map(([name2, description]) => [name2, external_exports.string().describe(description)])));
+        return new this(zodSchema);
+      }
+    };
+    AsymmetricStructuredOutputParser = class extends BaseOutputParser {
+      static {
+        __name(this, "AsymmetricStructuredOutputParser");
+      }
+      structuredInputParser;
+      constructor({ inputSchema }) {
+        super(...arguments);
+        this.structuredInputParser = new JsonMarkdownStructuredOutputParser(inputSchema);
+      }
+      async parse(text) {
+        let parsedInput;
+        try {
+          parsedInput = await this.structuredInputParser.parse(text);
+        } catch (e17) {
+          throw new OutputParserException(`Failed to parse. Text: "${text}". Error: ${e17}`, text);
+        }
+        return this.outputProcessor(parsedInput);
+      }
+      getFormatInstructions() {
+        return this.structuredInputParser.getFormatInstructions();
+      }
+    };
+  }
+});
+
+// node_modules/@kiro/agent/node_modules/@langchain/core/dist/utils
+

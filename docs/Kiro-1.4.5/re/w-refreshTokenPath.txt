@@ -1,0 +1,33 @@
+=====
+--- pos=18362759 ---
+eErrorResponseMessage, "getAuthServiceErrorResponseMessage");
+    __name(translateError$1, "translateError$1");
+    __name(logCommonErrorDetails$1, "logCommonErrorDetails$1");
+    AuthServiceClient = class {
+      static {
+        __name(this, "AuthServiceClient");
+      }
+      endpoint;
+      client;
+      get createTokenUrl() {
+        return `${this.endpoint}/oauth/token`;
+      }
+      get refreshTokenUrl() {
+        return `${this.endpoint}/refreshToken`;
+      }
+      get logoutUrl() {
+        return `${this.endpoint}/logout`;
+      }
+      get deleteAccountUrl() {
+        return `${this.endpoint}/account`;
+      }
+      constructor() {
+        this.endpoint = getAuthConfig().endpoint;
+        this.client = axios_default.create({ baseURL: this.endpoint, timeout: 1e4 });
+        esm_default(this.client, {
+          retries: 3,
+          retryCondition: /* @__PURE__ */ __name((error47) => {
+            return esm_default.isNetworkOrIdempotentRequestError(error47) && !(error47.response && error47.response.status >= 500 && error47.response.status < 600);
+          }, "retryCondition"),
+       
+

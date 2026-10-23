@@ -1,0 +1,8 @@
+assistantResponseEvent x4
+codeReferenceEvent x3
+followupPromptEvent x2
+messageMetadataEvent x2
+reasoningContentEvent x3
+toolResultEvent x3
+toolUseEvent x3
+userInputMessage x5

@@ -1,0 +1,136 @@
+===== line 197380 =====
+  197368|      session_update: "session/update",
+  197369|      terminal_create: "terminal/create",
+  197370|      terminal_kill: "terminal/kill",
+  197371|      terminal_output: "terminal/output",
+  197372|      terminal_release: "terminal/release",
+  197373|      terminal_wait_for_exit: "terminal/wait_for_exit"
+  197374|    };
+  197375|    PROTOCOL_VERSION = 1;
+  197376|  }
+  197377|});
+  197378|
+  197379|// node_modules/@agentclientprotocol/sdk/dist/schema/zod.gen.js
+  197380|var zAuthCapabilities, zAuthEnvVar, zAuthMethodAgent, zAuthMethodEnvVar, zAuthMethodTerminal, zAuthMethod, zAuthenticateRequest, zAuthenticateResponse, zBlobResourceContents, zBooleanPropertySchema, zCloseNesResponse, zCloseSessionResponse, zCost, zCreateTerminalResponse, zDiff, zElicitationContentValue, zElicitationAcceptAction, zCreateElicitationResponse, zElicitationFormCapabilities, zElicitationId, zCompleteElicitationNotification, zElicitationSchemaType, zElicitationStringType, zElicitationUrlCapabilities, zElicitationCapabilities, zEnumOption, zEnvVariable, zErrorCode, zError, zExtNotification, zExtRequest, zExtResponse, zFileSystemCapabilities, zHttpHeader, zImplementation, zIntegerPropertySchema, zKillTerminalResponse, zListSessionsRequest, zLogoutCapabilities, zAgentAuthCapabilities, zLogoutRequest, zLogoutResponse, zMcpCapabilities, zMcpServerHttp, zMcpServerSse, zMcpServerStdio, zMcpServer, zModelId, zModelInfo, zNesDiagnosticSeverity, zNesDiagnosticsCapabilities, zNesDocumentDidCloseCapabilities, zNesDocumentDidFocusCapabilities, zNesDocumentDidOpenCapabilities, zNesDocumentDidSaveCapabilities, zNesEditHistoryCapabilities, zNesEditHistoryEntry, zNesExcerpt, zNesJumpCapabilities, zNesOpenFilesCapabilities, zNesRecentFile, zNesRecentFilesCapabilities, zNesRejectReason, zNesRelatedSnippet, zNesRelatedSnippetsCapabilities, zNesRenameCapabilities, zNesRepository, zNesSearchAndReplaceCapabilities, zClientNesCapabilities, zNesSearchAndReplaceSuggestion, zNesTriggerKind, zNesUserActionsCapabilities, zNesContextCapabilities, zNewSessionRequest, zNumberPropertySchema, zPermissionOptionId, zPermissionOptionKind, zPermissionOption, zPlanEntryPriority, zPlanEntryStatus, zPlanEntry, zPlan, zPosition, zNesJumpSuggestion, zNesRenameSuggestion, zNesUserAction, zPositionEncodingKind, zClientCapabilities, zPromptCapabilities, zProtocolVersion, zInitializeRequest, zRange, zNesDiagnostic, zNesOpenFile, zNesSuggestContext, zNesTextEdit, zNesEditSuggestion, zNesSuggestion, zReadTextFileResponse, zReleaseTerminalResponse, zRequestId, zCancelRequestNotification, zElicitationRequestScope, zRole, zAnnotations, zAudioContent, zImageContent, zResourceLink, zSelectedPermissionOutcome, zRequestPermissionOutcome, zRequestPermissionResponse, zSessionAdditionalDirectoriesCapabilities, zSessionCloseCapabilities, zSessionConfigBoolean, zSessionConfigGroupId, zSessionConfigId, zSessionConfigOptionCategory, zSessionConfigValueId, zSessionConfigSelectOption, zSessionConfigSelectGroup, zSessionConfigSelectOptions, zSessionConfigSelect, zSessionConfigOption, zConfigOptionUpdate, zSessionForkCapabilities, zSessionId, zAcceptNesNotification, zCancelNotification, zCloseNesRequest, zCloseSessionRequest, zCreateTerminalRequest, zDidCloseDocumentNotification, zDidFocusDocumentNotification, zDidOpenDocumentNotification, zDidSaveDocumentNotification, zForkSessionRequest, zKillTerminalRequest, zLoadSessionRequest, zReadTextFileRequest, zRejectNesNotification, zReleaseTerminalRequest, zResumeSessionRequest, zSessionInfo, zListSessionsResponse, zSessionInfoUpdate, zSessionListCapabilities, zSessionModeId, zCurrentModeUpdate, zSessionMode, zSessionModeState, zSessionModelState, zForkSessionResponse, zLoadSessionResponse, zNewSessionResponse, zResumeSessionResponse, zSessionResumeCapabilities, zSessionCapabilities, zSetSessionConfigOptionRequest, zSetSessionConfigOptionResponse, zSetSessionModeRequest, zSetSessionModeResponse, zSetSessionModelRequest, zSetSessionModelResponse, zStartNesResponse, zStopReason, zStringFormat, zStringPropertySchema, zSuggestNesRequest, zSuggestNesResponse, zTerminal, zTerminalExitStatus, zTerminalOutputRequest, zTerminalOutputResponse, zTextContent, zTextDocumentContentChangeEvent, zDidChangeDocumentNotification, zClientNotification, zTextDocumentSyncKind, zNesDocumentDidChangeCapabilities, zNesDocumentEventCapabilities, zNesEventCapabilities, zNesCapabilities, zAgentCapabilities, zInitializeResponse, zTextResourceContents, zEmbeddedResourceResource, zEmbeddedResource, zContentBlock, zContent, zContentChunk, zPromptRequest, zTitledMultiSelectItems, zToolCallContent, zToolCallId, zElicitationSessionScope, zElicitationUrlMode, zToolCallLocation, zToolCallStatus, zToolKind, zToolCall, zToolCallUpdate, zRequestPermissionRequest, zUnstructuredCommandInput, zAvailableCommandInput, zAvailableCommand, zAvailableCommandsUpdate, zUntitledMultiSelectItems, zMultiSelectItems, zMultiSelectPropertySchema, zElicitationPropertySchema, zElicitationSchema, zElicitationFormMode, zCreateElicitationRequest, zUsage, zPromptResponse, zAgentResponse, zUsageUpdate, zSessionUpdate, zSessionNotification, zAgentNotification, zWaitForTerminalExitRequest, zWaitForTerminalExitResponse, zWorkspaceFolder, zStartNesRequest, zClientRequest, zWriteTextFileRequest, zAgentRequest, zWriteTextFileResponse, zClientResponse;
+  197381|var init_zod_gen = __esm({
+  197382|  "node_modules/@agentclientprotocol/sdk/dist/schema/zod.gen.js"() {
+  197383|    init_v43();
+  197384|    zAuthCapabilities = external_exports2.object({
+  197385|      _meta: external_exports2.record(external_exports2.string(), external_exports2.unknown()).nullish(),
+  197386|      terminal: external_exports2.boolean().optional().default(false)
+  197387|    });
+  197388|    zAuthEnvVar = external_exports2.object({
+  197389|      _meta: external_exports2.record(external_exports2.string(), external_exports2.unknown()).nullish(),
+  197390|      label: external_exports2.string().nullish(),
+  197391|      name: external_exports2.string(),
+  197392|      optional: external_exports2.boolean().optional().default(false),
+
+===== line 198225 =====
+  198213|    zSetSessionModelRequest = external_exports2.object({
+  198214|      _meta: external_exports2.record(external_exports2.string(), external_exports2.unknown()).nullish(),
+  198215|      modelId: zModelId,
+  198216|      sessionId: zSessionId
+  198217|    });
+  198218|    zSetSessionModelResponse = external_exports2.object({
+  198219|      _meta: external_exports2.record(external_exports2.string(), external_exports2.unknown()).nullish()
+  198220|    });
+  198221|    zStartNesResponse = external_exports2.object({
+  198222|      _meta: external_exports2.record(external_exports2.string(), external_exports2.unknown()).nullish(),
+  198223|      sessionId: zSessionId
+  198224|    });
+  198225|    zStopReason = external_exports2.union([
+  198226|      external_exports2.literal("end_turn"),
+  198227|      external_exports2.literal("max_tokens"),
+  198228|      external_exports2.literal("max_turn_requests"),
+  198229|      external_exports2.literal("refusal"),
+  198230|      external_exports2.literal("cancelled")
+  198231|    ]);
+  198232|    zStringFormat = external_exports2.union([
+  198233|      external_exports2.literal("email"),
+  198234|      external_exports2.literal("uri"),
+  198235|      external_exports2.literal("date"),
+  198236|      external_exports2.literal("date-time")
+  198237|    ]);
+
+===== line 198577 =====
+  198565|      message: external_exports2.string()
+  198566|    }));
+  198567|    zUsage = external_exports2.object({
+  198568|      cachedReadTokens: external_exports2.number().nullish(),
+  198569|      cachedWriteTokens: external_exports2.number().nullish(),
+  198570|      inputTokens: external_exports2.number(),
+  198571|      outputTokens: external_exports2.number(),
+  198572|      thoughtTokens: external_exports2.number().nullish(),
+  198573|      totalTokens: external_exports2.number()
+  198574|    });
+  198575|    zPromptResponse = external_exports2.object({
+  198576|      _meta: external_exports2.record(external_exports2.string(), external_exports2.unknown()).nullish(),
+  198577|      stopReason: zStopReason,
+  198578|      usage: zUsage.nullish(),
+  198579|      userMessageId: external_exports2.string().nullish()
+  198580|    });
+  198581|    zAgentResponse = external_exports2.union([
+  198582|      external_exports2.object({
+  198583|        id: zRequestId,
+  198584|        result: external_exports2.union([
+  198585|          zInitializeResponse,
+  198586|          zAuthenticateResponse,
+  198587|          zLogoutResponse,
+  198588|          zNewSessionResponse,
+  198589|          zLoadSessionResponse,
+
+===== line 263648 =====
+  263636|       */
+  263637|      model: string2(),
+  263638|      /**
+  263639|       * The reason why sampling stopped, if known.
+  263640|       *
+  263641|       * Standard values:
+  263642|       * - "endTurn": Natural end of the assistant's turn
+  263643|       * - "stopSequence": A stop sequence was encountered
+  263644|       * - "maxTokens": Maximum token limit was reached
+  263645|       *
+  263646|       * This field is an open string to allow for provider-specific stop reasons.
+  263647|       */
+  263648|      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens"]).or(string2())),
+  263649|      role: RoleSchema,
+  263650|      /**
+  263651|       * Response content. Single content block (text, image, or audio).
+  263652|       */
+  263653|      content: SamplingContentSchema
+  263654|    });
+  263655|    CreateMessageResultWithToolsSchema = ResultSchema.extend({
+  263656|      /**
+  263657|       * The name of the model that generated the message.
+  263658|       */
+  263659|      model: string2(),
+  263660|      /**
+
+===== line 263671 =====
+  263659|      model: string2(),
+  263660|      /**
+  263661|       * The reason why sampling stopped, if known.
+  263662|       *
+  263663|       * Standard values:
+  263664|       * - "endTurn": Natural end of the assistant's turn
+  263665|       * - "stopSequence": A stop sequence was encountered
+  263666|       * - "maxTokens": Maximum token limit was reached
+  263667|       * - "toolUse": The model wants to use one or more tools
+  263668|       *
+  263669|       * This field is an open string to allow for provider-specific stop reasons.
+  263670|       */
+  263671|      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens", "toolUse"]).or(string2())),
+  263672|      role: RoleSchema,
+  263673|      /**
+  263674|       * Response content. May be a single block or array. May include ToolUseContent if stopReason is "toolUse".
+  263675|       */
+  263676|      content: union([SamplingMessageContentBlockSchema, array(SamplingMessageContentBlockSchema)])
+  263677|    });
+  263678|    BooleanSchemaSchema = object({
+  263679|      type: literal("boolean"),
+  263680|      title: string2().optional(),
+  263681|      description: string2().optional(),
+  263682|      default: boolean2().optional()
+  263683|    });
+
+

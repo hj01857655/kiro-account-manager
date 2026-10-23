@@ -1,0 +1,21 @@
+===== HIT 1 line=225982 =====
+===== HIT 2 line=226107 =====
+--- offset=11 ---
+    Fs4 = "toolUseEvent";
+
+===== HIT 3 line=227673 =====
+--- offset=22 ---
+  const c39 = M19(t18.toolUseEvent);
+
+===== HIT 4 line=325755 =====
+===== HIT 5 line=325983 =====
+--- offset=10 ---
+    Iu = "toolUseEvent";
+
+===== HIT 6 line=508241 =====
+===== HIT 7 line=508404 =====
+===== HIT 8 line=508624 =====
+--- offset=16 ---
+    var _tUE = "toolUseEvent";
+
+

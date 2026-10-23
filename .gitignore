@@ -31,7 +31,9 @@ src-tauri/target/
 # Logs
 *.log
 
-docs/
+# 文档：协议规范与逆向取证是网关实现的判断依据，必须跟代码一起追溯；
+# 只忽略确实不该入库的旧计划与中间产物。
+docs/old/
 .tmp/
 # Python
 __pycache__/

@@ -1,0 +1,5 @@
+activeTextFile}}
+</ACTIVE-EDITOR-FILE>
+</${kbt}>
+
+`,keys:["openEditorFiles","activeTextFile"]})}function NAu(t){return{"sonnet-4":` - For maximum efficiency, whenever you need to perform multiple independent operations, invoke all relevant 

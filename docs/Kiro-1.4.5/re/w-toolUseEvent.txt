@@ -1,0 +1,175 @@
+=====
+--- pos=9637338 ---
+lt";
+    Ts4 = "serviceUnavailableError";
+    Ce10 = "server";
+    ye12 = "signature";
+    b16 = "source";
+    Ps4 = "stream";
+    O18 = "start";
+    As4 = "status";
+    xs4 = "stop";
+    Re9 = "streaming";
+    ks4 = "tools";
+    Ds4 = "throttlingError";
+    $s4 = "timezoneOffset";
+    ws4 = "toolResult";
+    bs4 = "toolResultEvent";
+    Os4 = "toolResults";
+    Ms4 = "toolSpecification";
+    Us4 = "totalTokens";
+    Ns4 = "toolUses";
+    Fs4 = "toolUseEvent";
+    G16 = "toolUseId";
+    Bs4 = "tokenUsage";
+    T12 = "text";
+    Ls4 = "title";
+    Ie10 = "type";
+    Te8 = "url";
+    Hs4 = "userInputMessage";
+    Gs4 = "userInputMessageContext";
+    js4 = "uncachedInputTokens";
+    Vs4 = "unitPlural";
+    qs4 = "useRelevantDocuments";
+    Ks4 = "unit";
+    zs4 = "usage";
+    Ws4 = "value";
+    Js4 = "validationError";
+    J13 = "version";
+    Qs4 = "web";
+    Ys4 = "workspaceFolders";
+    Xs4 = "x-amzn-kiro-agent-mode";
+    Zs4 = "x-amzn-kiro-conversation-id";
+    j14 = "x-amzn-kiro-profile-arn";
+    t11 = "com.amazon.kiro.runtimeservice";
+    Pe9 = De6.for(Ee9);
+    eo2 = [
+      -3,
+      Ee9,
+ 
+
+=====
+--- pos=9668327 ---
+nd: "assistant_response",
+    content: o29.content,
+    modelId: typeof o29.modelId == "string" ? o29.modelId : void 0
+  });
+  const a34 = M19(t18.reasoningContentEvent);
+  if (a34) {
+    const n27 = typeof a34.text == "string" ? a34.text : void 0, y45 = typeof a34.signature == "string" ? a34.signature : void 0;
+    (n27 || y45) && r23.push({
+      kind: "reasoning_content",
+      text: n27,
+      signature: y45
+    });
+  }
+  const c39 = M19(t18.toolUseEvent);
+  c39 && r23.push({
+    kind: "tool_use",
+    toolUseId: typeof c39.toolUseId == "string" ? c39.toolUseId : void 0,
+    name: typeof c39.name == "string" ? c39.name : void 0,
+    input: typeof c39.input == "string" ? c39.input : void 0,
+    stop: c39.stop === true
+  });
+  const s27 = M19(t18.meteringEvent);
+  s27 && r23.push({
+    kind: "metering",
+    metering: {
+      usage: typeof s27.usage == "number" ? s27.usage : void 0,
+      unit: typeof s27.unit == "string" ? s27.unit : void 0,
+      unitPlural: typeof s27.unitPlural == "string" ? s27.unitPlural : void 0
+    }
+  });
+  const i29 = M19(t18.codeReferenceEvent);
+  if (i29) {
+    const
+
+=====
+--- pos=13618867 ---
+ype";
+    du = "taskDetails";
+    mu = "textDocumentDiagnostic";
+    _u = "transformationExportContext";
+    fu = "testGenerationJobGroupName";
+    Su = "testGenerationJobId";
+    gu = "taskId";
+    hu = "taskName";
+    Cu = "toolName";
+    Eu = "timezoneOffset";
+    yu = "toolResult";
+    Ru = "toolResultEvent";
+    Tu = "taskReference";
+    Pu = "toolResults";
+    Au = "toolSpecification";
+    ku = "totalTokens";
+    xu = "toolUses";
+    Iu = "toolUseEvent";
+    Ie18 = "toolUseId";
+    wu = "tokenUsage";
+    Du = "target";
+    $u = "tags";
+    T35 = "text";
+    oe28 = "title";
+    bu = "tools";
+    Ou = "transition";
+    Mu = "uri";
+    Lu = "useClientCachingOnly";
+    Nu = "uxErrorMessage";
+    zt7 = "userIntent";
+    Uu = "userInputMessage";
+    Fu = "userInputMessageContext";
+    Wu = "uncachedInputTokens";
+    ju = "uploadId";
+    zu = "utteranceId";
+    Bu = "unitPlural";
+    Gu = "useRelevantDocuments";
+    Hu = "userSettings";
+    Vu = "unitTestGenerationExportContext";
+    qu = "unit";
+    se21 = "url";
+    Ju = "usage";
+    we16 = "value";
+    Qu = "web";
+    Ku = "workspaceFolders";
+
+
+=====
+--- pos=21217451 ---
+mationExportContext";
+    var _tGJGN = "testGenerationJobGroupName";
+    var _tGJI = "testGenerationJobId";
+    var _tI2 = "taskId";
+    var _tN = "taskName";
+    var _tNo = "toolName";
+    var _tO2 = "timezoneOffset";
+    var _tR = "toolResult";
+    var _tRE = "toolResultEvent";
+    var _tRa = "taskReference";
+    var _tRo = "toolResults";
+    var _tS = "toolSpecification";
+    var _tT4 = "totalTokens";
+    var _tU = "toolUses";
+    var _tUE = "toolUseEvent";
+    var _tUI = "toolUseId";
+    var _tUo = "tokenUsage";
+    var _ta = "target";
+    var _tag = "tags";
+    var _te = "text";
+    var _ti = "title";
+    var _to = "tools";
+    var _tr = "transition";
+    var _u3 = "uri";
+    var _uCCO = "useClientCachingOnly";
+    var _uEM = "uxErrorMessage";
+    var _uI = "userIntent";
+    var _uIM = "userInputMessage";
+    var _uIMC = "userInputMessageContext";
+    var _uIT = "uncachedInputTokens";
+    var _uIp = "uploadId";
+    var _uIt = "utteranceId";
+    var _uP = "unitPlural";
+    var _uRD = "useRelevantDocuments";
+    var _uS = "userSettings";
+    var _uTGEC = "unitTestGenerationExportContext";
+   
+

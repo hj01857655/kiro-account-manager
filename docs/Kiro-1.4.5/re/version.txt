@@ -1,0 +1,4 @@
+PRODUCT=1.4.5 distro=d0fd3324a737f695bd14f2aee3ca92accd28870f app=Kiro data=.kiro
+AGENT=1.1.499 main=./dist/extension.js name=kiroAgent size=14.53MB
+EXT_PATH=%LOCALAPPDATA%\Programs\Kiro\resources\app\extensions\kiro.kiro-agent
+ANALYSIS=static only（未动态抓包）

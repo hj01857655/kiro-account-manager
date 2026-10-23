@@ -1,0 +1,1 @@
+derSent":"optOutHeaderOmitted";Fsu.reportCountMetrics({[r]:1},{Operation:e})}function jsu(t,e){t.Authorization=`Bearer ${e.accessToken}`,e.kind==="sign-in"?(t["X-Kiro-Idp"]=qsu(e.provider),e.profileArn!==void 0&&(t["X-Kiro-Profile-Arn"]=e.profileArn),e.tokenType!==void 0&&(t.TokenType=e.tokenType)):t.TokenType=e.tokenType}functi

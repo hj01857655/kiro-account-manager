@@ -1,0 +1,117 @@
+=====
+--- pos=7059968 ---
+"ServiceQuotaExceededException";
+    Fr3 = "SensitiveString";
+    Br3 = "ThrottlingException";
+    Hr3 = "TokenLimits";
+    Gr3 = "UsageBreakdown";
+    jr3 = "UsageBreakdownList";
+    Wr3 = "UserInfo";
+    Kr3 = "UsageLimits";
+    qr3 = "UsageLimitList";
+    Vr3 = "ValidationException";
+    zr3 = "WorkspaceContext";
+    Qr3 = "WebTools";
+    Yr3 = "arn";
+    Jr3 = "autonomousAgents";
+    Xr3 = "apiKeys";
+    Zr3 = "allowlistedModels";
+    ea2 = "additionalModelRequestFieldsSchema";
+    ta2 = "addOns";
+    ra2 = "addOnMetadata";
+    aa2 = "addOnTotalLimit";
+    sa2 = "addOnTotalUsage";
+    ia2 = "availableOrigins";
+    oa2 = "action";
+    na2 = "bonuses";
+    da2 = "bonusCode";
+    la2 = "byUserAnalytics";
+    _16 = "client";
+    va2 = "continuousLearning";
+    ca2 = "currentOverages";
+    ua2 = "currentOveragesWithPrecision";
+    f16 = "currentUsage";
+    te10 = "currentUsageWithPrecision";
+    pa2 = "currency";
+    L15 = "description";
+    ma2 = "dashboardAnalytics";
+    re10 = "defaultModel";
+    ae9 = "displayName";
+    ga2 = "displayNamePlural";
+    ha2 = "dimensionType";
+    _a = "daysUntilReset";
+    p13 
+
+=====
+--- pos=9541148 ---
+34, conversationId: n27, continuationId: s27, metadata: u46 } = e17;
+  try {
+    const m50 = await ut4(o29).reduce((w41, f52) => w41.withNewMessage(f52), L16.empty()).serializeToLangChain(i29, {
+      conversationId: n27,
+      continuationId: s27,
+      taskType: e17.taskType ?? E8.VIBE
+    }), d47 = J11(f11, t18, r23, { forceRefresh: true }, a34), T37 = d47.bindTools ? d47.bindTools(i29.getChatTools()) : d47, R45 = {
+      metadata: u46,
+      additionalModelRequestFields: e17.effortLevel && e17.effortSchemaPath ? We7(e17.effortLevel, e17.effortSchemaPath) : void 0
+    }, I43 = me10((await T37.invoke(m50, R45)).content);
+    return I43.trim() ? I43 + (B12(o29.filter((w41) => !w41.forcedRole)) || "") : (O.warn("[SummarizationCore] Normal summarization returned empty content, falling back to truncation"), await Q9(e17));
+  } catch (m50) {
+    if (H11(m50))
+      return O.warn("[SummarizationCore] Normal summarization hit context limit, falling back to truncation", m50), await Q9(e17);
+    throw m50;
+  }
+}
+async function Q9(e17) {
+  const { messages: o29, modelId: i29, agentMode: t18, origin: r23, metadata: a34 
+
+=====
+--- pos=9562696 ---
+ 0;
+      do {
+        if (n27?.aborted) throw n27.reason instanceof Error ? n27.reason : /* @__PURE__ */ new Error("listAvailableModels aborted");
+        const y45 = await T37.send(new Fe9({
+          origin: r23,
+          profileArn: u46 || void 0,
+          nextToken: w41
+        }), { abortSignal: n27 });
+        if (y45.models?.length && R45.push(...y45.models.filter((p46) => !!p46.modelId).map((p46) => {
+          const A43 = Be6(je6(p46.additionalModelRequestFieldsSchema) ? p46.additionalModelRequestFieldsSchema : void 0);
+          return {
+            modelId: p46.modelId,
+            modelName: p46.modelName,
+            description: p46.description,
+            provider: p46.modelProvider,
+            rateMultiplier: p46.rateMultiplier,
+            rateUnit: p46.rateUnit,
+            maxInputTokens: p46.tokenLimits?.maxInputTokens,
+            effortLevels: A43?.levels,
+            effortSchemaPath: A43?.schemaPath,
+            defaultEffortLevel: A43?.defaultLevel
+          };
+        })), !I43 && y45.defaultModel?.modelId && (I43 = { modelId: y45.defaultModel.modelId }), w41 = y45.nextToken, f52 
+
+=====
+--- pos=9562738 ---
+hrow n27.reason instanceof Error ? n27.reason : /* @__PURE__ */ new Error("listAvailableModels aborted");
+        const y45 = await T37.send(new Fe9({
+          origin: r23,
+          profileArn: u46 || void 0,
+          nextToken: w41
+        }), { abortSignal: n27 });
+        if (y45.models?.length && R45.push(...y45.models.filter((p46) => !!p46.modelId).map((p46) => {
+          const A43 = Be6(je6(p46.additionalModelRequestFieldsSchema) ? p46.additionalModelRequestFieldsSchema : void 0);
+          return {
+            modelId: p46.modelId,
+            modelName: p46.modelName,
+            description: p46.description,
+            provider: p46.modelProvider,
+            rateMultiplier: p46.rateMultiplier,
+            rateUnit: p46.rateUnit,
+            maxInputTokens: p46.tokenLimits?.maxInputTokens,
+            effortLevels: A43?.levels,
+            effortSchemaPath: A43?.schemaPath,
+            defaultEffortLevel: A43?.defaultLevel
+          };
+        })), !I43 && y45.defaultModel?.modelId && (I43 = { modelId: y45.defaultModel.modelId }), w41 = y45.nextToken, f52 += 1, w41 && f52 >= oe11) {
+          O.wa
+

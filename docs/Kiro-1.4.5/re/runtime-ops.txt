@@ -1,0 +1,4 @@
+GenerateAssistantResponse
+GetFeatureConfiguration
+InvokeMCP
+InvokeMCPStream

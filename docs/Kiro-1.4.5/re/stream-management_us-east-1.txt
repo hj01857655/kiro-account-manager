@@ -1,0 +1,23 @@
+=====
+ */ new Set([...standardRegions, ...customRegions])];
+    krsConfigs = [
+      { region: "us-east-1", endpoint: "https://runtime.us-east-1.kiro.dev" },
+      { region: "eu-central-1", endpoint: "https://runtime.eu-central-1.kiro.dev" },
+      { region: "us-gov-west-1", endpoint: "https://runtime.us-gov-west-1.kiro.dev" }
+    ];
+    krsPresetConfig = buildPresetConfig(krsConfigs);
+    cpsConfigs = [
+      { region: "us-east-1", endpoint: "https://management.us-east-1.kiro.dev" },
+      { region: "eu-central-1", endpoint: "https://management.eu-central-1.kiro.dev" },
+      { region: "us-gov-west-1", endpoint: "https://management.us-gov-west-1.kiro.dev" }
+    ];
+    cpsPresetConfig = buildPresetConfig(cpsConfigs);
+  }
+});
+
+// node_modules/@aws-sdk/util-arn-parser/dist-cjs/index.js
+var require_dist_cjs80 = __commonJS({
+  "node_modules/@aws-sdk/util-arn-parser/dist-cjs/index.js"(exports2) {
+    "use strict";
+   
+

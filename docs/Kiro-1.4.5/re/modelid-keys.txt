@@ -1,0 +1,5 @@
+modelId:"auto" x2
+modelId:"cascade" x1
+modelId:"claude-fable-5" x1
+modelId:"claude-opus-5" x2
+modelId:"gpt-5.6-sol" x2

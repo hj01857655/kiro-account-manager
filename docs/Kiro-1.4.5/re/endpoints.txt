@@ -1,0 +1,33 @@
+===== HIT 1 line=22170 =====
+--- offset=40 ---
+    TMP_PROCESS_RUNTIME_NAME = "process.runtime.name";
+
+===== HIT 2 line=22171 =====
+--- offset=43 ---
+    TMP_PROCESS_RUNTIME_VERSION = "process.runtime.version";
+
+===== HIT 3 line=22172 =====
+--- offset=47 ---
+    TMP_PROCESS_RUNTIME_DESCRIPTION = "process.runtime.description";
+
+===== HIT 4 line=27499 =====
+--- offset=41 ---
+    TMP_PROCESS_RUNTIME_NAME2 = "process.runtime.name";
+
+===== HIT 5 line=27500 =====
+--- offset=44 ---
+    TMP_PROCESS_RUNTIME_VERSION2 = "process.runtime.version";
+
+===== HIT 6 line=27501 =====
+--- offset=48 ---
+    TMP_PROCESS_RUNTIME_DESCRIPTION2 = "process.runtime.description";
+
+===== HIT 7 line=45621 =====
+--- offset=41 ---
+    TMP_PROCESS_RUNTIME_NAME3 = "process.runtime.name";
+
+===== HIT 8 line=45622 =====
+--- offset=44 ---
+    TMP_PROCESS_RUNTIME_VERSION3 = "process.runtime.version";
+
+

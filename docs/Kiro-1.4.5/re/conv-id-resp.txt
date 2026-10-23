@@ -1,0 +1,1 @@
+config.requestHandler.handle(n.request,{}),l=a;if(await lud(l),s==="GenerateAssistantResponseCommand"){let u=l.headers["x-amzn-kiro-conversation-id"]??"",d=xQr(l.headers);return{response:l,output:{$metadata:{httpStatusCode:l.statusCode,requestId:d},conversatio

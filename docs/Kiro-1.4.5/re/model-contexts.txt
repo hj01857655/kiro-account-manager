@@ -1,0 +1,10 @@
+﻿=== sonnet-4 ===
+<none>
+=== deepseek-3.2 ===
+w");c(D1,"u");c(ece,"k");IOt={over:20,maxSide:2e3},ydd={maxSide:8e3,maxBase64Bytes:5242880,manyImage:IOt},sQi=new Set(["deepseek-3.2","glm-5","minimax-m2.5","qwen3-coder-next","minimax-m2.1","kirin-inference-glm"]);c(Add,"ge");c(wdd,"fe");c(vdd,"me");c
+=== qwen3-coder-next ===
+maxSide:2e3},ydd={maxSide:8e3,maxBase64Bytes:5242880,manyImage:IOt},sQi=new Set(["deepseek-3.2","glm-5","minimax-m2.5","qwen3-coder-next","minimax-m2.1","kirin-inference-glm"]);c(Add,"ge");c(wdd,"fe");c(vdd,"me");c(Sdd,"le");c(aQi,"We");c(M0e,"je");c(tce,"
+=== claude-opus-5 ===
+ype:"parallel",id:"reviews",joinPolicy:"all",branches:[{type:"step",id:"review-opus",agent:"semantic_reviewer",modelId:"claude-opus-5",effortLevel:"xhigh",prompt:`SELF-CHECK GATE (do this FIRST before anything else): Confirm you actually have the semant
+=== claude-fable-5 ===
+"id": "review-fable",\n      "agent": "semantic_reviewer",\n      "prompt": "Review {{pr_url}} ...",\n      "modelId": "claude-fable-5",\n      "effortLevel": "xhigh"\n    },\n    {\n      "type": "step",\n      "id": "review-gpt",\n      "agent": "seman

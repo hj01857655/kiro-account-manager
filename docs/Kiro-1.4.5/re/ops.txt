@@ -1,0 +1,10 @@
+CreateToken x12
+GenerateAssistantResponse x9
+GetFeatureConfiguration x3
+GetProfile x5
+GetUsageLimits x8
+InvokeMCP x6
+InvokeMCPStream x6
+ListAvailableModels x5
+RefreshToken x6
+SendMessage x5

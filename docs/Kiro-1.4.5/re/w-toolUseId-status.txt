@@ -1,0 +1,109 @@
+=====
+ontext?.toolResults) {
+        const o29 = A10((n27.assistantResponseMessage.toolUses ?? []).map(({ toolUseId: a34 }, c39) => a34 ?? `toolUse_${c39 + 1}`));
+        t18.push(o29);
+      } else if (!g8(n27.assistantResponseMessage.toolUses, r23.userInputMessage.userInputMessageContext.toolResults) && !e17.some((o29, a34) => a34 !== s27 && S11(o29) && p9(o29) && g8(o29.assistantResponseMessage.toolUses, r23.userInputMessage.userInputMessageContext?.toolResults))) {
+        const o29 = n27.assistantResponseMessage.toolUses ?? [], a34 = new Set((r23.userInputMessage.userInputMessageContext.toolRes
+
+=====
+putMessageContext.toolResults ?? []).map((l41) => l41.toolUseId).filter(Boolean)), c39 = o29.map(({ toolUseId: l41 }, u46) => l41 ?? `toolUse_${u46 + 1}`).filter((l41) => !a34.has(l41));
+        if (c39.length > 0) {
+          const l41 = c39.map((u46) => ({
+            toolUseId: u46,
+            content: [{ text: "Tool execution failed" }],
+            status: D7.ERROR
+          }));
+          t18.push({ userInputMessage: {
+            ...r23.userInputMessage,
+            userInputMessageContext: {
+              ...r23.userInputMessage.userInputMessageContext,
+              toolResults: [...
+
+=====
+!a34.has(l41));
+        if (c39.length > 0) {
+          const l41 = c39.map((u46) => ({
+            toolUseId: u46,
+            content: [{ text: "Tool execution failed" }],
+            status: D7.ERROR
+          }));
+          t18.push({ userInputMessage: {
+            ...r23.userInputMessage,
+            userInputMessageContext: {
+              ...r23.userInputMessage.userInputMessageContext,
+              toolResults: [...r23.userInputMessage.userInputMessageContext.toolResults ?? [], ...l41]
+            }
+          } }), s27++;
+        }
+      }
+    }
+  }
+  return t18;
+}
+function C10(e17) 
+
+=====
+     origin: "AI_EDITOR",
+      userInputMessageContext: { toolResults: e17.map((t18) => ({
+        toolUseId: t18,
+        content: [{ text: "Tool execution failed" }],
+        status: D7.ERROR
+      })) }
+    } }), "A");
+    __name(O10, "O");
+    __name(E9, "E");
+    __name(N5, "N");
+    __name(v9, "v");
+    __name(x8, "x");
+    __name(L8, "L");
+    __name(C10, "C");
+    __name(G7, "G");
+    __name(R6, "R");
+    __name(D8, "D");
+    __name(w7, "w");
+    __name(k9, "k");
+    __name(z4, "z");
+    f13 = /* @__PURE__ */ (function(e17) {
+      return e17.STARTS_WITH_USER_MESSAGE = "STARTS_WITH_US
+
+=====
+    signature: o29
+    } };
+  }
+}
+function Lt6(e17) {
+  return e17.toolMessages.map((t18) => ({
+    toolUseId: t18.tool_call_id,
+    content: [{ text: x18(t18.content) }],
+    status: t18.additional_kwargs.success === false ? "error" : "success"
+  }));
+}
+function Pt4(e17) {
+  let t18 = 0, r23 = 0;
+  const o29 = [...e17.history ?? [], ...e17.currentMessage ? [e17.currentMessage] : []];
+  for (const a34 of o29) {
+    const c39 = a34.userInputMessage;
+    c39 && (t18 += c39.images?.length ?? 0, r23 += c39.documents?.length ?? 0);
+  }
+  return {
+    imageCount: t18,
+    documentCount: r23
+  };
+}
+v
+
+=====
+8(n27.content),
+            toolUses: n27.tool_calls ? n27.tool_calls.map((y45) => ({
+              toolUseId: y45.id,
+              name: y45.name,
+              input: y45.args
+            })) : void 0,
+            reasoningContent: Ut6(n27, o29 ? $6(f11, o29) : void 0)
+          } };
+          throw new ze7(n27.type);
+        });
+        const i29 = q5(s27);
+        if (!i29.valid) for (const n27 of i29.errors)
+          this.log.debug(`Invalid message: ${n27.rule} (messageIndex: ${n27.index})`), (n27.rule === f13.TOOL_RESULTS_AND_NO_USES || n27.rule === f13.TOOL_RESULTS_ORPHAN_IDS) && (thi
+

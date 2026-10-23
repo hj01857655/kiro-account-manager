@@ -1,0 +1,33 @@
+===== HIT 1 line=225903 =====
+===== HIT 2 line=225994 =====
+--- offset=11 ---
+    hn3 = "assistantResponseEvent";
+
+===== HIT 3 line=227658 =====
+--- offset=43 ---
+  const t18 = e17, r23 = [], o29 = M19(t18.assistantResponseEvent);
+
+===== HIT 4 line=228556 =====
+--- offset=43 ---
+          const g45 = i29.filter((n27) => "assistantResponseEvent" in n27 && n27.assistantResponseEvent !== void 0);
+
+--- offset=81 ---
+          const g45 = i29.filter((n27) => "assistantResponseEvent" in n27 && n27.assistantResponseEvent !== void 0);
+
+===== HIT 5 line=228557 =====
+--- offset=34 ---
+          g45.filter((n27) => n27.assistantResponseEvent.modelId).forEach((n27) => this.log.debug(`Invoked with model ${n27.assistantResponseEvent.modelId}`));
+
+--- offset=124 ---
+          g45.filter((n27) => n27.assistantResponseEvent.modelId).forEach((n27) => this.log.debug(`Invoked with model ${n27.assistantResponseEvent.modelId}`));
+
+===== HIT 6 line=228558 =====
+--- offset=53 ---
+          const f52 = unescape2(g45.map((n27) => n27.assistantResponseEvent.content).join(""));
+
+===== HIT 7 line=325595 =====
+===== HIT 8 line=325774 =====
+--- offset=11 ---
+    Ni2 = "assistantResponseEvent";
+
+

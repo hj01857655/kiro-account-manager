@@ -1,0 +1,168 @@
+=====
+on([external_exports.string(), h5])),
+      executionId: external_exports.string().optional(),
+      subExecutionId: external_exports.string().optional()
+    });
+    __name(Ue3, "Ue");
+    __name(Le3, "Le");
+    Y3 = external_exports.object({
+      type: external_exports.literal("turn_start"),
+      executionId: external_exports.string().optional()
+    });
+    $4 = external_exports.object({
+      type: external_exports.literal("turn_end"),
+      stopReason: external_exports.string().min(1),
+      executionId: external_exports.string().optional()
+    });
+    X3 = external_exports.object({
+      type: external_exports.literal("tombstone"),
+      kind: external_exports.enum(["checkpoint_revert", "summarization"]),
+      effectiveFromMessageId: external_exports.string(),
+      metadata: external_exports.record(external_exports.unknown()).optional()
+    });
+    Q3 = external_exports.object({
+      type
+
+=====
+mber().nullish(),
+      cachedWriteTokens: external_exports2.number().nullish(),
+      inputTokens: external_exports2.number(),
+      outputTokens: external_exports2.number(),
+      thoughtTokens: external_exports2.number().nullish(),
+      totalTokens: external_exports2.number()
+    });
+    zPromptResponse = external_exports2.object({
+      _meta: external_exports2.record(external_exports2.string(), external_exports2.unknown()).nullish(),
+      stopReason: zStopReason,
+      usage: zUsage.nullish(),
+      userMessageId: external_exports2.string().nullish()
+    });
+    zAgentResponse = external_exports2.union([
+      external_exports2.object({
+        id: zRequestId,
+        result: external_exports2.union([
+          zInitializeResponse,
+          zAuthenticateResponse,
+          zLogoutResponse,
+          zNewSessionResponse,
+          zLoadSessionResponse,
+          zListSessionsResponse,
+     
+
+=====
+ us4 = "recommendationContentSpan";
+    _e9 = "redactedContent";
+    ls4 = "relevantDocuments";
+    fe11 = "relativeFilePath";
+    ps4 = "recommendedModel";
+    ms4 = "reasoningText";
+    hs4 = "range";
+    gs4 = "references";
+    _s4 = "refusal";
+    fs6 = "repository";
+    Se10 = "result";
+    Ee9 = "smithy.ts.sdk.synthetic.com.amazon.kiro.runtimeservice";
+    Ss4 = "sourceContent";
+    Es4 = "stopDetails";
+    Cs4 = "systemPrompt";
+    ys4 = "stopReason";
+    Rs4 = "searchResultIndex";
+    Is4 = "searchResult";
+    Ts4 = "serviceUnavailableError";
+    Ce10 = "server";
+    ye12 = "signature";
+    b16 = "source";
+    Ps4 = "stream";
+    O18 = "start";
+    As4 = "status";
+    xs4 = "stop";
+    Re9 = "streaming";
+    ks4 = "tools";
+    Ds4 = "throttlingError";
+    $s4 = "timezoneOffset";
+    ws4 = "toolResult";
+    bs4 = "toolResultEvent";
+    Os4 = "toolResults";
+    Ms4 = "toolSpecification";
+   
+
+=====
+    actionId: o29,
+          actionState: e.Running,
+          actionType: M24.id,
+          input: {
+            task: a34,
+            stages: l41.map((b50) => b50.name),
+            pipeline: g45()
+          },
+          rawInput: e17
+        });
+        const R45 = p46?.maxIterations ?? 1, N36 = [];
+        let G39;
+        const $35 = /* @__PURE__ */ __name((b50, I43) => {
+          p46 && S44.reportCountMetrics({ repeatIterations: b50 }, { stopReason: I43 });
+        }, "$");
+        try {
+          for (let I43 = 0; I43 < R45; I43++) {
+            const P39 = Date.now(), W40 = /* @__PURE__ */ new Set(), v59 = [];
+            if (I43 > 0 && p46) {
+              for (const c39 of l41) E46.set(c39.name, {
+                status: "pending",
+                agentSubtaskId: te4()
+              });
+              O.info("[OrchestrateSubAgent] repeat.iteration", {
+                iteration: I43 + 1,
+
+=====
+the model that generated the message.
+       */
+      model: string2(),
+      /**
+       * The reason why sampling stopped, if known.
+       *
+       * Standard values:
+       * - "endTurn": Natural end of the assistant's turn
+       * - "stopSequence": A stop sequence was encountered
+       * - "maxTokens": Maximum token limit was reached
+       *
+       * This field is an open string to allow for provider-specific stop reasons.
+       */
+      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens"]).or(string2())),
+      role: RoleSchema,
+      /**
+       * Response content. Single content block (text, image, or audio).
+       */
+      content: SamplingContentSchema
+    });
+    CreateMessageResultWithToolsSchema = ResultSchema.extend({
+      /**
+       * The name of the model that generated the message.
+       */
+      model: string2(),
+      /**
+       * The reason why sampling sto
+
+=====
+ring2(),
+      /**
+       * The reason why sampling stopped, if known.
+       *
+       * Standard values:
+       * - "endTurn": Natural end of the assistant's turn
+       * - "stopSequence": A stop sequence was encountered
+       * - "maxTokens": Maximum token limit was reached
+       * - "toolUse": The model wants to use one or more tools
+       *
+       * This field is an open string to allow for provider-specific stop reasons.
+       */
+      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens", "toolUse"]).or(string2())),
+      role: RoleSchema,
+      /**
+       * Response content. May be a single block or array. May include ToolUseContent if stopReason is "toolUse".
+       */
+      content: union([SamplingMessageContentBlockSchema, array(SamplingMessageContentBlockSchema)])
+    });
+    BooleanSchemaSchema = object({
+      type: literal("boolean"),
+      title: string2().optiona
+

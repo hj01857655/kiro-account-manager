@@ -1,0 +1,129 @@
+=====
+tools/list"
+    };
+  }
+});
+
+// node_modules/@kiro/agent/dist/validator-DyVPfXcS.js
+function i7(e17) {
+  return e17 != null && "userInputMessage" in e17;
+}
+function S11(e17) {
+  return e17 != null && "assistantResponseMessage" in e17;
+}
+function h11(e17) {
+  return !!e17.userInputMessage.userInputMessageContext?.toolResults?.length;
+}
+function p9(e17) {
+  return !!e17.assistantResponseMessage.toolUses?.length;
+}
+function g8(e17, t18) {
+  if (!e17 || !e17.length) return true;
+  if (!t18 || !t18.length) return false;
+  const s27 = e17.every((r23) => t18.some((o29) => o29.toolUseId === r23.toolUseId)), n27 = t18.every((r23) => e17.some((o29) => r23.toolUseId === o29.toolUseId));
+  return s27 && n27;
+}
+function O10(e17) {
+  const t18 = [];
+  for (let s27 = 0; s27 < e17.length; s27++) {
+    const n27 = e17[s27], r23 = s27 > 0 ? e17[s27 - 1] : null;
+    if (!i7(n27) || !h11(n27)) {
+      t18.push(n27);
+      continue;
+    }
+    if (!r23 || !S11(r23)) {
+      const u46 = E9(n27);
+      u46 && 
+
+=====
+7) {
+  return e17 != null && "assistantResponseMessage" in e17;
+}
+function h11(e17) {
+  return !!e17.userInputMessage.userInputMessageContext?.toolResults?.length;
+}
+function p9(e17) {
+  return !!e17.assistantResponseMessage.toolUses?.length;
+}
+function g8(e17, t18) {
+  if (!e17 || !e17.length) return true;
+  if (!t18 || !t18.length) return false;
+  const s27 = e17.every((r23) => t18.some((o29) => o29.toolUseId === r23.toolUseId)), n27 = t18.every((r23) => e17.some((o29) => r23.toolUseId === o29.toolUseId));
+  return s27 && n27;
+}
+function O10(e17) {
+  const t18 = [];
+  for (let s27 = 0; s27 < e17.length; s27++) {
+    const n27 = e17[s27], r23 = s27 > 0 ? e17[s27 - 1] : null;
+    if (!i7(n27) || !h11(n27)) {
+      t18.push(n27);
+      continue;
+    }
+    if (!r23 || !S11(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    if (!p9(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    const o29 = new Set((r23.assista
+
+=====
+   const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    if (!p9(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    const o29 = new Set((r23.assistantResponseMessage.toolUses ?? []).map((u46) => u46.toolUseId).filter(Boolean)), a34 = n27.userInputMessage.userInputMessageContext?.toolResults ?? [], c39 = /* @__PURE__ */ new Set(), l41 = a34.filter((u46) => !u46.toolUseId || !o29.has(u46.toolUseId) || c39.has(u46.toolUseId) ? false : (c39.add(u46.toolUseId), true));
+    if (l41.length === a34.length) t18.push(n27);
+    else if (l41.length > 0) t18.push({ userInputMessage: {
+      ...n27.userInputMessage,
+      userInputMessageContext: {
+        ...n27.userInputMessage.userInputMessageContext,
+        toolResults: l41
+      }
+    } });
+    else {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+    }
+  }
+  return t18;
+}
+function E9(e17) {
+  return e17.userInputMessage.content && e17.userInputMessage.content.trim() !== "" ? {
+
+=====
+7) && p9(n27)) {
+      const r23 = s27 + 1 < e17.length ? e17[s27 + 1] : null;
+      if (!r23 || !i7(r23) || !r23.userInputMessage.userInputMessageContext?.toolResults) {
+        const o29 = A10((n27.assistantResponseMessage.toolUses ?? []).map(({ toolUseId: a34 }, c39) => a34 ?? `toolUse_${c39 + 1}`));
+        t18.push(o29);
+      } else if (!g8(n27.assistantResponseMessage.toolUses, r23.userInputMessage.userInputMessageContext.toolResults) && !e17.some((o29, a34) => a34 !== s27 && S11(o29) && p9(o29) && g8(o29.assistantResponseMessage.toolUses, r23.userInputMessage.userInputMessageContext?.toolResults))) {
+        const o29 = n27.assistantResponseMessage.toolUses ?? [], a34 = new Set((r23.userInputMessage.userInputMessageContext.toolResults ?? []).map((l41) => l41.toolUseId).filter(Boolean)), c39 = o29.map(({ toolUseId: l41 }, u46) => l41 ?? `toolUse_${u46 + 1}`).filter((l41) => !a34.has(l41));
+        if (c39.length > 0) {
+          const l41 = c39.map((u46) => ({
+            toolUs
+
+=====
+t?.toolResults) {
+        const o29 = A10((n27.assistantResponseMessage.toolUses ?? []).map(({ toolUseId: a34 }, c39) => a34 ?? `toolUse_${c39 + 1}`));
+        t18.push(o29);
+      } else if (!g8(n27.assistantResponseMessage.toolUses, r23.userInputMessage.userInputMessageContext.toolResults) && !e17.some((o29, a34) => a34 !== s27 && S11(o29) && p9(o29) && g8(o29.assistantResponseMessage.toolUses, r23.userInputMessage.userInputMessageContext?.toolResults))) {
+        const o29 = n27.assistantResponseMessage.toolUses ?? [], a34 = new Set((r23.userInputMessage.userInputMessageContext.toolResults ?? []).map((l41) => l41.toolUseId).filter(Boolean)), c39 = o29.map(({ toolUseId: l41 }, u46) => l41 ?? `toolUse_${u46 + 1}`).filter((l41) => !a34.has(l41));
+        if (c39.length > 0) {
+          const l41 = c39.map((u46) => ({
+            toolUseId: u46,
+            content: [{ text: "Tool execution failed" }],
+            status: D7.ERROR
+          }));
+          t18.push({ userInputMessage: {
+
+

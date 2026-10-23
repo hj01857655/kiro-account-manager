@@ -1,0 +1,165 @@
+=====
+--- pos=6968262 ---
+g45[n27] = m50.readObject(c39, s27[h53]);
+        }
+        throw this.mixin.decorateServiceException(Object.assign(p46, o29, {
+          $fault: l41.getMergedTraits().error,
+          message: S44
+        }, g45), s27);
+      }
+      getDefaultContentType() {
+        return "application/json";
+      }
+    };
+  }
+});
+
+// node_modules/@kiro/agent/dist/sso-oidc-D2VycpdB.js
+var sso_oidc_D2VycpdB_exports = {};
+__export(sso_oidc_D2VycpdB_exports, {
+  CreateTokenCommand: () => An2,
+  SSOOIDCClient: () => xn2
+});
+function Nt3(e17, t18, r23) {
+  return e17.$source || (e17.$source = {}), e17.$source[t18] = r23, e17;
+}
+function Ht3(e17) {
+  return (t18) => async (r23) => {
+    const s27 = r23.request;
+    if (ie6.isInstance(s27)) {
+      const { body: n27, headers: i29 } = s27;
+      if (n27 && Object.keys(i29).map((a34) => a34.toLowerCase()).indexOf(W11) === -1) try {
+        const a34 = e17(n27);
+        s27.headers = {
+          ...s27.headers,
+          [W11]: String(a34)
+        };
+      } catch {
+      }
+    }
+    return t18({
+      ...r23,
+      request: s27
+    });
+  };
+}
+function Z8(e17) {
+  for
+
+=====
+--- pos=6996460 ---
+);
+    __name(xr2, "xr");
+    __name(Ar2, "Ar");
+    Or2 = /* @__PURE__ */ __name(async (e17, t18, r23) => ({
+      operation: Y8(t18).operation,
+      region: await G10(e17.region)() || (() => {
+        throw new Error("expected `region` to be configured for `aws.auth#sigv4`");
+      })()
+    }), "Or");
+    __name(Dr2, "Dr");
+    __name(_r2, "_r");
+    Pr2 = /* @__PURE__ */ __name((e17) => {
+      const t18 = [];
+      return e17.operation === "CreateToken" ? t18.push(_r2(e17)) : t18.push(Dr2(e17)), t18;
+    }, "Pr");
+    kr2 = /* @__PURE__ */ __name((e17) => {
+      const t18 = Ir2(e17);
+      return Object.assign(t18, { authSchemePreference: G10(e17.authSchemePreference ?? []) });
+    }, "kr");
+    Rr2 = /* @__PURE__ */ __name((e17) => Object.assign(e17, {
+      useDualstackEndpoint: e17.useDualstackEndpoint ?? false,
+      useFipsEndpoint: e17.useFipsEndpoint ?? false,
+      defaultSigningName: "sso-oauth"
+    }), "Rr");
+    Tr3 = {
+      UseFIPS: {
+        type: "builtInParams",
+        name: "useFipsEndpoint"
+      },
+      Endpoint: {
+        type: "builtInParams",
+        name: "endpoin
+
+=====
+--- pos=7010246 ---
+error;
+      error_description;
+      constructor(t18) {
+        super({
+          name: "UnsupportedGrantTypeException",
+          $fault: "client",
+          ...t18
+        }), Object.setPrototypeOf(this, Oe7.prototype), this.error = t18.error, this.error_description = t18.error_description;
+      }
+    };
+    vs2 = "AccessDeniedException";
+    ms2 = "AuthorizationPendingException";
+    fs4 = "AccessToken";
+    ys2 = "ClientSecret";
+    Ss2 = "CreateToken";
+    Es2 = "CreateTokenRequest";
+    ws2 = "CreateTokenResponse";
+    Cs2 = "CodeVerifier";
+    bs2 = "ExpiredTokenException";
+    Is2 = "InvalidClientException";
+    xs2 = "InvalidGrantException";
+    As2 = "InvalidRequestException";
+    Os2 = "InternalServerException";
+    Ds2 = "InvalidScopeException";
+    _s2 = "IdToken";
+    Ps2 = "RefreshToken";
+    ks2 = "SlowDownException";
+    Rs2 = "UnauthorizedClientException";
+    Ts2 = "UnsupportedGrantTypeException";
+    Ns2 = "accessToken";
+    w10 = "client";
+    js2 = "clientId";
+    $s2 = "clientSecret";
+    Hs2 = "codeVerifier";
+    Us2 = "code";
+    Fs2 = "deviceCode";
+    l8 = "error";
+
+
+=====
+--- pos=7010271 ---
+ption;
+      constructor(t18) {
+        super({
+          name: "UnsupportedGrantTypeException",
+          $fault: "client",
+          ...t18
+        }), Object.setPrototypeOf(this, Oe7.prototype), this.error = t18.error, this.error_description = t18.error_description;
+      }
+    };
+    vs2 = "AccessDeniedException";
+    ms2 = "AuthorizationPendingException";
+    fs4 = "AccessToken";
+    ys2 = "ClientSecret";
+    Ss2 = "CreateToken";
+    Es2 = "CreateTokenRequest";
+    ws2 = "CreateTokenResponse";
+    Cs2 = "CodeVerifier";
+    bs2 = "ExpiredTokenException";
+    Is2 = "InvalidClientException";
+    xs2 = "InvalidGrantException";
+    As2 = "InvalidRequestException";
+    Os2 = "InternalServerException";
+    Ds2 = "InvalidScopeException";
+    _s2 = "IdToken";
+    Ps2 = "RefreshToken";
+    ks2 = "SlowDownException";
+    Rs2 = "UnauthorizedClientException";
+    Ts2 = "UnsupportedGrantTypeException";
+    Ns2 = "accessToken";
+    w10 = "client";
+    js2 = "clientId";
+    $s2 = "clientSecret";
+    Hs2 = "codeVerifier";
+    Us2 = "code";
+    Fs2 = "deviceCode";
+    l8 = "error";
+    Ms2 = "expiresIn";
+  
+

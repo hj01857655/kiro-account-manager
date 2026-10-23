@@ -1,0 +1,148 @@
+=====
+--- pos=7061673 ---
+   La = "mcpRegistryUrl";
+    Ua = "minimumTokensPerCacheCheckpoint";
+    wa2 = "models";
+    $a = "notifications";
+    se9 = "nextDateReset";
+    k15 = "nextToken";
+    x14 = "origin";
+    ie9 = "overageConfiguration";
+    Ma = "overageCapWithPrecision";
+    Da = "overageCapability";
+    Na = "overageCharges";
+    Fa = "overageCap";
+    Ba = "overageCredits";
+    Ha = "optInFeatures";
+    Ga = "overageRate";
+    ja = "overageStatus";
+    y18 = "profileArn";
+    Wa = "promptCaching";
+    Ka = "promptLogging";
+    qa = "profileName";
+    Va = "profileType";
+    za = "percentUsed";
+    Qa = "profile";
+    $12 = "reason";
+    Ya = "redeemedAt";
+    Ja = "rateMultiplier";
+    T10 = "resourceType";
+    Xa = "referenceTrackerConfiguration";
+    Za = "rateUnit";
+    es3 = "recommendationsWithReferences";
+    ts3 = "resource";
+    oe9 = "smithy.ts.sdk.synthetic.com.amazon.kiro.controlplane.bearer";
+    rs3 = "subscriptionInfo";
+    as3 = "supportedInputTypes";
+    ss3 = "subscriptionManagementTarget";
+    is3 = "supportsPromptCaching";
+    os4 = "subscriptionTitle";
+    ne9 = "s3Uri";
+    ns3 = "serve
+
+=====
+--- pos=9562472 ---
+  endpoint: d47,
+        token: { token: s27 },
+        maxAttempts: 3,
+        customUserAgent: a34
+      });
+      A16(T37, o29.readToken()?.authMethod, "cps-bearer-client");
+      const R45 = [];
+      let I43, w41, f52 = 0;
+      do {
+        if (n27?.aborted) throw n27.reason instanceof Error ? n27.reason : /* @__PURE__ */ new Error("listAvailableModels aborted");
+        const y45 = await T37.send(new Fe9({
+          origin: r23,
+          profileArn: u46 || void 0,
+          nextToken: w41
+        }), { abortSignal: n27 });
+        if (y45.models?.length && R45.push(...y45.models.filter((p46) => !!p46.modelId).map((p46) => {
+          const A43 = Be6(je6(p46.additionalModelRequestFieldsSchema) ? p46.additionalModelRequestFieldsSchema : void 0);
+          return {
+            modelId: p46.modelId,
+            modelName: p46.modelName,
+            description: p46.description,
+            provider: p46.modelProvider,
+            rateMultiplier: p46.rateMultiplier,
+            rateUnit: p46.rateUnit,
+            maxInputTokens: p46.tokenLimits?.maxInputTokens,
+            effortLevels: A43
+
+=====
+--- pos=9621046 ---
+) throw o29.reason instanceof Error ? o29.reason : /* @__PURE__ */ new Error("getFeatureConfiguration aborted");
+  const c39 = await r23.getToken(), d47 = await r23.getProfileArn(), p46 = new Ti2({
+    region: r23.region || $i2,
+    endpoint: a34,
+    token: { token: c39 },
+    maxAttempts: 1,
+    customUserAgent: i29
+  });
+  ki2(p46), A16(p46, r23.readToken()?.authMethod, "get-feature-configuration");
+  const u46 = (await p46.send(new Pi2({
+    profileArn: d47 || void 0,
+    origin: s27,
+    version: n27
+  }), { abortSignal: o29 })).configuration;
+  return u46 !== null && typeof u46 == "object" && !Array.isArray(u46) ? u46 : {};
+}
+function N14(e17) {
+  if (typeof e17 != "object" || e17 === null) return `error=${String(e17)}`;
+  const r23 = e17;
+  return [
+    `name=${r23.name ?? "unknown"}`,
+    `message=${r23.message ?? "(none)"}`,
+    r23.$metadata?.httpStatusCode !== void 0 ? `httpStatus=${r23.$metadata.httpStatusCode}` : void 0,
+    r23.$metadata?.requestId ? `requestId=${r23.$metadata.requestId}` : void 0
+  ].filter(Boolean).join(" ");
+}
+var import_node_crypto4, Yt6, Zt5, er6, tr4, rr4, 
+
+=====
+--- pos=9636165 ---
+d";
+    Jn2 = "images";
+    $14 = "jsonrpc";
+    me12 = "json";
+    Qn2 = "key";
+    Yn2 = "location";
+    Xn2 = "languageName";
+    Zn2 = "licenseName";
+    es4 = "line";
+    h18 = "message";
+    ts4 = "metadataEvent";
+    rs4 = "meteringEvent";
+    he12 = "modelId";
+    as4 = "messageId";
+    L17 = "method";
+    R16 = "name";
+    ns6 = "normalizedTokenUsage";
+    F15 = "origin";
+    ss4 = "operatingSystem";
+    os5 = "outputTokens";
+    w13 = "profileArn";
+    ge11 = "programmingLanguage";
+    H13 = "params";
+    is4 = "position";
+    I16 = "reason";
+    vs4 = "retryAfterSeconds";
+    cs4 = "reasoningContent";
+    ds4 = "reasoningContentEvent";
+    us4 = "recommendationContentSpan";
+    _e9 = "redactedContent";
+    ls4 = "relevantDocuments";
+    fe11 = "relativeFilePath";
+    ps4 = "recommendedModel";
+    ms4 = "reasoningText";
+    hs4 = "range";
+    gs4 = "references";
+    _s4 = "refusal";
+    fs6 = "repository";
+    Se10 = "result";
+    Ee9 = "smithy.ts.sdk.synthetic.com.amazon.kiro.runtimeservice";
+    Ss4 = "sourceContent";
+    Es4 = "stopDetails";
+    Cs4 = "systemPrompt";
+    ys4 = "st
+

@@ -1,0 +1,100 @@
+=====
+
+    schemeId: "smithy.api#httpBearerAuth",
+    propertiesExtractor: /* @__PURE__ */ __name(({ profile: t18, filepath: r23, configFilepath: o29, ignoreCache: n27 }, u46) => ({ identityProperties: {
+      profile: t18,
+      filepath: r23,
+      configFilepath: o29,
+      ignoreCache: n27
+    } }), "propertiesExtractor")
+  };
+}
+function nm(e17, t18) {
+  return new sr8({
+    region: e17.region ?? "us-east-1",
+    endpoint: e17.endpoint || "https://runtime.us-east-1.kiro.dev",
+    token: { token: t18 },
+    customUserAgent: e17.customUserAgent
+  });
+}
+function sm(e17, t18, r23, o29, n27) {
+  if (process.env.KIRO_DUMP_REQUESTS)
+    try {
+      const u46 = (0, import_node_path16.join)(process.env.KIRO_DUMP_REQUESTS_DIR || (0, import_node_path16.join)((0, import_node_os8.tmpdir)(), "kiro-agent-requests"), "infra-safety", e17 || "unknown");
+      (0, import_node_fs15.mkdirSync)(u46, { recursive: true });
+      
+
+=====
+onst t18 = new AbortController(), r23 = setTimeout(() => t18.abort(), e17);
+  return {
+    signal: t18.signal,
+    cleanup: /* @__PURE__ */ __name(() => clearTimeout(r23), "cleanup")
+  };
+}
+function D40(e17, t18, r23, o29) {
+  if (!e17.getOutbound) return;
+  const n27 = e17.getOutbound(t18);
+  n27 && n27.extNotification(r23, o29);
+}
+function Mm(e17, t18) {
+  return O.info("infra-safety.pre-tool-use.init", {
+    endpoint: e17.endpoint || "https://runtime.us-east-1.kiro.dev",
+    hasOutbound: !!e17.getOutbound
+  }), {
+    hasHooks: /* @__PURE__ */ __name(() => true, "hasHooks"),
+    async execute(r23, o29, n27, u46) {
+      const v59 = u46.chatSessionId;
+      if (!at13(r23, n27))
+        return O.debug("infra-safety.pre-tool-use.skip-non-infra", {
+          toolId: r23,
+          sessionId: v59
+        }), vm(r23, Aa4.NonInfra), t18.execute(r23, o29, n27, u46);
+      if (!tt15.has(r23) && !rt13.has(r23)) 
+
+=====
+n q37(t18, "backend_fail_open"), O.warn("infra-safety.poll.backend-fail-open", {
+        toolId: t18,
+        sessionId: n27,
+        reason: g45.reason,
+        pollCount: v59
+      }), g45;
+  }
+  O.warn("infra-safety.poll.timeout-fail-open", {
+    pollCount: v59,
+    toolId: t18,
+    sessionId: n27,
+    maxDurationMs: X29
+  });
+}
+function Lm(e17, t18) {
+  return O.info("infra-safety.post-tool-use.init", {
+    endpoint: e17.endpoint || "https://runtime.us-east-1.kiro.dev",
+    hasOutbound: !!e17.getOutbound
+  }), { async execute(r23, o29, n27, u46, v59, s27) {
+    const i29 = s27.chatSessionId;
+    return !me23.has(r23) || !v59 || !u46 || !at13(r23, n27) ? (O.debug("infra-safety.post-tool-use.skip", {
+      toolId: r23,
+      sessionId: i29,
+      isRead: me23.has(r23),
+      success: v59,
+      hasResult: !!u46
+    }), t18.execute(r23, o29, n27, u46, v59, s27)) : (O.info("infra-safety.post-tool-use.sen
+
+=====
+resetConfig = buildPresetConfig([...allPartitionConfigs, ...customEndpoints]);
+    standardRegions = allPartitionConfigs.map((config2) => config2.region);
+    customRegions = [...customEndpoints, ...customKrsEndpoints, ...customCpsEndpoints].map(
+      (endpoint) => endpoint.region
+    );
+    supportedRegions = [.../* @__PURE__ */ new Set([...standardRegions, ...customRegions])];
+    krsConfigs = [
+      { region: "us-east-1", endpoint: "https://runtime.us-east-1.kiro.dev" },
+      { region: "eu-central-1", endpoint: "https://runtime.eu-central-1.kiro.dev" },
+      { region: "us-gov-west-1", endpoint: "https://runtime.us-gov-west-1.kiro.dev" }
+    ];
+    krsPresetConfig = buildPresetConfig(krsConfigs);
+    cpsConfigs = [
+      { region: "us-east-1", endpoint: "https://management.us-east-1.kiro.dev" },
+      { region: "eu-central-1", endpoint: "https://management.eu-central-1.kiro.dev" },
+      { region: 
+

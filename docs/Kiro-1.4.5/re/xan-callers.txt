@@ -1,0 +1,2 @@
+est.headers,"x-amzn-codewhisperer-optout":"true"},l(u)},"middleware");t.middlewareStack.add(s,{step:"build"})}}function xAn(t,e){let r=c(s=>async a=>{let l=a;return l.request.headers={...l.request.headers,"x-amzn-kiro-agent-mode":e},s(a)},"midd
+logger:a}))return;let d=await this.initializeRuntimeClient();kAn(d,"AmazonQDeveloper Runtime",tn.readToken()?.provider),xAn(d,"autocomplete"),Yde(d,{usingApiKey:tn.isUsingApiKey(),authMethod:tn.readToken()?.authMethod},"autocomplete"),Jde(d,tn.

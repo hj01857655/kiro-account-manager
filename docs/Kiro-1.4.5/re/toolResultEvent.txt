@@ -1,0 +1,18 @@
+===== HIT 1 line=225978 =====
+===== HIT 2 line=226102 =====
+--- offset=11 ---
+    bs4 = "toolResultEvent";
+
+===== HIT 3 line=325750 =====
+===== HIT 4 line=325977 =====
+--- offset=10 ---
+    Ru = "toolResultEvent";
+
+===== HIT 5 line=508241 =====
+===== HIT 6 line=508399 =====
+===== HIT 7 line=508618 =====
+--- offset=16 ---
+    var _tRE = "toolResultEvent";
+
+===== HIT 8 line=509230 =====
+

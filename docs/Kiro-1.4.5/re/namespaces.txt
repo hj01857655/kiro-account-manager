@@ -1,0 +1,3 @@
+com.amazon.kiro.controlplane
+com.amazon.kiro.controlplane.bearer
+com.amazon.kiro.runtimeservice

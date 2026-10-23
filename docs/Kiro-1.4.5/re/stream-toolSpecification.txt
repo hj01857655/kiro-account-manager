@@ -1,0 +1,167 @@
+=====
+;
+    ys4 = "stopReason";
+    Rs4 = "searchResultIndex";
+    Is4 = "searchResult";
+    Ts4 = "serviceUnavailableError";
+    Ce10 = "server";
+    ye12 = "signature";
+    b16 = "source";
+    Ps4 = "stream";
+    O18 = "start";
+    As4 = "status";
+    xs4 = "stop";
+    Re9 = "streaming";
+    ks4 = "tools";
+    Ds4 = "throttlingError";
+    $s4 = "timezoneOffset";
+    ws4 = "toolResult";
+    bs4 = "toolResultEvent";
+    Os4 = "toolResults";
+    Ms4 = "toolSpecification";
+    Us4 = "totalTokens";
+    Ns4 = "toolUses";
+    Fs4 = "toolUseEvent";
+    G16 = "toolUseId";
+    Bs4 = "tokenUsage";
+    T12 = "text";
+    Ls4 = "title";
+    Ie10 = "type";
+    Te8 = "url";
+    Hs4 = "userInputMessage";
+    Gs4 = "userInputMessageContext";
+    js4 = "uncachedInputTokens";
+    Vs4 = "unitPlural";
+    qs4 = "useRelevantDocuments";
+    Ks4 = "unit";
+    zs4 = "usage";
+    Ws4 = "value";
+    Js4 = "validationError";
+    J13 = "
+
+=====
+size > me13) throw new b17(T5.DOCUMENT_COUNT_EXCEEDED, `Too many documents attached (${r23.size}). Maximum is ${me13} per conversation.`);
+}
+function kt4(e17) {
+  return "function" in e17;
+}
+function K13(e17) {
+  return isInteropZodSchema(e17) ? Q12(toJsonSchema(e17)) : Q12(e17);
+}
+function k18(e17, t18) {
+  return e17 !== void 0 && e17.trim().length > 0 ? e17 : t18.trim().length > 0 ? t18 : "tool";
+}
+function xt3(e17) {
+  if (kt4(e17)) return { toolSpecification: {
+    name: e17.function.name,
+    description: k18(e17.function.description, e17.function.name),
+    inputSchema: { json: Q12(e17.function.parameters) }
+  } };
+  if ("name" in e17 && typeof e17.name == "string" && "description" in e17 && typeof e17.description == "string") {
+    const t18 = "schema" in e17 ? e17.schema : {};
+    return { toolSpecification: {
+      name: e17.name,
+      description: k18(e17.description, e17.name),
+      inputSc
+
+=====
+17 : t18.trim().length > 0 ? t18 : "tool";
+}
+function xt3(e17) {
+  if (kt4(e17)) return { toolSpecification: {
+    name: e17.function.name,
+    description: k18(e17.function.description, e17.function.name),
+    inputSchema: { json: Q12(e17.function.parameters) }
+  } };
+  if ("name" in e17 && typeof e17.name == "string" && "description" in e17 && typeof e17.description == "string") {
+    const t18 = "schema" in e17 ? e17.schema : {};
+    return { toolSpecification: {
+      name: e17.name,
+      description: k18(e17.description, e17.name),
+      inputSchema: { json: K13(t18) }
+    } };
+  } else if ("toolSpecification" in e17) {
+    const t18 = e17, r23 = t18.toolSpecification;
+    return r23 === void 0 ? t18 : { toolSpecification: {
+      ...r23,
+      description: k18(r23.description, r23.name)
+    } };
+  } else if ("parameters" in e17 && "id" in e17 && "description" in e17) {
+    const t18 = e17.paramete
+
+=====
+: k18(e17.function.description, e17.function.name),
+    inputSchema: { json: Q12(e17.function.parameters) }
+  } };
+  if ("name" in e17 && typeof e17.name == "string" && "description" in e17 && typeof e17.description == "string") {
+    const t18 = "schema" in e17 ? e17.schema : {};
+    return { toolSpecification: {
+      name: e17.name,
+      description: k18(e17.description, e17.name),
+      inputSchema: { json: K13(t18) }
+    } };
+  } else if ("toolSpecification" in e17) {
+    const t18 = e17, r23 = t18.toolSpecification;
+    return r23 === void 0 ? t18 : { toolSpecification: {
+      ...r23,
+      description: k18(r23.description, r23.name)
+    } };
+  } else if ("parameters" in e17 && "id" in e17 && "description" in e17) {
+    const t18 = e17.parameters;
+    return { toolSpecification: {
+      name: e17.id,
+      description: k18(e17.description, e17.id),
+      inputSchema: { json: K13(t18) }
+    } };
+ 
+
+=====
+tSchema: { json: Q12(e17.function.parameters) }
+  } };
+  if ("name" in e17 && typeof e17.name == "string" && "description" in e17 && typeof e17.description == "string") {
+    const t18 = "schema" in e17 ? e17.schema : {};
+    return { toolSpecification: {
+      name: e17.name,
+      description: k18(e17.description, e17.name),
+      inputSchema: { json: K13(t18) }
+    } };
+  } else if ("toolSpecification" in e17) {
+    const t18 = e17, r23 = t18.toolSpecification;
+    return r23 === void 0 ? t18 : { toolSpecification: {
+      ...r23,
+      description: k18(r23.description, r23.name)
+    } };
+  } else if ("parameters" in e17 && "id" in e17 && "description" in e17) {
+    const t18 = e17.parameters;
+    return { toolSpecification: {
+      name: e17.id,
+      description: k18(e17.description, e17.id),
+      inputSchema: { json: K13(t18) }
+    } };
+  } else if ("schema" in e17 && "id" in e17 && "description" 
+
+=====
+  if ("name" in e17 && typeof e17.name == "string" && "description" in e17 && typeof e17.description == "string") {
+    const t18 = "schema" in e17 ? e17.schema : {};
+    return { toolSpecification: {
+      name: e17.name,
+      description: k18(e17.description, e17.name),
+      inputSchema: { json: K13(t18) }
+    } };
+  } else if ("toolSpecification" in e17) {
+    const t18 = e17, r23 = t18.toolSpecification;
+    return r23 === void 0 ? t18 : { toolSpecification: {
+      ...r23,
+      description: k18(r23.description, r23.name)
+    } };
+  } else if ("parameters" in e17 && "id" in e17 && "description" in e17) {
+    const t18 = e17.parameters;
+    return { toolSpecification: {
+      name: e17.id,
+      description: k18(e17.description, e17.id),
+      inputSchema: { json: K13(t18) }
+    } };
+  } else if ("schema" in e17 && "id" in e17 && "description" in e17) {
+    const t18 = e17.schema;
+    return { tool
+

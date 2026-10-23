@@ -1,0 +1,133 @@
+=====
+ltEvent";
+    Za2 = "ToolResults";
+    en3 = "ToolSpecification";
+    tn3 = "TokenUsage";
+    rn3 = "ToolUseEvent";
+    an3 = "ToolUse";
+    nn3 = "ToolUses";
+    sn3 = "Tool";
+    on3 = "UserInputMessage";
+    vn3 = "UserInputMessageContext";
+    cn3 = "ValidationException";
+    dn3 = "WorkspaceFolderList";
+    un3 = "additionalContext";
+    ln3 = "agentContinuationId";
+    pn3 = "agentMode";
+    mn3 = "additionalModelRequestFields";
+    hn3 = "assistantResponseEvent";
+    gn3 = "assistantResponseMessage";
+    _n2 = "agentTaskType";
+    ie13 = "bytes";
+    P13 = "client";
+    ve10 = "conversationId";
+    fn3 = "currentMessage";
+    Sn3 = "codeReferenceEvent";
+    En2 = "cacheReadInputTokens";
+    Cn = "cursorState";
+    yn3 = "conversationState";
+    Rn = "contentType";
+    In2 = "chatTriggerType";
+    Tn2 = "contextUsageEvent";
+    ce11 = "contextUsagePercentage";
+    Pn2 = "currentWorkingDirectory";
+    An
+
+=====
+o-ide":
+      return "AI_EDITOR";
+    case "kiro-web":
+      return "KIRO_WEB";
+    case "kiro-cli":
+      return "KIRO_CLI";
+    case void 0:
+    case null:
+      return r23 === "websocket" || t18.client === "kiro-web" ? "KIRO_WEB" : le14;
+    default:
+      return le14;
+  }
+}
+function ar5(e17) {
+  return ye13.includes(e17);
+}
+function yt3(e17) {
+  if (typeof e17 != "object" || e17 === null) return [];
+  const t18 = e17, r23 = [], o29 = M19(t18.assistantResponseEvent);
+  o29 && typeof o29.content == "string" && o29.content.length > 0 && r23.push({
+    kind: "assistant_response",
+    content: o29.content,
+    modelId: typeof o29.modelId == "string" ? o29.modelId : void 0
+  });
+  const a34 = M19(t18.reasoningContentEvent);
+  if (a34) {
+    const n27 = typeof a34.text == "string" ? a34.text : void 0, y45 = typeof a34.signature == "string" ? a34.signature : void 0;
+    (n27 || y45) && r23.push({
+      kind: "rea
+
+=====
+d=${this.modelType || "<empty>"} agentMode=${this.agentMode} origin=${this.getOrigin()} streaming=false conversationId=${a34.conversationId ?? "<none>"}`);
+        try {
+          const s27 = await (await this.getKrsClient()).send(c39), i29 = [];
+          if (!s27.generateAssistantResponseResponse) throw new te13();
+          for await (const n27 of s27.generateAssistantResponseResponse) i29.push(n27);
+          const g45 = i29.filter((n27) => "assistantResponseEvent" in n27 && n27.assistantResponseEvent !== void 0);
+          g45.filter((n27) => n27.assistantResponseEvent.modelId).forEach((n27) => this.log.debug(`Invoked with model ${n27.assistantResponseEvent.modelId}`));
+          const f52 = unescape2(g45.map((n27) => n27.assistantResponseEvent.content).join(""));
+          return { generations: [{
+            message: new AIMessageChunk({ content: f52 }),
+            text: f52
+          }] };
+        } 
+
+=====
+Mode=${this.agentMode} origin=${this.getOrigin()} streaming=false conversationId=${a34.conversationId ?? "<none>"}`);
+        try {
+          const s27 = await (await this.getKrsClient()).send(c39), i29 = [];
+          if (!s27.generateAssistantResponseResponse) throw new te13();
+          for await (const n27 of s27.generateAssistantResponseResponse) i29.push(n27);
+          const g45 = i29.filter((n27) => "assistantResponseEvent" in n27 && n27.assistantResponseEvent !== void 0);
+          g45.filter((n27) => n27.assistantResponseEvent.modelId).forEach((n27) => this.log.debug(`Invoked with model ${n27.assistantResponseEvent.modelId}`));
+          const f52 = unescape2(g45.map((n27) => n27.assistantResponseEvent.content).join(""));
+          return { generations: [{
+            message: new AIMessageChunk({ content: f52 }),
+            text: f52
+          }] };
+        } catch (s27) {
+          throw this.log
+
+=====
+ersationId=${a34.conversationId ?? "<none>"}`);
+        try {
+          const s27 = await (await this.getKrsClient()).send(c39), i29 = [];
+          if (!s27.generateAssistantResponseResponse) throw new te13();
+          for await (const n27 of s27.generateAssistantResponseResponse) i29.push(n27);
+          const g45 = i29.filter((n27) => "assistantResponseEvent" in n27 && n27.assistantResponseEvent !== void 0);
+          g45.filter((n27) => n27.assistantResponseEvent.modelId).forEach((n27) => this.log.debug(`Invoked with model ${n27.assistantResponseEvent.modelId}`));
+          const f52 = unescape2(g45.map((n27) => n27.assistantResponseEvent.content).join(""));
+          return { generations: [{
+            message: new AIMessageChunk({ content: f52 }),
+            text: f52
+          }] };
+        } catch (s27) {
+          throw this.log.error("Failed to generate Messages", s27), Y15(s27);
+        }
+      
+
+=====
+(await this.getKrsClient()).send(c39), i29 = [];
+          if (!s27.generateAssistantResponseResponse) throw new te13();
+          for await (const n27 of s27.generateAssistantResponseResponse) i29.push(n27);
+          const g45 = i29.filter((n27) => "assistantResponseEvent" in n27 && n27.assistantResponseEvent !== void 0);
+          g45.filter((n27) => n27.assistantResponseEvent.modelId).forEach((n27) => this.log.debug(`Invoked with model ${n27.assistantResponseEvent.modelId}`));
+          const f52 = unescape2(g45.map((n27) => n27.assistantResponseEvent.content).join(""));
+          return { generations: [{
+            message: new AIMessageChunk({ content: f52 }),
+            text: f52
+          }] };
+        } catch (s27) {
+          throw this.log.error("Failed to generate Messages", s27), Y15(s27);
+        }
+      }
+      async *_streamResponseChunks(e17, t18, r23) {
+        const { systemPrompt: o29, c
+

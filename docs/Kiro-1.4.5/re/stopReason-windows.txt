@@ -1,0 +1,20 @@
+      stopReason: external_exports.string().min(1),
+      stopReason: zStopReason,
+    ys4 = "stopReason";
+          p46 && S44.reportCountMetrics({ repeatIterations: b50 }, { stopReason: I43 });
+      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens"]).or(string2())),
+      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens", "toolUse"]).or(string2())),
+       * Response content. May be a single block or array. May include ToolUseContent if stopReason is "toolUse".
+      return { turnEnd: { stopReason: e17.stopReason } };
+          stopReason: e17
+              stopReason: "end_turn",
+              stopReason: e17,
+        stopReason: t18.stopReason
+      stopReason: "cancelled",
+        if (!i29.trim() && r23.length === 0 && o29.length === 0) return { stopReason: "end_turn" };
+          }), await this.respondWithSpecRequiresWorkspace(t18), { stopReason: "end_turn" };
+          return t18.abortController = void 0, t18.lastTurnInterrupted = g45 === "cancelled", g45 !== "cancelled" && !w41.signal.aborted && this.clearSteeringAtTurnBoundary(t18, e17.sessionId), { stopReason: g45 };
+          stopReason: "cancelled"
+        const stopReason = turnEnd2.stopReason ?? "";
+        if (stopReason === "end_turn") {
+        } else if (stopReason === "error" || stopReason === "fault") {

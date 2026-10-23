@@ -1,0 +1,151 @@
+=====
+  M17 = "status";
+    o7 = "toggle";
+    ls3 = "tokenLimits";
+    vs3 = "totalUsageLimit";
+    de9 = "type";
+    cs3 = "unit";
+    us3 = "usageBreakdownList";
+    ps3 = "upgradeCapability";
+    ms3 = "userInfo";
+    gs3 = "userId";
+    C15 = "usageLimit";
+    le9 = "usageLimitWithPrecision";
+    hs3 = "workspaceContext";
+    _s3 = "webTools";
+    t8 = "com.amazon.kiro.controlplane";
+    ve9 = De6.for(oe9);
+    fs5 = [
+      -3,
+      oe9,
+      "KiroControlPlaneBearerServiceException",
+      0,
+      [],
+      []
+    ];
+    ve9.registerError(fs5, l9);
+    v15 = De6.for(t8);
+    Ps3 = [
+      -3,
+      t8,
+      Jt4,
+      {
+        [p13]: _16,
+        [m14]: 403
+      },
+      [g12, $12],
+      [0, 0],
+      1
+    ];
+    v15.registerError(Ps3, jt3);
+    Es3 = [
+      -3,
+      t8,
+      ir3,
+      {
+        [p13]: _16,
+        [m14]: 409
+      },
+      [g12, $12],
+      [0, 0],
+      1
+    ];
+    v15.registerError(E
+
+=====
+       identityProvider: /* @__PURE__ */ __name((r23) => r23.getIdentityProvider("smithy.api#httpBearerAuth"), "identityProvider"),
+        signer: new yr4()
+      }],
+      logger: e17?.logger ?? new Or(),
+      protocol: e17?.protocol ?? _13,
+      protocolSettings: e17?.protocolSettings ?? {
+        defaultNamespace: "com.amazon.kiro.controlplane.bearer",
+        errorTypeRegistries: xs3,
+        version: "2024-10-25",
+        serviceTarget: "KiroControlPlaneBearerService"
+      },
+      serviceId: e17?.serviceId ?? "KiroControlPlaneBearer",
+      urlParser: e17?.urlParser ?? Qe5,
+      utf8Decoder: e17?.utf8Decoder ?? M16,
+      utf8Encoder: e17?.utf8Encoder ?? br4
+    }), "mi");
+    gi2 = /* @__PURE__ */ __name((e17) => {
+      Ln(process.version);
+      const r23 = Hn(e17), a34 = /* @__PURE__ */ __name(() => r23().then($n), "a"), n27 = mi2(e17);
+      Pn(process.version);
+      const s27 = {
+        profile: e
+
+=====
+ResetContextUsage: Annotation(),
+      compactionConfigOverride: Annotation(),
+      contextOverflowRecovered: Annotation(),
+      postCompactionContinuation: Annotation()
+    };
+    __name(Ut5, "Ut");
+    Ot4 = Annotation.Root(De9);
+    j13 = /* @__PURE__ */ new Map();
+    __name(J11, "J");
+    Fe9 = class extends Ar.classBuilder().ep(Si2).m(function(e17, o29, i29, t18) {
+      return [Yn(i29, e17.getEndpointParameterInstructions())];
+    }).s("KiroControlPlaneBearerService", "ListAvailableModels", {}).n("KiroControlPlaneBearerClient", "ListAvailableModelsCommand").sc(xi2).build() {
+      static {
+        __name(this, "Fe");
+      }
+    };
+    oe11 = 10;
+    __name(_t3, "_t");
+    Le8 = /* @__PURE__ */ __name(async (e17) => {
+      const { authProvider: o29, controlPlaneEndpointOverride: i29, regionOverride: t18, origin: r23, customUserAgent: a34, signal: n27 } = e17, s27 = await o29.getToken(), u46 = await o29.get
+
+=====
+t/dist/governance-CxkOm-ab.js"() {
+    init_logger_Y_1oRKjn();
+    init_JsonCodec_DFCGBWGT();
+    init_middleware_utils_Dqi8AYUc();
+    init_control_plane_endpoint_C6vdORvc();
+    init_instrument_io_Ddo7rQz6();
+    init_registry_schema_DjFpbwaT();
+    I34 = __toESM(require("node:https"), 1);
+    $27 = class extends Ar.classBuilder().ep(Si2).m(function(e17, t18, r23, a34) {
+      return [Yn(r23, e17.getEndpointParameterInstructions())];
+    }).s("KiroControlPlaneBearerService", "GetProfile", {}).n("KiroControlPlaneBearerClient", "GetProfileCommand").sc(Ai2).build() {
+      static {
+        __name(this, "$");
+      }
+    };
+    __name(k35, "k");
+    F34 = /* @__PURE__ */ __name(async (e17) => {
+      const { authProvider: t18, controlPlaneEndpointOverride: r23, regionOverride: a34, customUserAgent: o29, signal: n27 } = e17, s27 = await t18.getToken(), c39 = await t18.getProfileArn(), { region: d47, endpoint: l41 } = b
+
+=====
+, e17, t18, i29) {
+      return [Yn(t18, s27.getEndpointParameterInstructions())];
+    }).s("KiroRuntimeService", "InvokeMCPStream", { eventStream: { output: true } }).n("KiroRuntimeClient", "InvokeMCPStreamCommand").sc(Ki2).build() {
+      static {
+        __name(this, "Bl");
+      }
+    };
+    Kl2 = class extends Ar.classBuilder().ep(Si2).m(function(s27, e17, t18, i29) {
+      return [Yn(t18, s27.getEndpointParameterInstructions())];
+    }).s("KiroControlPlaneBearerService", "GetUsageLimits", {}).n("KiroControlPlaneBearerClient", "GetUsageLimitsCommand").sc(Ii2).build() {
+      static {
+        __name(this, "Kl");
+      }
+    };
+    jl2 = {
+      OVERAGE_CAPABLE: "OVERAGE_CAPABLE",
+      OVERAGE_INCAPABLE: "OVERAGE_INCAPABLE"
+    };
+    __name(Z32, "Z");
+    __name(zl2, "zl");
+    __name(Hl2, "Hl");
+    xi5 = [
+      n3.READ,
+      n3.WRITE,
+      n3.SHELL,
+      n3.WEB,
+      n3.SUBAGENT,
+      n3.SPEC,
+      n3.
+

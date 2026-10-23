@@ -1,0 +1,205 @@
+=====
+stop";
+    Re9 = "streaming";
+    ks4 = "tools";
+    Ds4 = "throttlingError";
+    $s4 = "timezoneOffset";
+    ws4 = "toolResult";
+    bs4 = "toolResultEvent";
+    Os4 = "toolResults";
+    Ms4 = "toolSpecification";
+    Us4 = "totalTokens";
+    Ns4 = "toolUses";
+    Fs4 = "toolUseEvent";
+    G16 = "toolUseId";
+    Bs4 = "tokenUsage";
+    T12 = "text";
+    Ls4 = "title";
+    Ie10 = "type";
+    Te8 = "url";
+    Hs4 = "userInputMessage";
+    Gs4 = "userInputMessageContext";
+    js4 = "uncachedInputTokens";
+    Vs4 = "unitPlural";
+    qs4 = "useRelevantDocuments";
+    Ks4 = "unit";
+    zs4 = "usage";
+    Ws4 = "value";
+    Js4 = "validationError";
+    J13 = "version";
+    Qs4 = "web";
+    Ys4 = "workspaceFolders";
+    Xs4 = "x-amzn-kiro-agent-mode";
+    Zs4 = "x-amzn-kiro-conversation-id";
+    
+
+=====
+  gu = "taskId";
+    hu = "taskName";
+    Cu = "toolName";
+    Eu = "timezoneOffset";
+    yu = "toolResult";
+    Ru = "toolResultEvent";
+    Tu = "taskReference";
+    Pu = "toolResults";
+    Au = "toolSpecification";
+    ku = "totalTokens";
+    xu = "toolUses";
+    Iu = "toolUseEvent";
+    Ie18 = "toolUseId";
+    wu = "tokenUsage";
+    Du = "target";
+    $u = "tags";
+    T35 = "text";
+    oe28 = "title";
+    bu = "tools";
+    Ou = "transition";
+    Mu = "uri";
+    Lu = "useClientCachingOnly";
+    Nu = "uxErrorMessage";
+    zt7 = "userIntent";
+    Uu = "userInputMessage";
+    Fu = "userInputMessageContext";
+    Wu = "uncachedInputTokens";
+    ju = "uploadId";
+    zu = "utteranceId";
+    Bu = "unitPlural";
+    Gu = "useRelevantDocuments";
+    Hu = "userSettings";
+    Vu = "unitTestGeneration
+
+=====
+   var _tU = "tenantUrl";
+    var _tUC = "transformationUploadContext";
+    var _tUI = "toolUseId";
+    var _tUIE = "terminalUserInteractionEvent";
+    var _tUIET = "terminalUserInteractionEventType";
+    var _tUL = "totalUsageLimit";
+    var _tUo = "toolUses";
+    var _tUot = "totalUsage";
+    var _tV = "terminalVersion";
+    var _ta = "tags";
+    var _tar = "target";
+    var _te = "text";
+    var _ter = "terminal";
+    var _ti = "timestamp";
+    var _tit = "title";
+    var _to = "tools";
+    var _tok = "token";
+    var _ty = "type";
+    var _u3 = "uri";
+    var _uA = "updatedAt";
+    var _uACC = "unmodifiedAcceptedCharacterCount";
+    var _uACCn = "unmodifiedAddedCharacterCount";
+    var _uAS = "userActionStatus";
+    var _uAT = "uploadArtifactType";
+    var _uB = "usageBreakdown";
+    v
+
+=====
+= "toolName";
+    var _tO2 = "timezoneOffset";
+    var _tR = "toolResult";
+    var _tRE = "toolResultEvent";
+    var _tRa = "taskReference";
+    var _tRo = "toolResults";
+    var _tS = "toolSpecification";
+    var _tT4 = "totalTokens";
+    var _tU = "toolUses";
+    var _tUE = "toolUseEvent";
+    var _tUI = "toolUseId";
+    var _tUo = "tokenUsage";
+    var _ta = "target";
+    var _tag = "tags";
+    var _te = "text";
+    var _ti = "title";
+    var _to = "tools";
+    var _tr = "transition";
+    var _u3 = "uri";
+    var _uCCO = "useClientCachingOnly";
+    var _uEM = "uxErrorMessage";
+    var _uI = "userIntent";
+    var _uIM = "userInputMessage";
+    var _uIMC = "userInputMessageContext";
+    var _uIT = "uncachedInputTokens";
+    var _uIp = "uploadId";
+    var _uIt = "utteranceId";
+    var _uP 
+
+=====
+23.filter((i29) => i29.type === "toolUse"), c39 = r23.filter((i29) => i29.type === "toolUseResponse"), l41 = r23.find((i29) => i29.type === "reasoningContent");
+        return {
+          role: this.role,
+          content: n27.join(`
+
+`),
+          toolUses: a34.length ? a34 : void 0,
+          toolUseResponses: c39.length ? c39 : void 0,
+          images: o29,
+          documentAttachments: s27.length ? s27 : void 0,
+          reasoningContent: l41?.type === "reasoningContent" ? l41.text : void 0,
+          reasoningSignature: l41?.type === "reasoningContent" ? l41.signature : void 0,
+          reasoningModelId: l41?.type === "reasoningContent" ? l41.modelId : void 0
+        };
+      }
+      serializeTextEntry(e17) {
+        return e17.text;
+      }
+      async serializeDocumentsEntry(e1
+
+=====
+in e17;
+}
+function S11(e17) {
+  return e17 != null && "assistantResponseMessage" in e17;
+}
+function h11(e17) {
+  return !!e17.userInputMessage.userInputMessageContext?.toolResults?.length;
+}
+function p9(e17) {
+  return !!e17.assistantResponseMessage.toolUses?.length;
+}
+function g8(e17, t18) {
+  if (!e17 || !e17.length) return true;
+  if (!t18 || !t18.length) return false;
+  const s27 = e17.every((r23) => t18.some((o29) => o29.toolUseId === r23.toolUseId)), n27 = t18.every((r23) => e17.some((o29) => r23.toolUseId === o29.toolUseId));
+  return s27 && n27;
+}
+function O10(e17) {
+  const t18 = [];
+  for (let s27 = 0; s27 < e17.length; s27++) {
+    const n27 = e17[s27], r23 = s27 > 0 ? e17[s27 - 1] : null;
+    if (!i7(n27) || !h11(n27)) {
+      t18.push(n27);
+      continue;
+    }
+    if (!r23 |
+
+=====
+(!r23 || !S11(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    if (!p9(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    const o29 = new Set((r23.assistantResponseMessage.toolUses ?? []).map((u46) => u46.toolUseId).filter(Boolean)), a34 = n27.userInputMessage.userInputMessageContext?.toolResults ?? [], c39 = /* @__PURE__ */ new Set(), l41 = a34.filter((u46) => !u46.toolUseId || !o29.has(u46.toolUseId) || c39.has(u46.toolUseId) ? false : (c39.add(u46.toolUseId), true));
+    if (l41.length === a34.length) t18.push(n27);
+    else if (l41.length > 0) t18.push({ userInputMessage: {
+      ...n27.userInputMessage,
+      userInputMessageContext: {
+        ...n27.userInputMessage.userInputMessageContext,
+        toolResu
+
+=====
+if (t18.push(n27), S11(n27) && p9(n27)) {
+      const r23 = s27 + 1 < e17.length ? e17[s27 + 1] : null;
+      if (!r23 || !i7(r23) || !r23.userInputMessage.userInputMessageContext?.toolResults) {
+        const o29 = A10((n27.assistantResponseMessage.toolUses ?? []).map(({ toolUseId: a34 }, c39) => a34 ?? `toolUse_${c39 + 1}`));
+        t18.push(o29);
+      } else if (!g8(n27.assistantResponseMessage.toolUses, r23.userInputMessage.userInputMessageContext.toolResults) && !e17.some((o29, a34) => a34 !== s27 && S11(o29) && p9(o29) && g8(o29.assistantResponseMessage.toolUses, r23.userInputMessage.userInputMessageContext?.toolResults))) {
+        const o29 = n27.assistantResponseMessage.toolUses ?? [], a34 = new Set((r23.userInputMessage.userInputMessageContext.toolResults ?? []).map((l41) => l4
+

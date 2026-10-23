@@ -1,0 +1,12 @@
+﻿=== x-amzn-kiro-agent-name ===
+{let r=c(n=>async s=>{let a=s;return a.request.headers={...a.request.headers,...e.presentation!=="synthetic"&&{"x-amzn-kiro-execution-id":e.executionId},...e.agentName!==void 0&&{"x-amzn-kiro-agent-name":e.agentName},[Gsu]:e.sessionId,[Vsu]:e.presentation},n(s)},"t");t.middlewareStack.add(r,{step:"build"})}function BNr(t){if(t)return bAe[t]}function Wsu(t,e){let r=t;r.request.hea
+=== x-amzn-kiro-agent-presentation ===
+c(qsu,"v");c(vai,"Q");LNr="x-kiro-attempt",zsu="amz-sdk-request";c(Qsu,"I");c(Sai,"X");Hsu="x-amzn-kiro-client-attribution";c(_ai,"Y");c(B0t,"U");Gsu="x-amzn-kiro-session-id",Vsu="x-amzn-kiro-agent-presentation";c(Eai,"j");c(BNr,"D");c(Wsu,"M");c(Ub,"J");c(Ksu,"b");mai=new Set;c(DNr,"u");c(eSe,"A");c(Die,"V");c(tSe,"Z")});function bai(t){return Ysu?.isAuthError(t)??!1}function UNr(t){ret
+=== x-amzn-kiro-client-attribution ===
+on");c($su,"H");Xje="addBffIdentityHeaders";c(jsu,"_");c(Aai,"l");c(L0t,"W");c(wai,"G");c(qsu,"v");c(vai,"Q");LNr="x-kiro-attempt",zsu="amz-sdk-request";c(Qsu,"I");c(Sai,"X");Hsu="x-amzn-kiro-client-attribution";c(_ai,"Y");c(B0t,"U");Gsu="x-amzn-kiro-session-id",Vsu="x-amzn-kiro-agent-presentation";c(Eai,"j");c(BNr,"D");c(Wsu,"M");c(Ub,"J");c(Ksu,"b");mai=new Set;c(DNr,"u");c(eSe,"A");c(
+=== x-amzn-kiro-conversation-id ===
+InvokeMCPStreamCommand")return e(n);let{response:a}=await t.config.requestHandler.handle(n.request,{}),l=a;if(await lud(l),s==="GenerateAssistantResponseCommand"){let u=l.headers["x-amzn-kiro-conversation-id"]??"",d=xQr(l.headers);return{response:l,output:{$metadata:{httpStatusCode:l.statusCode,requestId:d},conversationId:u,generateAssistantResponseResponse:zqi(l.body,s,d)}}}if(s==="I
+=== x-amzn-kiro-execution-id ===
+s(a)},"n");t.middlewareStack.add(n,{step:"build"})}function Eai(t,e){let r=c(n=>async s=>{let a=s;return a.request.headers={...a.request.headers,...e.presentation!=="synthetic"&&{"x-amzn-kiro-execution-id":e.executionId},...e.agentName!==void 0&&{"x-amzn-kiro-agent-name":e.agentName},[Gsu]:e.sessionId,[Vsu]:e.presentation},n(s)},"t");t.middlewareStack.add(r,{step:"build"})}function
+=== x-amzn-kiro-session-id ===
+i,"l");c(L0t,"W");c(wai,"G");c(qsu,"v");c(vai,"Q");LNr="x-kiro-attempt",zsu="amz-sdk-request";c(Qsu,"I");c(Sai,"X");Hsu="x-amzn-kiro-client-attribution";c(_ai,"Y");c(B0t,"U");Gsu="x-amzn-kiro-session-id",Vsu="x-amzn-kiro-agent-presentation";c(Eai,"j");c(BNr,"D");c(Wsu,"M");c(Ub,"J");c(Ksu,"b");mai=new Set;c(DNr,"u");c(eSe,"A");c(Die,"V");c(tSe,"Z")});function bai(t){return Ysu?.i

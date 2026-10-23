@@ -1,0 +1,11 @@
+x-amzn-kiro-agent-mode x4
+x-amzn-kiro-agent-name x1
+x-amzn-kiro-agent-presentation x1
+x-amzn-kiro-client-attribution x1
+x-amzn-kiro-conversation-id x2
+x-amzn-kiro-execution-id x1
+x-amzn-kiro-origin x1
+x-amzn-kiro-profile x1
+x-amzn-kiro-profile-arn x4
+x-amzn-kiro-ratelimit-retry-after x3
+x-amzn-kiro-session-id x1

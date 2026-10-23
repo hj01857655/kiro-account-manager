@@ -1,0 +1,103 @@
+lt:
+      return le14;
+  }
+}
+function ar5(e17) {
+  return ye13.includes(e17);
+}
+function yt3(e17) {
+  if (typeof e17 != "object" || e17 === null) return [];
+  const t18 = e17, r23 = [], o29 = M19(t18.assistantResponseEvent);
+  o29 && typeof o29.content == "string" && o29.content.length > 0 && r23.push({
+    kind: "assistant_response",
+    content: o29.content,
+    modelId: typeof o29.modelId == "string" ? o29.modelId : void 0
+  });
+  const a34 = M19(t18.reasoningContentEvent);
+  if (a34) {
+    const n27 = typeof a34.text == "string" ? a34.text : void 0, y45 = typeof a34.signature == "string" ? a34.signature : void 0;
+    (n27 || y45) && r23.push({
+      kind: "reasoning_content",
+      text: n27,
+      signature: y45
+    });
+  }
+  const c39 = M19(t18.toolUseEvent);
+  c39 && r23.push({
+    kind: "tool_use",
+    toolUseId: typeof c39.toolUseId == "string" ? c39.toolUseId : void 0,
+    name: typeof c39.name == "string" ? c39.name : void 0,
+    input: typeof c39.input == "string" ? c39.input : void 0,
+    stop: c39.stop === true
+  });
+  const s27 = M19(t18.meteringEvent);
+  s27 && r23.push({
+    kind: "metering",
+    metering: {
+      usage: typeof s27.usage == "number" ? s27.usage : void 0,
+      unit: typeof s27.unit == "string" ? s27.unit : void 0,
+      unitPlural: typeof s27.unitPlural == "string" ? s27.unitPlural : void 0
+    }
+  });
+  const i29 = M19(t18.codeReferenceEvent);
+  if (i29) {
+    const n27 = Array.isArray(i29.references) ? i29.references : [];
+    r23.push({
+      kind: "code_reference",
+      references: n27
+    });
+  }
+  const g45 = M19(t18.metadataEvent);
+  if (g45) {
+    const n27 = M19(g45.tokenUsage);
+    if (n27) {
+      const y45 = typeof n27.uncachedInputTokens == "number" ? n27.uncachedInputTokens : 0, D43 = typeof n27.outputTokens == "number" ? n27.outputTokens : 0, T37 = typeof n27.cacheReadInputTokens == "number" ? n27.cacheReadInputTokens : 0, w41 = typeof n27.cacheWriteInputTokens == "number" ? n27.cacheWriteInputTokens : 0;
+      (y45 > 0 || D43 > 0) && r23.push({
+        kind: "metadata",
+        tokenUsage: {
+          inputTokens: y45,
+          outputTokens: D43,
+          cacheReadInputTokens: T37,
+          cacheWriteInputTokens: w41
+        }
+      });
+    }
+  }
+  const f52 = M19(t18.contextUsageEvent);
+  return f52 && typeof f52.contextUsagePercentage == "number" && r23.push({
+    kind: "context_usage",
+    contextUsagePercentage: f52.contextUsagePercentage
+  }), r23;
+}
+function M19(e17) {
+  if (!(typeof e17 != "object" || e17 === null))
+    return e17;
+}
+function Tt4(e17) {
+  throw new Error(`Unhandled Bedrock chunk kind: ${JSON.stringify(e17)}`);
+}
+function Rt3(e17) {
+  const t18 = e17.match(/^data:([^;,]+)/)?.[1]?.toLowerCase();
+  return t18 ? It3[t18] : void 0;
+}
+function _t4(e17, t18) {
+  if (typeof e17 == "string") return;
+  const r23 = [];
+  for (const o29 of e17) if (o29.type === "image_url" && "image_url" in o29) {
+    const a34 = o29.image_url, c39 = typeof a34 == "string" ? a34 : a34.url, s27 = c39.split(",");
+    if (s27.length < 2) {
+      t18.error(`No image data loaded, chat will skip url: ${c39}`);
+      continue;
+    }
+    const i29 = Rt3(c39);
+    if (!i29) throw new fe12(`Unsupported image format: ${c39.match(/^data:([^;,]+)/)?.[1] ?? "unknown"}. Supported formats: PNG, JPEG, GIF, WebP.`);
+    r23.push({
+      format: i29,
+      source: { bytes: Buffer.from(s27[1], "base64") }
+    });
+  }
+  if (r23.length !== 0)
+    return r23;
+}
+function vt(e17) {
+  return e17.replace(/\.[^.]+$/

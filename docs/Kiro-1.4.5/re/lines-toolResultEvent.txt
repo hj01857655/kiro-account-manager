@@ -1,0 +1,265 @@
+===== line 225978 =====
+  225963|    Na2 = "Span";
+  225964|    Fa2 = "SensitiveDocument";
+  225965|    Ba2 = "StopDetails";
+  225966|    La2 = "ServiceQuotaExceededException";
+  225967|    Ha2 = "SensitiveString";
+  225968|    Ga2 = "ServiceUnavailableException";
+  225969|    ja2 = "Tools";
+  225970|    Va2 = "ToolDescription";
+  225971|    qa2 = "TextDocument";
+  225972|    Ka2 = "ThrottlingException";
+  225973|    za2 = "ToolInputSchema";
+  225974|    Wa2 = "ToolName";
+  225975|    Ja2 = "ToolResult";
+  225976|    Qa2 = "ToolResultContent";
+  225977|    Ya2 = "ToolResultContentBlock";
+  225978|    Xa2 = "ToolResultEvent";
+  225979|    Za2 = "ToolResults";
+  225980|    en3 = "ToolSpecification";
+  225981|    tn3 = "TokenUsage";
+  225982|    rn3 = "ToolUseEvent";
+  225983|    an3 = "ToolUse";
+  225984|    nn3 = "ToolUses";
+  225985|    sn3 = "Tool";
+  225986|    on3 = "UserInputMessage";
+  225987|    vn3 = "UserInputMessageContext";
+  225988|    cn3 = "ValidationException";
+  225989|    dn3 = "WorkspaceFolderList";
+  225990|    un3 = "additionalContext";
+  225991|    ln3 = "agentContinuationId";
+  225992|    pn3 = "agentMode";
+  225993|    mn3 = "additionalModelRequestFields";
+
+===== line 226102 =====
+  226087|    Rs4 = "searchResultIndex";
+  226088|    Is4 = "searchResult";
+  226089|    Ts4 = "serviceUnavailableError";
+  226090|    Ce10 = "server";
+  226091|    ye12 = "signature";
+  226092|    b16 = "source";
+  226093|    Ps4 = "stream";
+  226094|    O18 = "start";
+  226095|    As4 = "status";
+  226096|    xs4 = "stop";
+  226097|    Re9 = "streaming";
+  226098|    ks4 = "tools";
+  226099|    Ds4 = "throttlingError";
+  226100|    $s4 = "timezoneOffset";
+  226101|    ws4 = "toolResult";
+  226102|    bs4 = "toolResultEvent";
+  226103|    Os4 = "toolResults";
+  226104|    Ms4 = "toolSpecification";
+  226105|    Us4 = "totalTokens";
+  226106|    Ns4 = "toolUses";
+  226107|    Fs4 = "toolUseEvent";
+  226108|    G16 = "toolUseId";
+  226109|    Bs4 = "tokenUsage";
+  226110|    T12 = "text";
+  226111|    Ls4 = "title";
+  226112|    Ie10 = "type";
+  226113|    Te8 = "url";
+  226114|    Hs4 = "userInputMessage";
+  226115|    Gs4 = "userInputMessageContext";
+  226116|    js4 = "uncachedInputTokens";
+  226117|    Vs4 = "unitPlural";
+
+===== line 325750 =====
+  325735|    Zs6 = "TaskActionPayload";
+  325736|    ei5 = "TaskComponent";
+  325737|    ti5 = "TaskComponentList";
+  325738|    ri4 = "ToolDescription";
+  325739|    ai4 = "TextDocumentDiagnostic";
+  325740|    ni5 = "TaskDetails";
+  325741|    oi5 = "TextDocument";
+  325742|    si4 = "ThrottlingException";
+  325743|    ii5 = "TransformationExportContext";
+  325744|    ci4 = "ToolInputSchema";
+  325745|    vi4 = "ToolName";
+  325746|    ui4 = "TaskOverview";
+  325747|    li4 = "ToolResult";
+  325748|    pi4 = "ToolResultContent";
+  325749|    di4 = "ToolResultContentBlock";
+  325750|    mi4 = "ToolResultEvent";
+  325751|    _i4 = "TaskReference";
+  325752|    fi4 = "ToolResults";
+  325753|    Si4 = "ToolSpecification";
+  325754|    gi4 = "ToolUse";
+  325755|    hi4 = "ToolUseEvent";
+  325756|    Ci3 = "TokenUsage";
+  325757|    Ei3 = "ToolUses";
+  325758|    yi3 = "Tools";
+  325759|    Ri3 = "Tool";
+  325760|    Ti3 = "UserInputMessage";
+  325761|    Pi3 = "UserInputMessageContext";
+  325762|    Ai4 = "UserSettings";
+  325763|    ki3 = "UnitTestGenerationExportContext";
+  325764|    xi4 = "ValidationException";
+  325765|    Ii4 = "WorkspaceFolderList";
+
+===== line 325977 =====
+  325962|    uu = "stream";
+  325963|    xe16 = "streaming";
+  325964|    lu = "string";
+  325965|    pu = "suggestions";
+  325966|    B36 = "type";
+  325967|    du = "taskDetails";
+  325968|    mu = "textDocumentDiagnostic";
+  325969|    _u = "transformationExportContext";
+  325970|    fu = "testGenerationJobGroupName";
+  325971|    Su = "testGenerationJobId";
+  325972|    gu = "taskId";
+  325973|    hu = "taskName";
+  325974|    Cu = "toolName";
+  325975|    Eu = "timezoneOffset";
+  325976|    yu = "toolResult";
+  325977|    Ru = "toolResultEvent";
+  325978|    Tu = "taskReference";
+  325979|    Pu = "toolResults";
+  325980|    Au = "toolSpecification";
+  325981|    ku = "totalTokens";
+  325982|    xu = "toolUses";
+  325983|    Iu = "toolUseEvent";
+  325984|    Ie18 = "toolUseId";
+  325985|    wu = "tokenUsage";
+  325986|    Du = "target";
+  325987|    $u = "tags";
+  325988|    T35 = "text";
+  325989|    oe28 = "title";
+  325990|    bu = "tools";
+  325991|    Ou = "transition";
+  325992|    Mu = "uri";
+
+===== line 508241 =====
+  508226|        });
+  508227|        Object.setPrototypeOf(this, _DryRunOperationException.prototype);
+  508228|        this.responseCode = opts.responseCode;
+  508229|      }
+  508230|    };
+  508231|    exports2.DryRunOperationException = DryRunOperationException;
+  508232|  }
+  508233|});
+  508234|
+  508235|// node_modules/@aws/codewhisperer-streaming-client/dist-cjs/schemas/schemas_0.js
+  508236|var require_schemas_02 = __commonJS({
+  508237|  "node_modules/@aws/codewhisperer-streaming-client/dist-cjs/schemas/schemas_0.js"(exports2) {
+  508238|    "use strict";
+  508239|    Object.defineProperty(exports2, "__esModule", { value: true });
+  508240|    exports2.ProgrammingLanguage$ = exports2.Position$ = exports2.MeteringEvent$ = exports2.MetadataEvent$ = exports2.MessageMetadataEvent$ = exports2.InvalidStateEvent$ = exports2.IntentsEvent$ = exports2.ImageBlock$ = exports2.GitState$ = exports2.FollowupPromptEvent$ = exports2.FollowupPrompt$ = exports2.EnvState$ = exports2.EnvironmentVariable$ = exports2.EditorState$ = exports2.DryRunSucceedEvent$ = exports2.DocumentSymbol$ = exports2.DocumentCitationWebLocation$ = exports2.DocumentCitationSpan$ = exports2.DocumentCitationSourceContent$ = exports2.DocumentCitationSearchResultSpan$ = exports2.DocumentCitationEvent$ = exports2.DocumentBlock$ = exports2.DiagnosticRelatedInformation$ = exports2.DiagnosticLocation$ = exports2.ConversationState$ = exports2.ContextUsageEvent$ = exports2.ConsoleState$ = exports2.CodeReferenceEvent$ = exports2.CodeEvent$ = exports2.CodeDescription$ = exports2.ClientCacheConfig$ = exports2.CitationEvent$ = exports2.CachePoint$ = exports2.BinaryPayloadEvent$ = exports2.BinaryMetadataEvent$ = exports2.AssistantResponseMessage$ = exports2.AssistantResponseEvent$ = exports2.AppStudioState$ = exports2.AdditionalContentEntry$ = exports2.errorTypeRegistries = exports2.ValidationException$ = exports2.ThrottlingException$ = exports2.ServiceUnavailableException$ = exports2.ServiceQuotaExceededException$ = exports2.ResourceNotFoundException$ = exports2.InternalServerException$ = exports2.DryRunOperationException$ = exports2.ConflictException$ = exports2.AccessDeniedException$ = exports2.CodeWhispererStreamingServiceException$ = void 0;
+  508241|    exports2.ProgressComponent$ = exports2.Progress$ = exports2.ModuleLink$ = exports2.InteractionComponentEntry$ = exports2.InteractionComponent$ = exports2.InfrastructureUpdateTransition$ = exports2.InfrastructureUpdate$ = exports2.CloudWatchTroubleshootingLink$ = exports2.AlertComponent$ = exports2.Alert$ = exports2.Action$ = exports2.InteractionComponentsEvent$ = exports2.JsonRpcStreamEvent$ = exports2.JsonRpcError$ = exports2.InvokeMCPStreamResponse$ = exports2.InvokeMCPStreamRequest$ = exports2.InvokeMCPResponse$ = exports2.InvokeMCPRequest$ = exports2.GenerateTaskAssistPlanResponse$ = exports2.GenerateTaskAssistPlanRequest$ = exports2.GenerateAssistantResponseResponse$ = exports2.GenerateAssistantResponseRequest$ = exports2.ExportResultArchiveResponse$ = exports2.ExportResultArchiveRequest$ = exports2.TokenUsage$ = exports2.WorkspaceState$ = exports2.UserSettings$ = exports2.UserInputMessageContext$ = exports2.UserInputMessage$ = exports2.UnitTestGenerationExportContext$ = exports2.TransformationExportContext$ = exports2.ToolUseEvent$ = exports2.ToolUse$ = exports2.ToolSpecification$ = exports2.ToolResultEvent$ = exports2.ToolResult$ = exports2.ToolInputSchema$ = exports2.TextDocumentDiagnostic$ = exports2.TextDocument$ = exports2.SupplementaryWebLinksEvent$ = exports2.SupplementaryWebLink$ = exports2.Span$ = exports2.ShellState$ = exports2.ShellHistoryEntry$ = exports2.RuntimeDiagnostic$ = exports2.RelevantTextDocument$ = exports2.Reference$ = exports2.ReasoningText$ = exports2.ReasoningContentEvent$ = exports2.Range$ = void 0;
+  508242|    exports2.SendMessage$ = exports2.InvokeMCPStream$ = exports2.InvokeMCP$ = exports2.GenerateTaskAssistPlan$ = exports2.GenerateAssistantResponse$ = exports2.ExportResultArchive$ = exports2.MCPStreamOutput$ = exports2.ToolResultContentBlock$ = exports2.Tool$ = exports2.ResultArchiveStream$ = exports2.ReasoningContent$ = exports2.IntentDataType$ = exports2.ImageSource$ = exports2.ExportContext$ = exports2.DocumentSource$ = exports2.DocumentCitationLocation$ = exports2.Diagnostic$ = exports2.CursorState$ = exports2.CitationTarget$ = exports2.ChatResponseStream$ = exports2.ChatMessage$ = exports2.SendMessageResponse$ = exports2.SendMessageRequest$ = exports2.WebLink$ = exports2.Text$ = exports2.TaskReference$ = exports2.TaskOverview$ = exports2.TaskDetails$ = exports2.TaskComponent$ = exports2.TaskActionNote$ = exports2.TaskActionConfirmation$ = exports2.TaskAction$ = exports2.Suggestions$ = exports2.Suggestion$ = exports2.StepComponent$ = exports2.Step$ = exports2.SectionComponent$ = exports2.Section$ = exports2.ResourceList$ = exports2.Resource$ = void 0;
+  508243|    var _A2 = "Action";
+  508244|    var _AC = "AlertComponent";
+  508245|    var _ACE = "AdditionalContentEntry";
+  508246|    var _ACL = "AdditionalContentList";
+  508247|    var _ACLl = "AlertComponentList";
+  508248|    var _ADE4 = "AccessDeniedException";
+  508249|    var _ARE = "AssistantResponseEvent";
+  508250|    var _ARM = "AssistantResponseMessage";
+  508251|    var _ARN = "ARN";
+  508252|    var _ASS = "AppStudioState";
+  508253|    var _Al = "Alert";
+  508254|    var _BME = "BinaryMetadataEvent";
+  508255|    var _BPE = "BinaryPayloadEvent";
+  508256|    var _CCC = "ClientCacheConfig";
+
+===== line 508399 =====
+  508384|    var _TAP = "TaskActionPayload";
+  508385|    var _TC2 = "TaskComponent";
+  508386|    var _TCL = "TaskComponentList";
+  508387|    var _TD = "ToolDescription";
+  508388|    var _TDD = "TextDocumentDiagnostic";
+  508389|    var _TDa = "TaskDetails";
+  508390|    var _TDe = "TextDocument";
+  508391|    var _TE = "ThrottlingException";
+  508392|    var _TEC = "TransformationExportContext";
+  508393|    var _TIS = "ToolInputSchema";
+  508394|    var _TN = "ToolName";
+  508395|    var _TO = "TaskOverview";
+  508396|    var _TR = "ToolResult";
+  508397|    var _TRC = "ToolResultContent";
+  508398|    var _TRCB = "ToolResultContentBlock";
+  508399|    var _TRE = "ToolResultEvent";
+  508400|    var _TRa = "TaskReference";
+  508401|    var _TRo = "ToolResults";
+  508402|    var _TS = "ToolSpecification";
+  508403|    var _TU = "ToolUse";
+  508404|    var _TUE = "ToolUseEvent";
+  508405|    var _TUo = "TokenUsage";
+  508406|    var _TUoo = "ToolUses";
+  508407|    var _To = "Tools";
+  508408|    var _Too = "Tool";
+  508409|    var _UIM = "UserInputMessage";
+  508410|    var _UIMC = "UserInputMessageContext";
+  508411|    var _US = "UserSettings";
+  508412|    var _UTGEC = "UnitTestGenerationExportContext";
+  508413|    var _VE2 = "ValidationException";
+  508414|    var _WFL = "WorkspaceFolderList";
+
+===== line 508618 =====
+  508603|    var _str = "stream";
+  508604|    var _stre = "streaming";
+  508605|    var _stri = "string";
+  508606|    var _su = "suggestions";
+  508607|    var _t11 = "type";
+  508608|    var _tD = "taskDetails";
+  508609|    var _tDD = "textDocumentDiagnostic";
+  508610|    var _tEC = "transformationExportContext";
+  508611|    var _tGJGN = "testGenerationJobGroupName";
+  508612|    var _tGJI = "testGenerationJobId";
+  508613|    var _tI2 = "taskId";
+  508614|    var _tN = "taskName";
+  508615|    var _tNo = "toolName";
+  508616|    var _tO2 = "timezoneOffset";
+  508617|    var _tR = "toolResult";
+  508618|    var _tRE = "toolResultEvent";
+  508619|    var _tRa = "taskReference";
+  508620|    var _tRo = "toolResults";
+  508621|    var _tS = "toolSpecification";
+  508622|    var _tT4 = "totalTokens";
+  508623|    var _tU = "toolUses";
+  508624|    var _tUE = "toolUseEvent";
+  508625|    var _tUI = "toolUseId";
+  508626|    var _tUo = "tokenUsage";
+  508627|    var _ta = "target";
+  508628|    var _tag = "tags";
+  508629|    var _te = "text";
+  508630|    var _ti = "title";
+  508631|    var _to = "tools";
+  508632|    var _tr = "transition";
+  508633|    var _u3 = "uri";
+
+===== line 509230 =====
+  509215|      n06,
+  509216|      _TIS,
+  509217|      0,
+  509218|      [_j],
+  509219|      [[() => SensitiveDocument, 0]]
+  509220|    ];
+  509221|    exports2.ToolResult$ = [
+  509222|      3,
+  509223|      n06,
+  509224|      _TR,
+  509225|      0,
+  509226|      [_tUI, _co4, _sta, _tNo],
+  509227|      [0, [() => ToolResultContent, 0], 0, [() => ToolName, 0]],
+  509228|      2
+  509229|    ];
+  509230|    exports2.ToolResultEvent$ = [
+  509231|      3,
+  509232|      n06,
+  509233|      _TRE,
+  509234|      0,
+  509235|      [_tR],
+  509236|      [[() => exports2.ToolResult$, 0]]
+  509237|    ];
+  509238|    exports2.ToolSpecification$ = [
+  509239|      3,
+  509240|      n06,
+  509241|      _TS,
+  509242|      0,
+  509243|      [_iS, _n4, _d3],
+  509244|      [[() => exports2.ToolInputSchema$, 0], [() => ToolName, 0], [() => ToolDescription, 0]],
+  509245|      2
+
+

@@ -1,0 +1,24 @@
+===== HIT 1 line=138955 =====
+--- offset=6 ---
+      stopReason: external_exports.string().min(1),
+
+===== HIT 2 line=197380 =====
+===== HIT 3 line=198225 =====
+===== HIT 4 line=198577 =====
+--- offset=6 ---
+      stopReason: zStopReason,
+
+===== HIT 5 line=199489 =====
+===== HIT 6 line=226086 =====
+--- offset=11 ---
+    ys4 = "stopReason";
+
+===== HIT 7 line=252177 =====
+--- offset=69 ---
+          p46 && S44.reportCountMetrics({ repeatIterations: b50 }, { stopReason: I43 });
+
+===== HIT 8 line=263648 =====
+--- offset=6 ---
+      stopReason: optional(_enum2(["endTurn", "stopSequence", "maxTokens"]).or(string2())),
+
+

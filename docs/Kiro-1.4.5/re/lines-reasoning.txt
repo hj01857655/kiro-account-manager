@@ -1,0 +1,217 @@
+===== line 225955 =====
+  225943|    _a2 = "InvokeMCPStreamResponse";
+  225944|    fa3 = "ImageSource";
+  225945|    Sa3 = "InternalServerException";
+  225946|    Ea3 = "JsonRpcError";
+  225947|    Ca2 = "JsonRpcStreamEvent";
+  225948|    ya3 = "MCPStreamOutput";
+  225949|    Ra2 = "MetadataEvent";
+  225950|    Ia2 = "MeteringEvent";
+  225951|    Ta2 = "Position";
+  225952|    Pa2 = "ProgrammingLanguage";
+  225953|    Aa2 = "Range";
+  225954|    xa2 = "Retry-After";
+  225955|    ka2 = "ReasoningContentEvent";
+  225956|    Da2 = "ReasoningContent";
+  225957|    $a2 = "RefusalDetails";
+  225958|    wa3 = "RelevantDocumentList";
+  225959|    ba2 = "ReasoningText";
+  225960|    Oa2 = "RelevantTextDocument";
+  225961|    Ma2 = "Reference";
+  225962|    Ua2 = "References";
+  225963|    Na2 = "Span";
+  225964|    Fa2 = "SensitiveDocument";
+  225965|    Ba2 = "StopDetails";
+  225966|    La2 = "ServiceQuotaExceededException";
+  225967|    Ha2 = "SensitiveString";
+
+===== line 226070 =====
+  226058|    R16 = "name";
+  226059|    ns6 = "normalizedTokenUsage";
+  226060|    F15 = "origin";
+  226061|    ss4 = "operatingSystem";
+  226062|    os5 = "outputTokens";
+  226063|    w13 = "profileArn";
+  226064|    ge11 = "programmingLanguage";
+  226065|    H13 = "params";
+  226066|    is4 = "position";
+  226067|    I16 = "reason";
+  226068|    vs4 = "retryAfterSeconds";
+  226069|    cs4 = "reasoningContent";
+  226070|    ds4 = "reasoningContentEvent";
+  226071|    us4 = "recommendationContentSpan";
+  226072|    _e9 = "redactedContent";
+  226073|    ls4 = "relevantDocuments";
+  226074|    fe11 = "relativeFilePath";
+  226075|    ps4 = "recommendedModel";
+  226076|    ms4 = "reasoningText";
+  226077|    hs4 = "range";
+  226078|    gs4 = "references";
+  226079|    _s4 = "refusal";
+  226080|    fs6 = "repository";
+  226081|    Se10 = "result";
+  226082|    Ee9 = "smithy.ts.sdk.synthetic.com.amazon.kiro.runtimeservice";
+
+===== line 227664 =====
+  227652|}
+  227653|function ar5(e17) {
+  227654|  return ye13.includes(e17);
+  227655|}
+  227656|function yt3(e17) {
+  227657|  if (typeof e17 != "object" || e17 === null) return [];
+  227658|  const t18 = e17, r23 = [], o29 = M19(t18.assistantResponseEvent);
+  227659|  o29 && typeof o29.content == "string" && o29.content.length > 0 && r23.push({
+  227660|    kind: "assistant_response",
+  227661|    content: o29.content,
+  227662|    modelId: typeof o29.modelId == "string" ? o29.modelId : void 0
+  227663|  });
+  227664|  const a34 = M19(t18.reasoningContentEvent);
+  227665|  if (a34) {
+  227666|    const n27 = typeof a34.text == "string" ? a34.text : void 0, y45 = typeof a34.signature == "string" ? a34.signature : void 0;
+  227667|    (n27 || y45) && r23.push({
+  227668|      kind: "reasoning_content",
+  227669|      text: n27,
+  227670|      signature: y45
+  227671|    });
+  227672|  }
+  227673|  const c39 = M19(t18.toolUseEvent);
+  227674|  c39 && r23.push({
+  227675|    kind: "tool_use",
+  227676|    toolUseId: typeof c39.toolUseId == "string" ? c39.toolUseId : void 0,
+
+===== line 325696 =====
+  325684|    as5 = "MeteringEvent";
+  325685|    ns7 = "ModuleLink";
+  325686|    os6 = "MessageMetadataEvent";
+  325687|    ss5 = "Position";
+  325688|    is5 = "PartBody";
+  325689|    cs5 = "ProgressComponent";
+  325690|    vs6 = "ProgressComponentList";
+  325691|    us6 = "ProgrammingLanguage";
+  325692|    ls6 = "Progress";
+  325693|    ps6 = "Range";
+  325694|    ds5 = "ResultArchiveStream";
+  325695|    ms5 = "ReasoningContent";
+  325696|    _s6 = "ReasoningContentEvent";
+  325697|    fs8 = "RuntimeDiagnostic";
+  325698|    Ss6 = "RelevantDocumentList";
+  325699|    gs5 = "ResourceList";
+  325700|    hs6 = "ResourceNotFoundException";
+  325701|    Cs6 = "ReasoningText";
+  325702|    Es6 = "RelevantTextDocument";
+  325703|    ys6 = "Reference";
+  325704|    Rs6 = "References";
+  325705|    Ts6 = "Resource";
+  325706|    Ps6 = "Resources";
+  325707|    As6 = "Span";
+  325708|    ks6 = "SectionComponent";
+
+===== line 325917 =====
+  325905|    ke18 = "programmingLanguage";
+  325906|    Av = "propertyName";
+  325907|    kv = "planningResponseStream";
+  325908|    xv = "propertyValue";
+  325909|    Iv = "payload";
+  325910|    wv = "position";
+  325911|    xt8 = "progress";
+  325912|    Dv = "primary";
+  325913|    $v = "questions";
+  325914|    bv = "question";
+  325915|    b43 = "reason";
+  325916|    Ov = "responseCode";
+  325917|    Mv = "reasoningContentEvent";
+  325918|    Lv = "recommendationContentSpan";
+  325919|    Nv = "reasoningContent";
+  325920|    It7 = "redactedContent";
+  325921|    Uv = "relevantDocuments";
+  325922|    Fv = "runtimeDiagnostic";
+  325923|    wt9 = "relativeFilePath";
+  325924|    Wv = "relatedInformation";
+  325925|    jv = "resourceJsonString";
+  325926|    Dt9 = "resourceList";
+  325927|    zv = "reasoningText";
+  325928|    ae22 = "range";
+  325929|    $t8 = "references";
+
+===== line 508241 =====
+  508229|      }
+  508230|    };
+  508231|    exports2.DryRunOperationException = DryRunOperationException;
+  508232|  }
+  508233|});
+  508234|
+  508235|// node_modules/@aws/codewhisperer-streaming-client/dist-cjs/schemas/schemas_0.js
+  508236|var require_schemas_02 = __commonJS({
+  508237|  "node_modules/@aws/codewhisperer-streaming-client/dist-cjs/schemas/schemas_0.js"(exports2) {
+  508238|    "use strict";
+  508239|    Object.defineProperty(exports2, "__esModule", { value: true });
+  508240|    exports2.ProgrammingLanguage$ = exports2.Position$ = exports2.MeteringEvent$ = exports2.MetadataEvent$ = exports2.MessageMetadataEvent$ = exports2.InvalidStateEvent$ = exports2.IntentsEvent$ = exports2.ImageBlock$ = exports2.GitState$ = exports2.FollowupPromptEvent$ = exports2.FollowupPrompt$ = exports2.EnvState$ = exports2.EnvironmentVariable$ = exports2.EditorState$ = exports2.DryRunSucceedEvent$ = exports2.DocumentSymbol$ = exports2.DocumentCitationWebLocation$ = exports2.DocumentCitationSpan$ = exports2.DocumentCitationSourceContent$ = exports2.DocumentCitationSearchResultSpan$ = exports2.DocumentCitationEvent$ = exports2.DocumentBlock$ = exports2.DiagnosticRelatedInformation$ = exports2.DiagnosticLocation$ = exports2.ConversationState$ = exports2.ContextUsageEvent$ = exports2.ConsoleState$ = exports2.CodeReferenceEvent$ = exports2.CodeEvent$ = exports2.CodeDescription$ = exports2.ClientCacheConfig$ = exports2.CitationEvent$ = exports2.CachePoint$ = exports2.BinaryPayloadEvent$ = exports2.BinaryMetadataEvent$ = exports2.AssistantResponseMessage$ = exports2.AssistantResponseEvent$ = exports2.AppStudioState$ = exports2.AdditionalContentEntry$ = exports2.errorTypeRegistries = exports2.ValidationException$ = exports2.ThrottlingException$ = exports2.ServiceUnavailableException$ = exports2.ServiceQuotaExceededException$ = exports2.ResourceNotFoundException$ = exports2.InternalServerException$ = exports2.DryRunOperationException$ = exports2.ConflictException$ = exports2.AccessDeniedException$ = exports2.CodeWhispererStreamingServiceException$ = void 0;
+  508241|    exports2.ProgressComponent$ = exports2.Progress$ = exports2.ModuleLink$ = exports2.InteractionComponentEntry$ = exports2.InteractionComponent$ = exports2.InfrastructureUpdateTransition$ = exports2.InfrastructureUpdate$ = exports2.CloudWatchTroubleshootingLink$ = exports2.AlertComponent$ = exports2.Alert$ = exports2.Action$ = exports2.InteractionComponentsEvent$ = exports2.JsonRpcStreamEvent$ = exports2.JsonRpcError$ = exports2.InvokeMCPStreamResponse$ = exports2.InvokeMCPStreamRequest$ = exports2.InvokeMCPResponse$ = exports2.InvokeMCPRequest$ = exports2.GenerateTaskAssistPlanResponse$ = exports2.GenerateTaskAssistPlanRequest$ = exports2.GenerateAssistantResponseResponse$ = exports2.GenerateAssistantResponseRequest$ = exports2.ExportResultArchiveResponse$ = exports2.ExportResultArchiveRequest$ = exports2.TokenUsage$ = exports2.WorkspaceState$ = exports2.UserSettings$ = exports2.UserInputMessageContext$ = exports2.UserInputMessage$ = exports2.UnitTestGenerationExportContext$ = exports2.TransformationExportContext$ = exports2.ToolUseEvent$ = exports2.ToolUse$ = exports2.ToolSpecification$ = exports2.ToolResultEvent$ = exports2.ToolResult$ = exports2.ToolInputSchema$ = exports2.TextDocumentDiagnostic$ = exports2.TextDocument$ = exports2.SupplementaryWebLinksEvent$ = exports2.SupplementaryWebLink$ = exports2.Span$ = exports2.ShellState$ = exports2.ShellHistoryEntry$ = exports2.RuntimeDiagnostic$ = exports2.RelevantTextDocument$ = exports2.Reference$ = exports2.ReasoningText$ = exports2.ReasoningContentEvent$ = exports2.Range$ = void 0;
+  508242|    exports2.SendMessage$ = exports2.InvokeMCPStream$ = exports2.InvokeMCP$ = exports2.GenerateTaskAssistPlan$ = exports2.GenerateAssistantResponse$ = exports2.ExportResultArchive$ = exports2.MCPStreamOutput$ = exports2.ToolResultContentBlock$ = exports2.Tool$ = exports2.ResultArchiveStream$ = exports2.ReasoningContent$ = exports2.IntentDataType$ = exports2.ImageSource$ = exports2.ExportContext$ = exports2.DocumentSource$ = exports2.DocumentCitationLocation$ = exports2.Diagnostic$ = exports2.CursorState$ = exports2.CitationTarget$ = exports2.ChatResponseStream$ = exports2.ChatMessage$ = exports2.SendMessageResponse$ = exports2.SendMessageRequest$ = exports2.WebLink$ = exports2.Text$ = exports2.TaskReference$ = exports2.TaskOverview$ = exports2.TaskDetails$ = exports2.TaskComponent$ = exports2.TaskActionNote$ = exports2.TaskActionConfirmation$ = exports2.TaskAction$ = exports2.Suggestions$ = exports2.Suggestion$ = exports2.StepComponent$ = exports2.Step$ = exports2.SectionComponent$ = exports2.Section$ = exports2.ResourceList$ = exports2.Resource$ = void 0;
+  508243|    var _A2 = "Action";
+  508244|    var _AC = "AlertComponent";
+  508245|    var _ACE = "AdditionalContentEntry";
+  508246|    var _ACL = "AdditionalContentList";
+  508247|    var _ACLl = "AlertComponentList";
+  508248|    var _ADE4 = "AccessDeniedException";
+  508249|    var _ARE = "AssistantResponseEvent";
+  508250|    var _ARM = "AssistantResponseMessage";
+  508251|    var _ARN = "ARN";
+  508252|    var _ASS = "AppStudioState";
+  508253|    var _Al = "Alert";
+
+===== line 508345 =====
+  508333|    var _MEe = "MeteringEvent";
+  508334|    var _ML = "ModuleLink";
+  508335|    var _MME = "MessageMetadataEvent";
+  508336|    var _P2 = "Position";
+  508337|    var _PB = "PartBody";
+  508338|    var _PC2 = "ProgressComponent";
+  508339|    var _PCL = "ProgressComponentList";
+  508340|    var _PL = "ProgrammingLanguage";
+  508341|    var _Pr2 = "Progress";
+  508342|    var _R = "Range";
+  508343|    var _RAS = "ResultArchiveStream";
+  508344|    var _RC2 = "ReasoningContent";
+  508345|    var _RCE = "ReasoningContentEvent";
+  508346|    var _RD = "RuntimeDiagnostic";
+  508347|    var _RDL = "RelevantDocumentList";
+  508348|    var _RL = "ResourceList";
+  508349|    var _RNFE2 = "ResourceNotFoundException";
+  508350|    var _RT4 = "ReasoningText";
+  508351|    var _RTD = "RelevantTextDocument";
+  508352|    var _Re = "Reference";
+  508353|    var _Ref = "References";
+  508354|    var _Res = "Resource";
+  508355|    var _Reso = "Resources";
+  508356|    var _S = "Span";
+  508357|    var _SC = "SectionComponent";
+
+===== line 508559 =====
+  508547|    var _pA = "profileArn";
+  508548|    var _pC = "propertyContext";
+  508549|    var _pL = "programmingLanguage";
+  508550|    var _pN = "propertyName";
+  508551|    var _pRS = "planningResponseStream";
+  508552|    var _pV = "propertyValue";
+  508553|    var _pa = "payload";
+  508554|    var _po = "position";
+  508555|    var _pr = "progress";
+  508556|    var _pri = "primary";
+  508557|    var _r11 = "reason";
+  508558|    var _rC2 = "responseCode";
+  508559|    var _rCE = "reasoningContentEvent";
+  508560|    var _rCS = "recommendationContentSpan";
+  508561|    var _rCe = "reasoningContent";
+  508562|    var _rCed = "redactedContent";
+  508563|    var _rD = "relevantDocuments";
+  508564|    var _rDu = "runtimeDiagnostic";
+  508565|    var _rFP = "relativeFilePath";
+  508566|    var _rI = "relatedInformation";
+  508567|    var _rJS = "resourceJsonString";
+  508568|    var _rL = "resourceList";
+  508569|    var _rT4 = "reasoningText";
+  508570|    var _ra = "range";
+  508571|    var _re = "references";
+
+

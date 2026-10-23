@@ -1,0 +1,125 @@
+=====
+;
+    qs4 = "useRelevantDocuments";
+    Ks4 = "unit";
+    zs4 = "usage";
+    Ws4 = "value";
+    Js4 = "validationError";
+    J13 = "version";
+    Qs4 = "web";
+    Ys4 = "workspaceFolders";
+    Xs4 = "x-amzn-kiro-agent-mode";
+    Zs4 = "x-amzn-kiro-conversation-id";
+    j14 = "x-amzn-kiro-profile-arn";
+    t11 = "com.amazon.kiro.runtimeservice";
+    Pe9 = De6.for(Ee9);
+    eo2 = [
+      -3,
+      Ee9,
+      "KiroRuntimeServiceException",
+      0,
+      [],
+      []
+    ];
+    Pe9.registerError(eo2, f19);
+    E17 = De6.for(t11);
+    to = [
+      -3,
+      t11,
+      Dr4,
+      {
+        [l12]: P13,
+        [y20]: 403
+      },
+      [h18, I16],
+      [0, 0],
+      1
+    ];
+    E17.registerError(to, yr6);
+    Ae10 = [
+      -3,
+      t11,
+      Sa3,
+      {
+        [l12]: Ce10,
+        [y20]: 
+
+=====
+ge";
+    we16 = "value";
+    Qu = "web";
+    Ku = "workspaceFolders";
+    Xu = "workspaceId";
+    Yu = "webLink";
+    Zu = "workspaceState";
+    el = "x-amzn-codewhisperer-conversation-id";
+    tl = "x-amzn-kiro-agent-mode";
+    Bt8 = "x-amzn-kiro-profile-arn";
+    a27 = "com.amazon.aws.codewhisperer";
+    Gt8 = "com.amazon.aws.q";
+    rl = "com.amazon.aws.codewhisperer.internal";
+    f46 = "com.amazon.aws.codewhisperer.streaming";
+    p42 = "com.amazon.aws.q.interactioncomponents";
+    De17 = "com.amazon.aws.q.streaming";
+    Ht9 = De6.for(Mt10);
+    al = [
+      -3,
+      Mt10,
+      "CodeWhispererStreamingServiceException",
+      0,
+      [],
+      []
+    ];
+    Ht9.registerError(al, P37);
+    A42 = De6.for(a27);
+    nl = [
+      -3,
+      a27,
+      Cn2,
+      {
+        [R43]: $34,
+   
+
+=====
+, agentMode) {
+  const middleware = /* @__PURE__ */ __name((next) => async (args2) => {
+    const requestArgs = args2;
+    requestArgs.request.headers = {
+      ...requestArgs.request.headers,
+      "x-amzn-kiro-agent-mode": agentMode
+    };
+    return next(args2);
+  }, "middleware");
+  const clientWithMiddleware = client2;
+  clientWithMiddleware.middlewareStack.add(middleware, { step: "build" });
+}
+function addExternalIdpTokenTypeMiddleware(client2, authMethod, clientName = "CodeWhisperer") {
+  if (authMethod !== "external_idp") {
+    return;
+  }
+  logger.debug(`${clientName}: adding TokenType header for External IdP`);
+  const middleware = /* @__PURE__ */ __name((next) => async (args2) => {
+    const requestArgs = args2;
+    requestArgs.request.headers = {
+      ...requestArgs.request.he
+
+=====
+eb";
+    var _wF = "workspaceFolders";
+    var _wI = "workspaceId";
+    var _wL = "webLink";
+    var _wS = "workspaceState";
+    var _xacci = "x-amzn-codewhisperer-conversation-id";
+    var _xakam = "x-amzn-kiro-agent-mode";
+    var _xakpa = "x-amzn-kiro-profile-arn";
+    var n06 = "com.amazon.aws.codewhisperer";
+    var n1 = "com.amazon.aws.q";
+    var n27 = "com.amazon.aws.codewhisperer.internal";
+    var n32 = "com.amazon.aws.codewhisperer.streaming";
+    var n42 = "com.amazon.aws.q.interactioncomponents";
+    var n52 = "com.amazon.aws.q.streaming";
+    var schema_1 = (init_schema10(), __toCommonJS(schema_exports4));
+    var CodeWhispererStreamingServiceException_1 = require_CodeWhispererStreamingServiceException();
+    var errors_1 = require_errors4();
+    var _s_registry5 = schema_1.T
+

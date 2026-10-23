@@ -1,0 +1,31 @@
+"client",
+    ...n27.__type && { name: n27.__type.split("#").pop() },
+    ...n27.reason && { reason: n27.reason }
+  });
+}
+function ki2(e17) {
+  e17.middlewareStack.add((r23, a34) => async (s27) => {
+    const { commandName: n27 } = a34;
+    if (n27 !== "GenerateAssistantResponseCommand" && n27 !== "InvokeMCPStreamCommand") return r23(s27);
+    const { response: i29 } = await e17.config.requestHandler.handle(s27.request, {}), o29 = i29;
+    if (await xi3(o29), n27 === "GenerateAssistantResponseCommand") {
+      const c39 = o29.headers["x-amzn-kiro-conversation-id"] ?? "";
+      return {
+        response: o29,
+        output: {
+          $metadata: { httpStatusCode: o29.statusCode },
+          conversationId: c39,
+          generateAssistantResponseResponse: Q11(o29.body, n27)
+        }
+      };
+    }
+    if (n27 === "InvokeMCPStreamCommand") {
+      const c39 = o29.headers["content-type"] ?? "", d47 = c39.includes("application/vnd.amazon.eventstream");
+      return {
+        response: o29,
+        output: {
+          $metadata: { httpStatusCode: o29.statusCode },
+          contentType: c39,
+          stream: (async function* () {
+            if (d47) yield* Q11(o29.body, n27);
+     

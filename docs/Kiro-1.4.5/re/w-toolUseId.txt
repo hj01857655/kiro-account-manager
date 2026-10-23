@@ -1,0 +1,150 @@
+=====
+--- pos=6421672 ---
+ "userInputMessage" in e17;
+}
+function S11(e17) {
+  return e17 != null && "assistantResponseMessage" in e17;
+}
+function h11(e17) {
+  return !!e17.userInputMessage.userInputMessageContext?.toolResults?.length;
+}
+function p9(e17) {
+  return !!e17.assistantResponseMessage.toolUses?.length;
+}
+function g8(e17, t18) {
+  if (!e17 || !e17.length) return true;
+  if (!t18 || !t18.length) return false;
+  const s27 = e17.every((r23) => t18.some((o29) => o29.toolUseId === r23.toolUseId)), n27 = t18.every((r23) => e17.some((o29) => r23.toolUseId === o29.toolUseId));
+  return s27 && n27;
+}
+function O10(e17) {
+  const t18 = [];
+  for (let s27 = 0; s27 < e17.length; s27++) {
+    const n27 = e17[s27], r23 = s27 > 0 ? e17[s27 - 1] : null;
+    if (!i7(n27) || !h11(n27)) {
+      t18.push(n27);
+      continue;
+    }
+    if (!r23 || !S11(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    if (!p9(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    const o29 = new Set((r23.assistantResponseMessage.toolUses ?? []).map((u46) => u46.toolUseId).fi
+
+=====
+--- pos=6421690 ---
+" in e17;
+}
+function S11(e17) {
+  return e17 != null && "assistantResponseMessage" in e17;
+}
+function h11(e17) {
+  return !!e17.userInputMessage.userInputMessageContext?.toolResults?.length;
+}
+function p9(e17) {
+  return !!e17.assistantResponseMessage.toolUses?.length;
+}
+function g8(e17, t18) {
+  if (!e17 || !e17.length) return true;
+  if (!t18 || !t18.length) return false;
+  const s27 = e17.every((r23) => t18.some((o29) => o29.toolUseId === r23.toolUseId)), n27 = t18.every((r23) => e17.some((o29) => r23.toolUseId === o29.toolUseId));
+  return s27 && n27;
+}
+function O10(e17) {
+  const t18 = [];
+  for (let s27 = 0; s27 < e17.length; s27++) {
+    const n27 = e17[s27], r23 = s27 > 0 ? e17[s27 - 1] : null;
+    if (!i7(n27) || !h11(n27)) {
+      t18.push(n27);
+      continue;
+    }
+    if (!r23 || !S11(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    if (!p9(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    const o29 = new Set((r23.assistantResponseMessage.toolUses ?? []).map((u46) => u46.toolUseId).filter(Boolean)), a3
+
+=====
+--- pos=6421750 ---
+istantResponseMessage" in e17;
+}
+function h11(e17) {
+  return !!e17.userInputMessage.userInputMessageContext?.toolResults?.length;
+}
+function p9(e17) {
+  return !!e17.assistantResponseMessage.toolUses?.length;
+}
+function g8(e17, t18) {
+  if (!e17 || !e17.length) return true;
+  if (!t18 || !t18.length) return false;
+  const s27 = e17.every((r23) => t18.some((o29) => o29.toolUseId === r23.toolUseId)), n27 = t18.every((r23) => e17.some((o29) => r23.toolUseId === o29.toolUseId));
+  return s27 && n27;
+}
+function O10(e17) {
+  const t18 = [];
+  for (let s27 = 0; s27 < e17.length; s27++) {
+    const n27 = e17[s27], r23 = s27 > 0 ? e17[s27 - 1] : null;
+    if (!i7(n27) || !h11(n27)) {
+      t18.push(n27);
+      continue;
+    }
+    if (!r23 || !S11(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    if (!p9(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    const o29 = new Set((r23.assistantResponseMessage.toolUses ?? []).map((u46) => u46.toolUseId).filter(Boolean)), a34 = n27.userInputMessage.userInputMessageContext?.toolResult
+
+=====
+--- pos=6421768 ---
+age" in e17;
+}
+function h11(e17) {
+  return !!e17.userInputMessage.userInputMessageContext?.toolResults?.length;
+}
+function p9(e17) {
+  return !!e17.assistantResponseMessage.toolUses?.length;
+}
+function g8(e17, t18) {
+  if (!e17 || !e17.length) return true;
+  if (!t18 || !t18.length) return false;
+  const s27 = e17.every((r23) => t18.some((o29) => o29.toolUseId === r23.toolUseId)), n27 = t18.every((r23) => e17.some((o29) => r23.toolUseId === o29.toolUseId));
+  return s27 && n27;
+}
+function O10(e17) {
+  const t18 = [];
+  for (let s27 = 0; s27 < e17.length; s27++) {
+    const n27 = e17[s27], r23 = s27 > 0 ? e17[s27 - 1] : null;
+    if (!i7(n27) || !h11(n27)) {
+      t18.push(n27);
+      continue;
+    }
+    if (!r23 || !S11(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    if (!p9(r23)) {
+      const u46 = E9(n27);
+      u46 && t18.push(u46);
+      continue;
+    }
+    const o29 = new Set((r23.assistantResponseMessage.toolUses ?? []).map((u46) => u46.toolUseId).filter(Boolean)), a34 = n27.userInputMessage.userInputMessageContext?.toolResults ?? [], c39 = /* 
+

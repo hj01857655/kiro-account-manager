@@ -1,0 +1,15 @@
+nHi="x-amzn-kiro-ratelimit-retry-after",ufd=15e3,dfd=1024*1024
+ufd=15e3,dfd=1024*1024;c(pfd,"hs");c(ffd,"Es");oHi="MODEL_REQUIRES_USER_OPT_IN";c(hfd,"ys");mfd={context_length_exceeded:gs.CONTENT_LENGTH_EXCEEDS_THRESHOLD,model_not_found:gs.INVALID_MODEL_ID,invalid_function_parameters:gs.TOOL_SCHEMA_INVA
+dfd=1024*1024;c(pfd,"hs");c(ffd,"Es");oHi="MODEL_REQUIRES_USER_OPT_IN";c(hfd,"ys");mfd={context_length_exceeded:gs.CONTENT_LENGTH_EXCEEDS_THRESHOLD,model_not_found:gs.INVALID_MODEL_ID,invalid_function_parameters:gs.TOOL_SCHEMA_INVALID,inval
+kfd="compaction_required_for_model_handoff",xfd=Ct(bt.Agent,"CreateResponseSse"),Rfd="kiroKeepaliveEvent"
+Tfd="COMPACTION_REQUIRED_FOR_MODEL_HANDOFF",kfd="compaction_required_for_model_handoff",xfd=Ct(bt.Agent,"CreateResponseSse"),Rfd="kiroKeepaliveEvent"
+Rfd="kiroKeepaliveEvent";c(Pfd,"Us");Ofd={max_output_tokens:"MAX_TOKENS",content_filter:"CONTENT_FILTERED",[kfd]:Tfd};c(Nfd,"Ps");Mfd=4*1024*1024;c(Dfd,"Fs");_6r="tool-schema-sanitization",E6r=Ct(bt.Feature,"ToolSchemaSanitization");c(Lfd,"
+oHi="MODEL_REQUIRES_USER_OPT_IN";c(hfd,"ys");mfd={context_length_exceeded:gs.CONTENT_LENGTH_EXCEEDS_THRESHOLD,model_not_found:gs.INVALID_MODEL_ID,invalid_function_parameters:gs.TOOL_SCHEMA_INVALID,invalid_json:gs.REQUEST_BODY_INVALID_JSON,"
+Sui=10;c(Eui,"z");c(Jyu,"Q");c(Xyu,"Y");Zyu=[{path:"output_config",extract:c(t=>t.properties?.output_config?.properties?.effort,"extract")},{path:"reasoning",extract:c(t=>t.properties?.reasoning?.properties?.effort,"extract")}];c(eAu,"J");c
+Zsu=newSet(["api_key","machine_token"]);c(Wh,"h");c(rSe,"u");c(eau,"y");c(t4e,"m");c(U0t,"I");Rai=class{static{c(this,"w")}listeners=newSet;last;foundNoCredential=!1;signOutsReported=0;inflight;recheckRequested=!1;unsubscribeHost;construc
+Afd=newSet(["invalid_request","not_found","too_many_requests","insufficient_quota","server_error","model_error"])
+Sfd=newSet(Object.values(yDr)),_fd=newSet(Object.values(gs)),Efd=newSet(Object.values(vDr)),bfd=newSet(Object.values(Kbt))
+gfd=newSet([...Object.values(gs),...Object.values(Kbt),...Object.values(vDr),...Object.values(yDr),...Object.values(cdi),...Object.values(wDr)])
+mfd={context_length_exceeded:gs.CONTENT_LENGTH_EXCEEDS_THRESHOLD,model_not_found:gs.INVALID_MODEL_ID,invalid_function_parameters:gs.TOOL_SCHEMA_INVALID,invalid_json:gs.REQUEST_BODY_INVALID_JSON,"kiro:model_requires_user_opt_in":oHi,server_i
+VDl="SSO_OIDC",bAe={external_idp:"EXTERNAL_IDP",machine_token:"KIRO_MACHINE_TOKEN",api_key:"API_KEY",IdC:VDl}})
+xai=/^[a-z]{2,4}(-[a-z]+)+-\d{1,2}$/;c(Xsu,"p");c(nSe,"l");Zsu=newSet(["api_key","machine_token"]);c(Wh,"h");c(rSe,"u");c(eau,"y");c(t4e,"m");c(U0t,"I");Rai=class{static{c(this,"w")}listeners=newSet;last;foundNoCredential=!1;signOutsRepor

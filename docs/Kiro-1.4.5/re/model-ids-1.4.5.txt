@@ -1,0 +1,16 @@
+claude-2.0 x1
+claude-2.1 x1
+claude-3-5-sonnet-20240620 x1
+claude-3-5-sonnet-20241022 x1
+claude-3-haiku-20240307 x1
+claude-3-opus-20240229 x1
+claude-3-sonnet-20240229 x1
+claude-config x1
+claude-config.mjs x1
+claude-fable-5 x2
+claude-instant-1.2 x1
+claude-opus-4.8 x1
+claude-opus-5 x2
+claude-searchbot x3
+claude-user x3
+claude-web x3

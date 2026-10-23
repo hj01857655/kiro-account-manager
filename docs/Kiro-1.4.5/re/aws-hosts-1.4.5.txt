@@ -1,0 +1,5 @@
+https://q-fips.us-gov-east-1.amazonaws.com x1
+https://q-fips.us-gov-west-1.amazonaws.com x1
+https://q.eu-central-1.amazonaws.com x1
+https://q.us-east-1.amazonaws.com x1
+https://sts.amazonaws.com x4

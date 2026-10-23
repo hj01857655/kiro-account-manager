@@ -1,0 +1,3 @@
+    bs4 = "toolResultEvent";
+    Ru = "toolResultEvent";
+    var _tRE = "toolResultEvent";

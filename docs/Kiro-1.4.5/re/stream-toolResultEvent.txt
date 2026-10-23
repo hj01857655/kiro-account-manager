@@ -1,0 +1,117 @@
+=====
+nt";
+    Es4 = "stopDetails";
+    Cs4 = "systemPrompt";
+    ys4 = "stopReason";
+    Rs4 = "searchResultIndex";
+    Is4 = "searchResult";
+    Ts4 = "serviceUnavailableError";
+    Ce10 = "server";
+    ye12 = "signature";
+    b16 = "source";
+    Ps4 = "stream";
+    O18 = "start";
+    As4 = "status";
+    xs4 = "stop";
+    Re9 = "streaming";
+    ks4 = "tools";
+    Ds4 = "throttlingError";
+    $s4 = "timezoneOffset";
+    ws4 = "toolResult";
+    bs4 = "toolResultEvent";
+    Os4 = "toolResults";
+    Ms4 = "toolSpecification";
+    Us4 = "totalTokens";
+    Ns4 = "toolUses";
+    Fs4 = "toolUseEvent";
+    G16 = "toolUseId";
+    Bs4 = "tokenUsage";
+    T12 = "text";
+    Ls4 = "title";
+    Ie10 = "type";
+    Te8 = "url";
+    Hs4 = "userInputMessage";
+    Gs4 = "userInputMessageContext";
+    js4 = "uncachedInputTokens";
+    Vs4 = "unitPlural";
+    qs4 = "useRelevantDocuments";
+    Ks4 = "unit";
+    zs4 = "usage";
+   
+
+=====
+
+    cu = "stderr";
+    jt9 = "step";
+    vu = "stop";
+    uu = "stream";
+    xe16 = "streaming";
+    lu = "string";
+    pu = "suggestions";
+    B36 = "type";
+    du = "taskDetails";
+    mu = "textDocumentDiagnostic";
+    _u = "transformationExportContext";
+    fu = "testGenerationJobGroupName";
+    Su = "testGenerationJobId";
+    gu = "taskId";
+    hu = "taskName";
+    Cu = "toolName";
+    Eu = "timezoneOffset";
+    yu = "toolResult";
+    Ru = "toolResultEvent";
+    Tu = "taskReference";
+    Pu = "toolResults";
+    Au = "toolSpecification";
+    ku = "totalTokens";
+    xu = "toolUses";
+    Iu = "toolUseEvent";
+    Ie18 = "toolUseId";
+    wu = "tokenUsage";
+    Du = "target";
+    $u = "tags";
+    T35 = "text";
+    oe28 = "title";
+    bu = "tools";
+    Ou = "transition";
+    Mu = "uri";
+    Lu = "useClientCachingOnly";
+    Nu = "uxErrorMessage";
+    zt7 = "userIntent";
+    Uu = "userInputMessage";
+    Fu
+
+=====
+= "streaming";
+    var _stri = "string";
+    var _su = "suggestions";
+    var _t11 = "type";
+    var _tD = "taskDetails";
+    var _tDD = "textDocumentDiagnostic";
+    var _tEC = "transformationExportContext";
+    var _tGJGN = "testGenerationJobGroupName";
+    var _tGJI = "testGenerationJobId";
+    var _tI2 = "taskId";
+    var _tN = "taskName";
+    var _tNo = "toolName";
+    var _tO2 = "timezoneOffset";
+    var _tR = "toolResult";
+    var _tRE = "toolResultEvent";
+    var _tRa = "taskReference";
+    var _tRo = "toolResults";
+    var _tS = "toolSpecification";
+    var _tT4 = "totalTokens";
+    var _tU = "toolUses";
+    var _tUE = "toolUseEvent";
+    var _tUI = "toolUseId";
+    var _tUo = "tokenUsage";
+    var _ta = "target";
+    var _tag = "tags";
+    var _te = "text";
+    var _ti = "title";
+    var _to = "tools";
+    var _tr = "transition";
+    var _u3 = "uri";
+    var _uCCO = "useClientCachingOnly";
+  
+

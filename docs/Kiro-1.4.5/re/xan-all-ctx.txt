@@ -1,0 +1,1 @@
+umber:e,leftFileContent:r,rightFileContent:n,languageName:s,logger:a}))return;let d=await this.initializeRuntimeClient();kAn(d,"AmazonQDeveloper Runtime",tn.readToken()?.provider),xAn(d,"autocomplete"),Yde(d,{usingApiKey:tn.isUsingApiKey(),authMethod:tn.readToken()?.authMethod},"autocomplete"),Jde(d,tn.readToken()?.provider);let p=await Nd({required:!0}),f=[

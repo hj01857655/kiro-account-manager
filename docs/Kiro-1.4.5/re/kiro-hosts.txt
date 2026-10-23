@@ -1,0 +1,11 @@
+https://app.kiro.dev
+https://gamma.us-east-1.telemetry.desktop.kiro.dev
+https://management.eu-central-1.kiro.dev
+https://management.us-east-1.kiro.dev
+https://management.us-gov-west-1.kiro.dev
+https://prod.download.desktop.kiro.dev
+https://prod.us-east-1.auth.desktop.kiro.dev
+https://prod.us-east-1.telemetry.desktop.kiro.dev
+https://runtime.eu-central-1.kiro.dev
+https://runtime.us-east-1.kiro.dev
+https://runtime.us-gov-west-1.kiro.dev

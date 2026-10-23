@@ -1,0 +1,33 @@
+===== HIT 1 line=143680 =====
+--- offset=12 ---
+      VIBE: "vibe"
+
+===== HIT 2 line=224635 =====
+--- offset=9 ---
+  return "vibe";
+
+===== HIT 3 line=224686 =====
+--- offset=22 ---
+  return J11(f11, M7, "vibe", void 0, e17);
+
+===== HIT 4 line=225282 =====
+--- offset=19 ---
+            return "vibe";
+
+===== HIT 5 line=226126 =====
+--- offset=11 ---
+    Xs4 = "x-amzn-kiro-agent-mode";
+
+===== HIT 6 line=240273 =====
+--- offset=253 ---
+  const t18 = e17.context.messages.findLast((a34) => a34.role === "human")?.entries.filter((a34) => a34.type === "text").map((a34) => "text" in a34 ? a34.text : "").join(" ") ?? "", { modelClient: n27, modelId: i29 } = e17.execution.getFastModelClient("intent-classification"), r23 = new Zt6(i29, n27), s27 = r23.detectLocalIntent(t18);
+
+===== HIT 7 line=241290 =====
+--- offset=125 ---
+        const f52 = i14(), u46 = f52.loadOpenEditorFiles(), h53 = f52.loadCurrentFile() || "", T37 = e17.getFastModelClient("intent-classification");
+
+===== HIT 8 line=241335 =====
+--- offset=195 ---
+        const r23 = e17.reduce((l41, p46) => l41.withNewMessage(p46), L16.empty()), s27 = i14(), o29 = s27.loadOpenEditorFiles(), c39 = s27.loadCurrentFile() || "", a34 = t18.getFastModelClient("intent-classification");
+
+

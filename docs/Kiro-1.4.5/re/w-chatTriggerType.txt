@@ -1,0 +1,155 @@
+=====
+--- pos=9634767 ---
+  ln3 = "agentContinuationId";
+    pn3 = "agentMode";
+    mn3 = "additionalModelRequestFields";
+    hn3 = "assistantResponseEvent";
+    gn3 = "assistantResponseMessage";
+    _n2 = "agentTaskType";
+    ie13 = "bytes";
+    P13 = "client";
+    ve10 = "conversationId";
+    fn3 = "currentMessage";
+    Sn3 = "codeReferenceEvent";
+    En2 = "cacheReadInputTokens";
+    Cn = "cursorState";
+    yn3 = "conversationState";
+    Rn = "contentType";
+    In2 = "chatTriggerType";
+    Tn2 = "contextUsageEvent";
+    ce11 = "contextUsagePercentage";
+    Pn2 = "currentWorkingDirectory";
+    An3 = "cacheWriteInputTokens";
+    xn3 = "category";
+    kn2 = "character";
+    A21 = "content";
+    Dn = "code";
+    $n2 = "configuration";
+    de12 = "description";
+    wn2 = "documentChar";
+    bn2 = "documentCitationEvent";
+    On = "documentChunk";
+    Mn2 = "documentIndex";
+    Un2 = "documentPage";
+    ue12 = "documentSymbols";
+    Nn = "data";
+    Fn2 = "domain";
+    Bn2 = "document";
+    Ln2 = "documents";
+    l12 = "error";
+    Hn2 = "editorState";
+    Gn2 = "envState";
+    jn2 = "environmentVariables";
+    x17 = "end";
+  
+
+=====
+--- pos=9714817 ---
+sationId: f52.find(({ additional_kwargs: n27 }) => n27.conversationId)?.additional_kwargs.conversationId ?? crypto.randomUUID(),
+          agentContinuationId: f52.find(({ additional_kwargs: n27 }) => n27.continuationId)?.additional_kwargs.continuationId,
+          agentTaskType: f52.find(({ additional_kwargs: n27 }) => n27.taskType)?.additional_kwargs.taskType,
+          currentMessage: s27.at(-1),
+          history: s27.slice(0, -1),
+          chatTriggerType: "MANUAL"
+        };
+      }
+      emitTelemetryForError(e17, t18) {
+        if (e17 instanceof l13) {
+          this.metrics.reportCountMetrics({ [e17.retryErrorType]: 1 }, t18);
+          for (const r23 of e17.telemetryMetricNames) this.metrics.reportCountMetrics({ [r23]: 1 }, t18);
+        } else e17 instanceof Ee10 ? this.metrics.reportCountMetrics({ accessDenied: 1 }, t18) : this.metrics.reportCountMetrics({ fault: 1 }, t18);
+      }
+    };
+    __name(Tt4, "Tt");
+    It3 = {
+      "image/png": I6.PNG,
+      "image/jpeg": I6.JPEG,
+      "image/gif": I6.GIF,
+      "image/webp": I6.WEBP
+    };
+    __name(Rt3, "Rt");
+    __name(_t4, "_t");
+
+
+=====
+--- pos=13614318 ---
+ontentChecksumType";
+    Qi3 = "codeDescription";
+    Ki3 = "codeEvent";
+    Xi2 = "citationEvent";
+    Ee19 = "conversationId";
+    Yi3 = "citationLink";
+    Zi2 = "currentMessage";
+    ye23 = "cachePoint";
+    ec = "codeReferenceEvent";
+    tc = "cacheReadInputTokens";
+    rc = "cursorState";
+    ac = "consoleState";
+    Re17 = "conversationState";
+    nc = "currentState";
+    oc = "citationText";
+    sc = "contextTruncationScheme";
+    ic2 = "chatTriggerType";
+    cc = "contentType";
+    vc = "consoleUrl";
+    uc = "contextUsageEvent";
+    ft10 = "contextUsagePercentage";
+    lc = "currentWorkingDirectory";
+    pc = "cacheWriteInputTokens";
+    dc = "cloudWatchTroubleshootingLink";
+    mc = "character";
+    _c = "clarification";
+    E43 = "content";
+    St8 = "code";
+    fc = "command";
+    Sc = "confirmation";
+    ee28 = "description";
+    gc = "downloadArtifactId";
+    hc = "downloadArtifactType";
+    Cc = "documentChar";
+    Ec = "documentCitationEvent";
+    yc = "documentChunk";
+    Rc = "documentIndex";
+    Tc = "documentPage";
+    Pc = "dryRun";
+    Ac = "dryRunSucceedEvent";
+    gt10 = "d
+
+=====
+--- pos=20360743 ---
+age";
+    var _cSE = "codeScanEvent";
+    var _cSFE = "codeScanFailedEvent";
+    var _cSJI = "codeScanJobId";
+    var _cSN = "codeScanName";
+    var _cSRE = "codeScanRemediationsEvent";
+    var _cSSE = "codeScanSucceededEvent";
+    var _cSo = "consoleState";
+    var _cSon = "conversationState";
+    var _cSu = "cursorState";
+    var _cT = "componentsTree";
+    var _cTC = "cliToolCommand";
+    var _cTS = "contextTruncationScheme";
+    var _cTT2 = "chatTriggerType";
+    var _cTl = "clientToken";
+    var _cTli = "clientType";
+    var _cTo = "completionType";
+    var _cTr = "creationTime";
+    var _cU = "consoleUrl";
+    var _cUME = "chatUserModificationEvent";
+    var _cUWP = "currentUsageWithPrecision";
+    var _cUa = "cancelUrl";
+    var _cUr = "creditsUsed";
+    var _cUu = "currentUsage";
+    var _cWD = "currentWorkingDirectory";
+    var _ch = "character";
+    var _co4 = "content";
+    var _cod = "code";
+    var _com = "component";
+    var _comm = "command";
+    var _comp = "completions";
+    var _compl = "completion";
+    var _cu = "customizations";
+    var _cur = "currency";
+    var _d3 = "descrip
+
