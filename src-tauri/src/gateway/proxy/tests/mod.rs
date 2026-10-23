@@ -11,6 +11,7 @@ mod session;
 mod responses;
 mod upstream;
 mod handlers;
+mod tool_search_loop;
 
 fn proxy_test_state() -> RouterState {
     RouterState {

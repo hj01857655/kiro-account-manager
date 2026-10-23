@@ -1310,54 +1310,18 @@ pub async fn proxy_handler(
     if !request.deferred_tools.is_empty() {
         const TOOL_SEARCH_MAX_ROUNDS: usize = 3;
         for round in 0..TOOL_SEARCH_MAX_ROUNDS {
-            let Some((call_id, call_name, args_json)) = aggregated
-                .tool_calls
-                .iter()
-                .find(|(_, name, _)| super::tool_search::is_tool_search_call(name))
-                .cloned()
+            let Some((turn_messages, answer)) =
+                build_tool_search_turn(&aggregated, &request.deferred_tools)
             else {
                 break;
             };
-
-            let args: Value = serde_json::from_str(&args_json).unwrap_or_else(|_| json!({}));
-            let answer = super::tool_search::execute_tool_search(&args, &request.deferred_tools);
             log::info!(
                 "[Tool Search] 第 {} 轮代答：回灌 {} 字节",
                 round + 1,
                 answer.len()
             );
-
-            // assistant(tool_use) + user(tool_result)：形状对齐 normalize 层产出
-            // （tool_result 的 content 数组原样保留，历史构建器按 tool_call_id
-            // 关联，见 converter/history.rs 的消费点）。直接落 final_messages，
-            // 本轮消息下一轮整份重发，不另做累积容器。
-            final_messages.push(NormalizedMessage {
-                role: "assistant".to_string(),
-                content: None,
-                tool_calls: Some(vec![ToolCall {
-                    id: call_id.clone(),
-                    call_type: "function".to_string(),
-                    function: ToolCallFunction {
-                        // 保留模型实际调用的名字（可能是官方别名
-                        // tool_search_tool_*），保证 assistant 消息保真
-                        name: call_name,
-                        arguments: args_json,
-                    },
-                }]),
-                tool_call_id: None,
-                metadata: None,
-            });
-            final_messages.push(NormalizedMessage {
-                role: "user".to_string(),
-                content: Some(json!([{
-                    "type": "tool_result",
-                    "tool_use_id": call_id,
-                    "content": [{"type": "text", "text": answer}]
-                }])),
-                tool_calls: None,
-                tool_call_id: Some(call_id),
-                metadata: None,
-            });
+            // 直接落 final_messages，本轮消息下一轮整份重发，不另做累积容器。
+            final_messages.extend(turn_messages);
 
             // 重发请求视图：原始请求 + 环内追加（owned，不碰 request）
             let mut re_request = request.clone();
@@ -1635,6 +1599,58 @@ pub async fn proxy_handler(
     Json(response).into_response()
 }
 
+/// 从聚合响应中找出待代答的 tool_search 调用，并生成回灌用的两条消息。
+///
+/// 非流式代答环与流式缓冲环共用这段语义（流式之前是复制的）：
+/// - `find` 只取第一个命中，一个回合内的多次检索由多轮环完成；
+/// - assistant 消息保留模型实际调用的名字（可能是官方别名
+///   `tool_search_tool_*`），否则历史与模型自述不一致；
+/// - tool_result 的 `tool_use_id` 必须与 assistant 的 `id` 相同，上游强校验。
+///
+/// 返回 `None` 表示本回合没有 tool_search 调用，即环应退出。
+pub(crate) fn build_tool_search_turn(
+    aggregated: &stream::AggregatedKiroResponse,
+    deferred_tools: &[Tool],
+) -> Option<(Vec<NormalizedMessage>, String)> {
+    let (call_id, call_name, args_json) = aggregated
+        .tool_calls
+        .iter()
+        .find(|(_, name, _)| super::tool_search::is_tool_search_call(name))
+        .cloned()?;
+
+    let args: Value = serde_json::from_str(&args_json).unwrap_or_else(|_| json!({}));
+    let answer = super::tool_search::execute_tool_search(&args, deferred_tools);
+
+    let messages = vec![
+        NormalizedMessage {
+            role: "assistant".to_string(),
+            content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: call_id.clone(),
+                call_type: "function".to_string(),
+                function: ToolCallFunction {
+                    name: call_name,
+                    arguments: args_json,
+                },
+            }]),
+            tool_call_id: None,
+            metadata: None,
+        },
+        NormalizedMessage {
+            role: "user".to_string(),
+            content: Some(json!( [{
+                "type": "tool_result",
+                "tool_use_id": call_id,
+                "content": [{"type": "text", "text": answer}]
+            }])),
+            tool_calls: None,
+            tool_call_id: Some(call_id),
+            metadata: None,
+        },
+    ];
+    Some((messages, answer))
+}
+
 /// EventStream 字节流 → JSON event payload 列表（只取 `:event-type` 消息）。
 /// 非流式代答环与流式缓冲环共用。
 fn decode_event_payloads(raw: &[u8]) -> Vec<String> {
@@ -1683,51 +1699,17 @@ async fn run_tool_search_buffered_loop(
     for round in 0..TOOL_SEARCH_MAX_ROUNDS {
         let json_payloads = decode_event_payloads(&raw);
         let aggregated = stream::aggregate_kiro_response_from_payloads(&json_payloads);
-        let Some((call_id, call_name, args_json)) = aggregated
-            .tool_calls
-            .iter()
-            .find(|(_, name, _)| super::tool_search::is_tool_search_call(name))
-            .cloned()
+        let Some((turn_messages, answer)) =
+            build_tool_search_turn(&aggregated, &working.deferred_tools)
         else {
             break; // 无 tool_search 调用：当前轮即最终轮
         };
-
-        let args: Value = serde_json::from_str(&args_json).unwrap_or_else(|_| json!({}));
-        let answer = super::tool_search::execute_tool_search(&args, &working.deferred_tools);
         log::info!(
             "[Tool Search] 流式第 {} 轮代答：回灌 {} 字节",
             round + 1,
             answer.len()
         );
-
-        // assistant(tool_use) + user(tool_result)：形状对齐 normalize 层产出
-        // （tool_result 的 content 数组原样保留，历史构建器按 tool_call_id 关联）
-        working.messages.push(NormalizedMessage {
-            role: "assistant".to_string(),
-            content: None,
-            tool_calls: Some(vec![ToolCall {
-                id: call_id.clone(),
-                call_type: "function".to_string(),
-                function: ToolCallFunction {
-                    // 保留模型实际调用的名字（可能是官方别名）
-                    name: call_name,
-                    arguments: args_json,
-                },
-            }]),
-            tool_call_id: None,
-            metadata: None,
-        });
-        working.messages.push(NormalizedMessage {
-            role: "user".to_string(),
-            content: Some(json!([{
-                "type": "tool_result",
-                "tool_use_id": call_id,
-                "content": [{"type": "text", "text": answer}]
-            }])),
-            tool_calls: None,
-            tool_call_id: Some(call_id),
-            metadata: None,
-        });
+        working.messages.extend(turn_messages);
 
         // 重建 payload（同账号单次重发，不进限流换号环）
         let re_payload = build_kiro_payload_with_tool_limit(

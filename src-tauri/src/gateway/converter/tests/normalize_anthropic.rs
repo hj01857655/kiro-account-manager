@@ -224,3 +224,53 @@ fn override_thinking_respects_explicit_client_config() {
     assert_eq!(thinking.budget_tokens, 12345);
 }
 
+/// allowed_callers 不含 direct 的工具：模型永远调不到，不下发。
+#[test]
+fn tool_without_direct_caller_is_not_declared() {
+    let request = AnthropicMessagesRequest {
+        model: "claude-opus-5-5".to_string(),
+        messages: vec![crate::gateway::models::AnthropicMessage {
+            role: "user".to_string(),
+            content: json!("跑个脚本"),
+        }],
+        max_tokens: 1024,
+        system: None,
+        stream: false,
+        temperature: None,
+        top_p: None,
+        stop_sequences: None,
+        tools: Some(vec![
+            AnthropicTool {
+                r#type: Some("custom".to_string()),
+                name: "code_only".to_string(),
+                description: Some("只在沙箱内可调".to_string()),
+                input_schema: json!({"type": "object"}),
+                cache_control: None,
+                defer_loading: None,
+                allowed_callers: Some(vec!["code_execution_20260120".to_string()]),
+                configs: None,
+            },
+            AnthropicTool {
+                r#type: Some("custom".to_string()),
+                name: "direct_ok".to_string(),
+                description: Some("可直接调".to_string()),
+                input_schema: json!({"type": "object"}),
+                cache_control: None,
+                defer_loading: None,
+                allowed_callers: Some(vec!["direct".to_string()]),
+                configs: None,
+            },
+        ]),
+        tool_choice: None,
+        thinking: None,
+        output_config: None,
+        metadata: None,
+        top_k: None,
+    };
+
+    let converted = normalize_anthropic_request(&request);
+    let tools = converted.tools.expect("仍有可下发工具");
+    assert_eq!(tools.len(), 1, "只有 direct_ok 应下发");
+    assert_eq!(tools[0].function.name, "directOk");
+}
+
