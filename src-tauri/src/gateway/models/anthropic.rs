@@ -56,12 +56,17 @@ pub struct AnthropicTool {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
     /// 限定谁能调用该工具：`direct`（模型直接调，缺省即此）/ `code_execution_*`
-    /// （仅在代码执行沙箱内可调）。上游 Kiro 无代码执行环境，因此只声明了
-    /// `code_execution_*` 的工具实际无法被调用——normalize 层据此告警。
+    /// （仅在代码执行沙箱内可调）。上游 Kiro 无代码执行沙箱，因此不含 `direct`
+    /// 的工具在 normalize 层直接不下发（模型永远无法合法调用，下发只会让它
+    /// 发起一次注定失败的 tool_use）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_callers: Option<Vec<String>>,
     /// client toolset（computer/browser）的成员开关：`{成员名: {enabled, defer_loading}}`。
-    /// 成员 schema 由官方固定，本网关暂不展开（见 normalize/anthropic.rs 的告警）。
+    ///
+    /// 网关**不展开** toolset：成员 schema 是官方内置的（官方文档明确 schema-less、
+    /// "built into Claude's model and can't be modified"），展开必须伪造 schema；
+    /// 且成员调用的 `toolset_name` 元数据由 Anthropic API 端渲染，展开后客户端
+    /// 按 `(toolset_name, name)` 分发依然失败。字段保留仅为诊断与未来可能的重评估。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub configs: Option<serde_json::Value>,
 }
