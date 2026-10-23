@@ -1644,6 +1644,8 @@
   "gatewayLogs.streamingTitle": "Потоковый ответ",
   "gatewayLogs.requestPayload": "Тело запроса (Request Body)",
   "gatewayLogs.responsePayload": "Журнал декодирования EventStream (Decoded EventStream)",
+  "gatewayLogs.sseDetailHint": "Пособытийный SSE-журнал стриминговых запросов пишется в файл:",
+  "gatewayLogs.openLogDir": "Открыть каталог журналов",
   "gatewayLogs.copy": "Копировать",
   "gatewayLogs.toastCacheCleared": "Системный кэш очищен",
   "gatewayLogs.breakdownTitle": "Статистика по измерениям",

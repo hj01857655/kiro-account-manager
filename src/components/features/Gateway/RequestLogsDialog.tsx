@@ -852,6 +852,30 @@ export function RequestLogsDialog({
                                   </pre>
                                 </div>
                               </div>
+
+                              {/* 流式请求：SSE 逐事件明细只落文件，不进内存日志（体积不可控），
+                                  这里给出文件路径与打开入口，否则面板上看不到 content_block_* 序列 */}
+                              {log.stream && (
+                                <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-[11px]">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">
+                                      {t('gatewayLogs.sseDetailHint')}
+                                      <code className="ml-1 font-mono text-foreground">{log.path.includes('/responses') ? 'openai-responses-response-sse.log' : log.path.includes('/chat/completions') ? 'openai-chat-response-sse.log' : 'anthropic-messages-response-sse.log'}</code>
+                                    </span>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-6 shrink-0 px-2 text-[10px]"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        void openGatewayLogDir()
+                                      }}
+                                    >
+                                      {t('gatewayLogs.openLogDir')}
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>

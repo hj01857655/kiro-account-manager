@@ -1644,6 +1644,8 @@
   "gatewayLogs.streamingTitle": "Streaming response",
   "gatewayLogs.requestPayload": "Request Payload (Request Body)",
   "gatewayLogs.responsePayload": "EventStream Decoded Log (Decoded EventStream)",
+  "gatewayLogs.sseDetailHint": "Per-event SSE detail for streamed requests is written to file:",
+  "gatewayLogs.openLogDir": "Open log directory",
   "gatewayLogs.copy": "Copy",
   "gatewayLogs.toastCacheCleared": "System cache cleared",
   "gatewayLogs.breakdownTitle": "Breakdown",

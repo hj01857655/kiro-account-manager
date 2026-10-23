@@ -1644,6 +1644,8 @@
   "gatewayLogs.streamingTitle": "流式响应",
   "gatewayLogs.requestPayload": "请求 Payload (Request Body)",
   "gatewayLogs.responsePayload": "EventStream 解码日志 (Decoded EventStream)",
+  "gatewayLogs.sseDetailHint": "流式请求的 SSE 逐事件明细只写入文件：",
+  "gatewayLogs.openLogDir": "打开日志目录",
   "gatewayLogs.copy": "复制",
   "gatewayLogs.toastCacheCleared": "系统缓存已清理",
   "gatewayLogs.breakdownTitle": "维度统计",
