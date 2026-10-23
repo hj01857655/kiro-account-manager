@@ -669,6 +669,14 @@ pub fn convert_responses_tool(item: &Value) -> Option<(Tool, Option<(String, Str
     }
 
     if item_type != "function" {
+        // 官方 hosted tools（web_search / file_search / code_interpreter / mcp /
+        // image_generation 等）与未来的新工具类型都落到这里。上游 Kiro 只认
+        // function 形状，无法转发；但静默丢弃会让客户端以为工具已声明，
+        // 因此至少留一条可诊断的日志（带名字，便于定位是哪个工具）。
+        log::warn!(
+            "[Responses] 工具 `{}` 的类型 `{item_type}` 不受支持（上游只认 function），已跳过",
+            item.get("name").and_then(Value::as_str).unwrap_or("<unnamed>")
+        );
         return None;
     }
 
@@ -772,5 +780,51 @@ mod tests {
         let (converted, _, deferred) = convert_responses_tools(Some(&tools));
         assert!(converted.is_none());
         assert!(deferred.is_empty());
+    }
+
+    /// hosted tools（web_search / file_search / mcp 等）上游无法执行，
+    /// 必须跳过（不能当 function 下发），且不影响同一数组里的 function 工具。
+    #[test]
+    fn hosted_tools_are_skipped_without_breaking_siblings() {
+        let tools = serde_json::json!([
+            {"type": "web_search"},
+            {"type": "file_search", "vector_store_ids": ["vs_1"]},
+            {"type": "code_interpreter", "container": {"type": "auto"}},
+            {
+                "type": "function",
+                "name": "get_weather",
+                "parameters": {"type": "object"}
+            }
+        ]);
+
+        let (converted, _, deferred) = convert_responses_tools(Some(&tools));
+        let list = converted.expect("function 工具应保留");
+        assert_eq!(list.len(), 1, "三个 hosted tool 都被跳过，只剩 function");
+        assert_eq!(list[0].function.name, "getWeather");
+        assert!(deferred.is_empty());
+    }
+
+    /// namespace 层自身的 defer_loading 不参与（官方定义在成员层）。
+    /// 若将来官方改成允许 namespace 层，这条会提醒改实现。
+    #[test]
+    fn namespace_level_defer_loading_is_not_consumed() {
+        let tools = serde_json::json!([{
+            "type": "namespace",
+            "name": "crm",
+            "defer_loading": true,
+            "tools": [{
+                "type": "function",
+                "name": "find_customer",
+                "parameters": {"type": "object"}
+            }]
+        }]);
+
+        let (converted, _, deferred) = convert_responses_tools(Some(&tools));
+        let list = converted.expect("成员仍应展开");
+        assert_eq!(list.len(), 1);
+        assert!(
+            deferred.is_empty(),
+            "namespace 层 defer_loading 不消费，只认成员层"
+        );
     }
 }
