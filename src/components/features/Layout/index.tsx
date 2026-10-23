@@ -37,15 +37,21 @@ function useMenuItems() {
 function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
   const [localToken, setLocalToken] = useState<LocalToken | null>(null)
   const [version, setVersion] = useState('')
-  const [collapsed, setCollapsed] = useState(false)
+  // 默认折叠：窗口最小可缩到 1280×720（720p），展开时侧边栏占 192px，内容区剩 1088px，
+  // 卡片布局已能正常展开。默认仍收成 64px 图标态（带 tooltip），折叠后内容区有 1216px。
+  // 用户手动展开后记在 localStorage 里，下次保持自己的选择。
+  //
+  // 初值必须惰性读取：若先 useState(true) 再在 effect 里改回 false，
+  // 会先渲染一帧 64px 再走 200ms 宽度动画——启动时能看到侧边栏“抽”一下。
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem('sidebar-collapsed') !== 'false'
+  )
   const { t, theme, setTheme } = useApp()
   const menuItems = useMenuItems()
 
   useEffect(() => {
     getKiroLocalToken<LocalToken>().then(setLocalToken).catch(() => {})
     getVersion().then(setVersion)
-    const saved = localStorage.getItem('sidebar-collapsed')
-    if (saved === 'true') setCollapsed(true)
   }, [])
 
   const toggleCollapsed = () => {
