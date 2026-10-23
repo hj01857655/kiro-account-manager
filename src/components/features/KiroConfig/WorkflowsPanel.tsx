@@ -14,7 +14,7 @@ import {
 
 // Workflows 面板（Kiro 1.1.14）
 //
-// 逆向结论（详见 docs/Kiro 1.1.14/未覆盖功能与权限预设.md）：
+// 结论（详见 docs/Kiro 1.1.14/未覆盖功能与权限预设.md）：
 // 文件为 .workflow.json / .workflow.yaml / .workflow.yml，
 // 存于 <项目>/.kiro/workflows/ 或 ~/.kiro/workflows/。
 // 四个合法根目录中，bundled:// 与 generated:// 属运行时/只读来源，本管理端只编辑用户级与项目级。

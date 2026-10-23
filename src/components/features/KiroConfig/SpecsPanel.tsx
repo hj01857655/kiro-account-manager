@@ -16,7 +16,7 @@ import {
 
 // Specs 面板（Kiro 1.1.14）
 //
-// 逆向结论（详见 docs/Kiro 1.1.14/未覆盖功能与权限预设.md）：
+// 结论（详见 docs/Kiro 1.1.14/未覆盖功能与权限预设.md）：
 // 每个 spec 是 .kiro/specs/<name>/ 下一个子目录，内含三个约定命名的 Markdown
 // —— requirements.md / design.md / tasks.md，无 schema，纯文本。
 // 用户级在 ~/.kiro/specs，项目级在 <项目>/.kiro/specs。

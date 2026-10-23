@@ -503,7 +503,7 @@ if idx := strings.LastIndex(format, "/"); idx >= 0 {
 | `kiroxy` | 端点 fail-over + 独立的 `internal/reqconv` 转换层 | 走主链路 |
 | 本项目 | 专门的 `gateway/proxy/websearch.rs`（657 行） | 走主链路，但**改写**子请求 |
 
-本项目 `websearch.rs` 的注释记录了完整逆向结论（2026-09-28 实测），与本轮实测**完全一致**：
+本项目 `websearch.rs` 的注释记录了完整协议取证结论（2026-09-28 实测），与本轮实测**完全一致**：
 
 ```text
 POST https://runtime.{region}.kiro.dev/mcp

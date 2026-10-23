@@ -49,7 +49,7 @@ const normalize = (rules: PermissionRule[], policies: string): PermissionPolicy 
   policies: lines(policies),
 })
 
-// Kiro 内置的只读 shell 命令白名单，按工具分组（逆向自 1.1.14 扩展产物的 read-only-shell 预设）。
+// Kiro 内置的只读 shell 命令白名单，按工具分组（据 1.1.14 扩展产物的 read-only-shell 预设）。
 // 组名保持英文标识符，与 capability / preset id 一致，免得多语言维护。
 const SHELL_COMMAND_GROUPS: { id: string; commands: string[] }[] = [
   {

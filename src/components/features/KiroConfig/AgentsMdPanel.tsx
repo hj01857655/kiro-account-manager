@@ -16,7 +16,7 @@ const formatSize = (bytes: number) =>
 
 // 嵌套 AGENTS.md 面板（Kiro 1.1.14）
 //
-// 逆向结论（详见 docs/Kiro 1.1.14/嵌套AGENTS.md加载机制.md）：
+// 结论（详见 docs/Kiro 1.1.14/嵌套AGENTS.md加载机制.md）：
 // Kiro 会递归找出工作区里**每一层目录**的 AGENTS.md，与 .kiro/steering/*.md
 // 合并成同一份清单，且顺序为：根 AGENTS.md → 嵌套 AGENTS.md → steering → 全局。
 // 后端返回的列表已按此顺序排好，这里直接按序展示即可。
