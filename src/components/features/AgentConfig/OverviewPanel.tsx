@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { getMcpToolStats, getMcpConfig } from '../../../api/mcpApi'
 import { getPermissions } from '../../../api/settingsApi'
+import { getMemoryMode } from '../../../api/memoryApi'
 
 // Agent 配置总览：上半是配置体检（状态灯 + 洞察 + 跳转），下半是资产计数卡。
 // 体检数据并行拉取（MCP 工具量 / 服务状态 / 权限放行口子），云托管状态由
@@ -106,6 +107,7 @@ export default function OverviewPanel({
   const [serverDisabled, setServerDisabled] = useState(0)
   const [openRules, setOpenRules] = useState(0)
   const [rulesLoaded, setRulesLoaded] = useState(false)
+  const [memoryOff, setMemoryOff] = useState<boolean | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -113,7 +115,8 @@ export default function OverviewPanel({
       getMcpToolStats(projectDir || null).catch(() => null),
       getMcpConfig(projectDir || null).catch(() => null),
       getPermissions<any>().catch(() => null),
-    ]).then(([toolStats, mcpCfg, policy]) => {
+      getMemoryMode().catch(() => null),
+    ]).then(([toolStats, mcpCfg, policy, memMode]) => {
       if (cancelled) return
       const servers: any[] = mcpCfg?.mcpServers ? Object.values(mcpCfg.mcpServers) : []
       const disabled = servers.filter((s: any) => s?.disabled).length
@@ -125,11 +128,16 @@ export default function OverviewPanel({
       setServerDisabled(disabled)
       setOpenRules(open)
       setRulesLoaded(!!policy)
+      // mode=disabled（含键不存在的默认态）→ off；读取失败 → null 不出该项
+      setMemoryOff(memMode ? memMode.mode === 'disabled' : null)
     })
     return () => {
       cancelled = true
     }
   }, [projectDir])
+
+  // 行为类资产（hooks/steering/agentsMd）总数：为 0 时给出引导项
+  const behaviorAssets = counts.hooks + counts.steering + counts.agentsMd
 
   const checks: { level: 'ok' | 'warn'; title: string; detail: string; tab: string }[] = [
     {
@@ -159,6 +167,20 @@ export default function OverviewPanel({
       title: t('agentConfig.checkCloud'),
       detail: cloudReadOnly ? t('agentConfig.checkCloudOn') : t('agentConfig.checkCloudOff'),
       tab: 'mcp',
+    },
+    ...(memoryOff !== null ? [{
+      level: memoryOff ? ('warn' as const) : ('ok' as const),
+      title: t('agentConfig.checkMemoryMode'),
+      detail: memoryOff ? t('agentConfig.checkMemoryOff') : t('agentConfig.checkMemoryOn'),
+      tab: 'memories',
+    }] : []),
+    {
+      level: behaviorAssets === 0 ? 'warn' : 'ok',
+      title: t('agentConfig.checkBehaviorAssets'),
+      detail: behaviorAssets === 0
+        ? t('agentConfig.checkBehaviorEmpty')
+        : tr(t('agentConfig.checkBehaviorOk'), behaviorAssets),
+      tab: 'steering',
     },
   ]
 

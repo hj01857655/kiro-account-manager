@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { Fragment, useState, useEffect, useMemo } from 'react'
 import { getCustomAgents, getHooks, getPowers, getSkills, getSteeringFiles, scanAgentsMd, listSpecs, listWorkflows } from '../../../api/agentConfigApi'
 import { readCloudConfigEnabled } from '../../../api/settingsApi'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -94,19 +94,27 @@ function AgentConfig() {
 
   const TABS = [
     { id: 'overview', label: t('agentConfig.overview'), icon: LayoutDashboard, count: 0 },
-    { id: 'mcp', label: t('agentConfig.mcp'), icon: Server, count: mcpCount },
-    { id: 'powers', label: t('agentConfig.powers'), icon: Zap, count: powersCount },
-    { id: 'agents', label: t('agentConfig.agents'), icon: Bot, count: agentsCount },
-    { id: 'skills', label: t('agentConfig.skills'), icon: Puzzle, count: skillsCount },
-    { id: 'memories', label: t('agentConfig.memories'), icon: Brain, count: memoriesCount },
-    { id: 'hooks', label: t('agentConfig.hooks'), icon: Link2, count: hooksCount },
-    { id: 'steering', label: t('agentConfig.steering'), icon: FileText, count: steeringCount },
-    { id: 'agentsMd', label: t('agentConfig.agentsMd'), icon: FileText, count: agentsMdCount },
-    { id: 'specs', label: t('agentConfig.specs'), icon: FileText, count: specsCount },
-    { id: 'workflows', label: t('agentConfig.workflows'), icon: FileText, count: workflowsCount },
+    { id: 'mcp', label: t('agentConfig.mcp'), icon: Server, count: mcpCount, group: 'capabilities' },
+    { id: 'powers', label: t('agentConfig.powers'), icon: Zap, count: powersCount, group: 'capabilities' },
+    { id: 'agents', label: t('agentConfig.agents'), icon: Bot, count: agentsCount, group: 'capabilities' },
+    { id: 'skills', label: t('agentConfig.skills'), icon: Puzzle, count: skillsCount, group: 'capabilities' },
+    { id: 'memories', label: t('agentConfig.memories'), icon: Brain, count: memoriesCount, group: 'capabilities' },
+    { id: 'hooks', label: t('agentConfig.hooks'), icon: Link2, count: hooksCount, group: 'behavior' },
+    { id: 'steering', label: t('agentConfig.steering'), icon: FileText, count: steeringCount, group: 'behavior' },
+    { id: 'agentsMd', label: t('agentConfig.agentsMd'), icon: FileText, count: agentsMdCount, group: 'behavior' },
+    { id: 'specs', label: t('agentConfig.specs'), icon: FileText, count: specsCount, group: 'specs' },
+    { id: 'workflows', label: t('agentConfig.workflows'), icon: FileText, count: workflowsCount, group: 'specs' },
     // 权限规则（permissions.yaml，独立于 settings.json / mcp.json），从设置页迁入
-    { id: 'permissions', label: t('settings.permissions'), icon: Shield, count: 0 },
+    { id: 'permissions', label: t('settings.permissions'), icon: Shield, count: 0, group: 'boundaries' },
   ]
+
+  // 组名复用总览页的分组键（groupCapabilities 等已有三语）；boundaries 为本页新增
+  const GROUP_LABELS: Record<string, string> = {
+    capabilities: t('agentConfig.groupCapabilities'),
+    behavior: t('agentConfig.groupBehavior'),
+    specs: t('agentConfig.groupSpecs'),
+    boundaries: t('agentConfig.groupBoundaries'),
+  }
 
   return (
     <div className="h-full flex flex-col max-w-full overflow-x-hidden glass-main">
@@ -161,26 +169,36 @@ function AgentConfig() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <div className="px-5 pt-3 pb-2">
           <TabsList className="glass-card flex h-10 w-full justify-start overflow-x-auto rounded-lg border-none p-0.5 no-scrollbar lg:w-fit">
-            {TABS.map(tab => {
+            {TABS.map((tab, i) => {
               const Icon = tab.icon
+              const prev = i > 0 ? TABS[i - 1] : null
+              // 组间分隔：组名小字 + 竖线，组名复用总览页分组键
+              const showGroupSep = !!(prev && prev.group && tab.group && prev.group !== tab.group)
               return (
-                <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  className="gap-1.5 px-3 h-9 shrink-0 text-sm font-medium data-[state=active]:shadow-sm"
-                >
-                  <Icon size={14} />
-                  {tab.label}
-                  {tab.count > 0 && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                      activeTab === tab.id
-                        ? 'bg-primary/20 text-primary'
-                        : 'bg-muted/50 text-muted-foreground'
-                    }`}>
-                      {tab.count}
-                    </span>
+                <Fragment key={tab.id}>
+                  {showGroupSep && (
+                    <div className="mx-1 flex items-center gap-1.5 self-center shrink-0">
+                      <span className="text-[10px] text-muted-foreground/70">{GROUP_LABELS[tab.group]}</span>
+                      <span className="w-px h-5 bg-border" />
+                    </div>
                   )}
-                </TabsTrigger>
+                  <TabsTrigger
+                    value={tab.id}
+                    className="gap-1.5 px-3 h-9 shrink-0 text-sm font-medium data-[state=active]:shadow-sm"
+                  >
+                    <Icon size={14} />
+                    {tab.label}
+                    {tab.count > 0 && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        activeTab === tab.id
+                          ? 'bg-primary/20 text-primary'
+                          : 'bg-muted/50 text-muted-foreground'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                </Fragment>
               )
             })}
           </TabsList>
@@ -250,4 +268,3 @@ function AgentConfig() {
 }
 
 export default AgentConfig
-

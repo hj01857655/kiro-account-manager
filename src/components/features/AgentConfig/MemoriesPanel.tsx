@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Brain, ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Brain, ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { deleteMemory, getMemoryMode, listMemoriesPage, saveMemory, type MemoryItem } from '../../../api/memoryApi'
 import { setKiroAgentSetting } from '../../../api/settingsApi'
 import { useDialog } from '../../../contexts/DialogContext'
@@ -185,6 +185,14 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
           </Select>
         </div>
       </div>
+
+      {/* mode 联动：关闭时提示——会话侧不读不学，此处编辑仍落库 */}
+      {modeId === 'off' && (
+        <div className="px-3 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 flex items-start gap-2.5">
+          <AlertTriangle size={16} className="mt-0.5 text-amber-500 shrink-0" />
+          <div className="text-xs leading-relaxed text-foreground">{t('agentConfig.memoryOffBanner')}</div>
+        </div>
+      )}
 
       {/* scope 过滤：从当前已加载的记忆里汇总可选 scope */}
       {(() => {
