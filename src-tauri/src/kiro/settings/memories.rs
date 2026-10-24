@@ -320,6 +320,139 @@ pub fn delete_memory_impl(id: &str) -> Result<(), String> {
 }
 
 // ============================================================
+// 注入预览（模拟 Kiro buildMemoryBlock，docs/Kiro memory 系统.md §7.1.11）
+// ============================================================
+// 预算常量（§7.1.11.8 已解密）：总 24000 字符；单条上限 1817（超长 skipped）；
+// scope 标题上限 84；Cri(records, 75)：≤75 全过，超限 preferences 1/3 配额三段式裁剪。
+// resident 层：首个 scope 为 Global 或 repo:*（dve：json_extract(scopes,'$[0]')）；其余 manifest。
+
+const INJECT_TOTAL_BUDGET: u32 = 24_000;
+const INJECT_SINGLE_MAX: u32 = 1_817;
+const INJECT_RECORD_LIMIT: u32 = 75;
+
+/// 预览里的单条记忆行（oni 格式：`- [TYPE] title: "TITLE" - SUMMARY`）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewRow {
+    pub title: String,
+    pub memory_type: String,
+    pub chars: u32,
+    pub line: String,
+}
+
+/// 注入预览结果
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryInjectionPreview {
+    pub enabled: bool,
+    pub disabled_reason: Option<String>,
+    pub total_budget: u32,
+    pub single_max: u32,
+    pub record_limit: u32,
+    pub pref_quota: u32,
+    pub resident: Vec<PreviewRow>,
+    pub manifest: Vec<PreviewRow>,
+    pub dropped_too_long: Vec<String>,
+    pub rendered_chars: u32,
+}
+
+fn preview_line(item: &MemoryItem) -> String {
+    format!(
+        "- [{}] title: {} - {}",
+        item.memory_type,
+        serde_json::to_string(&item.title).unwrap_or_else(|_| item.title.clone()),
+        item.summary
+    )
+}
+
+pub fn preview_memory_injection_impl(enabled: bool) -> Result<MemoryInjectionPreview, String> {
+    let mut sorted = list_memories_impl()?;
+    sorted.sort_by(compare_recency);
+
+    // Cri(records, 75)：不超上限全过；超限按 preferences 1/3 配额三段式裁剪
+    let total = sorted.len() as u32;
+    let pref_total = sorted
+        .iter()
+        .filter(|m| m.memory_type == "USER_PREFERENCE")
+        .count() as u32;
+    let pref_quota = std::cmp::min((INJECT_RECORD_LIMIT + 2) / 3, pref_total);
+    let selected: Vec<MemoryItem> = if total <= INJECT_RECORD_LIMIT {
+        sorted
+    } else {
+        let other_quota = INJECT_RECORD_LIMIT - pref_quota;
+        let mut keep_ids: Vec<String> = Vec::new();
+        let mut pref_n = 0u32;
+        let mut other_n = 0u32;
+        for m in &sorted {
+            if pref_n < pref_quota && m.memory_type == "USER_PREFERENCE" {
+                keep_ids.push(m.id.clone());
+                pref_n += 1;
+            } else if other_n < other_quota {
+                keep_ids.push(m.id.clone());
+                other_n += 1;
+            }
+        }
+        // 补满剩余名额（某类不够时按全局顺序）
+        for m in &sorted {
+            if keep_ids.len() as u32 >= INJECT_RECORD_LIMIT {
+                break;
+            }
+            if !keep_ids.contains(&m.id) {
+                keep_ids.push(m.id.clone());
+            }
+        }
+        let keep: std::collections::HashSet<String> = keep_ids.into_iter().collect();
+        sorted.into_iter().filter(|m| keep.contains(&m.id)).collect()
+    };
+
+    let mut resident = Vec::new();
+    let mut manifest = Vec::new();
+    let mut dropped_too_long = Vec::new();
+    let mut rendered_chars = 0u32;
+    for m in &selected {
+        let line = preview_line(m);
+        let chars = line.chars().count() as u32;
+        if chars > INJECT_SINGLE_MAX {
+            dropped_too_long.push(m.title.clone());
+            continue;
+        }
+        rendered_chars += chars;
+        let is_resident = m
+            .scopes
+            .first()
+            .map_or(false, |s| s == "Global" || s.starts_with("repo:"));
+        let row = PreviewRow {
+            title: m.title.clone(),
+            memory_type: m.memory_type.clone(),
+            chars,
+            line,
+        };
+        if is_resident {
+            resident.push(row);
+        } else {
+            manifest.push(row);
+        }
+    }
+
+    Ok(MemoryInjectionPreview {
+        enabled,
+        disabled_reason: if enabled {
+            None
+        } else {
+            Some("Memory 当前关闭，会话不会注入任何记忆".to_string())
+        },
+        total_budget: INJECT_TOTAL_BUDGET,
+        single_max: INJECT_SINGLE_MAX,
+        record_limit: INJECT_RECORD_LIMIT,
+        pref_quota,
+        resident,
+        manifest,
+        dropped_too_long,
+        rendered_chars,
+    })
+}
+
+// ============================================================
 // 新建 / 编辑
 // ============================================================
 

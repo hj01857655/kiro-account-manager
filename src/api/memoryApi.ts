@@ -59,3 +59,28 @@ export function saveMemory(draft: MemoryDraft) {
 export function getMemoryMode() {
   return invoke<MemoryModeConfig>('get_memory_mode')
 }
+
+export interface MemoryPreviewRow {
+  title: string
+  memoryType: string
+  chars: number
+  line: string
+}
+
+// 注入预览（模拟 Kiro buildMemoryBlock 的 resident/manifest 分层与预算）
+export interface MemoryInjectionPreview {
+  enabled: boolean
+  disabledReason: string | null
+  totalBudget: number
+  singleMax: number
+  recordLimit: number
+  prefQuota: number
+  resident: MemoryPreviewRow[]
+  manifest: MemoryPreviewRow[]
+  droppedTooLong: string[]
+  renderedChars: number
+}
+
+export function previewMemoryInjection() {
+  return invoke<MemoryInjectionPreview>('preview_memory_injection')
+}

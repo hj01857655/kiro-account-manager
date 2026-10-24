@@ -11,8 +11,8 @@
 
 use crate::commands::kiro_settings_cmd::get_kiro_settings_path;
 use crate::kiro::settings::memories::{
-    delete_memory_impl, list_memories_page_impl, save_memory_impl, MemoryDraft, MemoryItem,
-    MemoryPage,
+    delete_memory_impl, list_memories_page_impl, preview_memory_injection_impl, save_memory_impl,
+    MemoryDraft, MemoryInjectionPreview, MemoryItem, MemoryPage,
 };
 use serde::Serialize;
 use std::fs;
@@ -66,4 +66,12 @@ pub async fn get_memory_mode() -> Result<MemoryModeConfig, String> {
     let mode = mem["mode"].as_str().unwrap_or("disabled").to_string();
     let reflection = mem["reflection"].as_bool().unwrap_or(false);
     Ok(MemoryModeConfig { mode, reflection })
+}
+
+/// 注入预览：模拟 Kiro buildMemoryBlock 的 resident/manifest 分层与预算（§7.1.11）
+#[tauri::command]
+pub async fn preview_memory_injection() -> Result<MemoryInjectionPreview, String> {
+    let mode = get_memory_mode().await?.mode;
+    let enabled = mode != "disabled";
+    preview_memory_injection_impl(enabled)
 }

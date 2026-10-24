@@ -136,7 +136,8 @@ use commands::proxy_cmd::{detect_system_proxy, test_account_proxy};
 
 //Powers
 use commands::memory_cmd::{
-    delete_memory, get_memory_mode, list_memories, list_memories_page, save_memory,
+    delete_memory, get_memory_mode, list_memories, list_memories_page, preview_memory_injection,
+    save_memory,
 };
 use commands::sandbox_cmd::{
     get_effective_sandbox, get_sandbox_config, save_project_sandbox_config, save_sandbox_config,
@@ -642,6 +643,7 @@ fn main() {
             set_kiro_reference_tracker,
             set_kiro_configure_mcp,
             list_memories,
+            preview_memory_injection,
             list_memories_page,
             delete_memory,
             save_memory,

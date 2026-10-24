@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Brain, ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
-import { deleteMemory, getMemoryMode, listMemoriesPage, saveMemory, type MemoryItem } from '../../../api/memoryApi'
+import { deleteMemory, getMemoryMode, listMemoriesPage, previewMemoryInjection, saveMemory, type MemoryInjectionPreview, type MemoryItem } from '../../../api/memoryApi'
 import { setKiroAgentSetting } from '../../../api/settingsApi'
 import { useDialog } from '../../../contexts/DialogContext'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select'
@@ -27,6 +27,12 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
   const [loading, setLoading] = useState(true)
   const [dbMissing, setDbMissing] = useState(false)
   const [modeId, setModeId] = useState('off')
+  const [preview, setPreview] = useState<MemoryInjectionPreview | null>(null)
+
+  // 注入预览：记忆或模式变化后重算（模拟 buildMemoryBlock 的分层与预算）
+  useEffect(() => {
+    previewMemoryInjection().then(setPreview).catch(() => setPreview(null))
+  }, [memories, modeId])
   // 分页状态（口径对齐 IDE：limit 默认 100、上限 1000）
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -191,6 +197,53 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
         <div className="px-3 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 flex items-start gap-2.5">
           <AlertTriangle size={16} className="mt-0.5 text-amber-500 shrink-0" />
           <div className="text-xs leading-relaxed text-foreground">{t('agentConfig.memoryOffBanner')}</div>
+        </div>
+      )}
+
+      {/* 注入预览：模拟 Kiro buildMemoryBlock 的分层与预算（§7.1.11） */}
+      {preview && (
+        <div className="glass-card border border-border rounded-xl p-4 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">{t('agentConfig.memoryPreviewTitle')}</h3>
+            {preview.enabled ? (
+              <span className="text-xs text-muted-foreground font-mono">
+                {preview.renderedChars} / {preview.totalBudget}
+              </span>
+            ) : (
+              <span className="text-xs text-amber-500">{t('agentConfig.memoryPreviewDisabled')}</span>
+            )}
+          </div>
+          {preview.enabled && (
+            <>
+              <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                  {t('agentConfig.memoryPreviewResident')} {preview.resident.length}
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground">
+                  {t('agentConfig.memoryPreviewManifest')} {preview.manifest.length}
+                </span>
+                {preview.droppedTooLong.length > 0 && (
+                  <span
+                    className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-400"
+                    title={preview.droppedTooLong.join('\n')}
+                  >
+                    {t('agentConfig.memoryPreviewDropped')} {preview.droppedTooLong.length}
+                  </span>
+                )}
+                <span className="px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground">
+                  {t('agentConfig.memoryPreviewPrefQuota')} {preview.prefQuota}
+                </span>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1 font-mono text-[11px] leading-relaxed">
+                {preview.resident.map(r => (
+                  <div key={`r-${r.title}`} className="truncate text-foreground" title={r.line}>{r.line}</div>
+                ))}
+                {preview.manifest.map(r => (
+                  <div key={`m-${r.title}`} className="truncate text-muted-foreground" title={r.line}>{r.line}</div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 
