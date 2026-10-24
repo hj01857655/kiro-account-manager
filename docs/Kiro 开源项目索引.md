@@ -531,7 +531,7 @@ gh api repos/nguyen-duc-loc/kiro-gateway/contents/internal/kiro/adapter.go --jq 
 | `mikeyobrien/pi-provider-kiro` | ★106 | TypeScript | pi extension，17 models / 7 families |
 | `daokimluc/X-Router` | ★98 | TypeScript | 多上游路由（Claude Code / Cursor / Kiro / Codex…） |
 | `ankitcharolia/kiro-gateway` | ★82 | Python | 合规优先的 Kiro 网关 |
-| `dangweilinshinidie/kiro-reverse-api` | ★72 | JavaScript | Kiro 逆向 API 控制台 |
+| `dangweilinshinidie/kiro-reverse-api` | ★72 | JavaScript | Kiro 分析 API 控制台 |
 | `zxc123aa/cc-proxy-detector` | ★47 | Python | 检测 Claude Code 代理后端（Anthropic / Bedrock Kiro / Vertex） |
 
 **若要补全**，用 §8.4 的 `gh api contents` 方式逐个核验上游端点即可——不要用 code search（配额 10/分钟）。
