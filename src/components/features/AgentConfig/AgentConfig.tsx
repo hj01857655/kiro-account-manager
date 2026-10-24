@@ -3,9 +3,11 @@ import { getCustomAgents, getHooks, getPowers, getSkills, getSteeringFiles, scan
 import { readCloudConfigEnabled } from '../../../api/settingsApi'
 import { open } from '@tauri-apps/plugin-dialog'
 import { useApp } from '../../../hooks/useApp'
-import { Server, Settings2, FileText, Puzzle, Bot, Zap, FolderOpen, Link2, X, Lock, Shield, LayoutDashboard } from 'lucide-react'
+import { Server, Settings2, FileText, Puzzle, Bot, Zap, FolderOpen, Link2, X, Lock, Shield, LayoutDashboard, Brain } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import OverviewPanel from './OverviewPanel'
+import MemoriesPanel from './MemoriesPanel'
+import { listMemories } from '../../../api/memoryApi'
 import MCPPanel from './MCPPanel'
 import PermissionsPanel from '../Settings/PermissionsPanel'
 import SteeringPanel from './SteeringPanel'
@@ -33,6 +35,7 @@ function AgentConfig() {
   const [agentsMdCount, setAgentsMdCount] = useState(0)
   const [specsCount, setSpecsCount] = useState(0)
   const [workflowsCount, setWorkflowsCount] = useState(0)
+  const [memoriesCount, setMemoriesCount] = useState(0)
   const [projectDir, setProjectDir] = useState<string | null>(null)
   // 云配置只读：kiroAgent.experiments.cloudConfig 开启时，steering/skills/extensions(MCP)/
   // powers/hooks/workflows/agents 由 Kiro Cloud 托管，本地写入无效，本管理端应禁用写操作。
@@ -65,6 +68,9 @@ function AgentConfig() {
     // Workflows：同上，预载计数。
     const wfScope = projectDir ? 'project' : 'user'
     listWorkflows(wfScope, projectDir).then(w => setWorkflowsCount(w?.length || 0)).catch(() => setWorkflowsCount(0))
+
+    // Memories：memories.db 不存在（Memory 从未启用）按 0 条计。
+    listMemories().then(m => setMemoriesCount(m?.length || 0)).catch(() => setMemoriesCount(0))
   }, [projectDir])
 
   // 进入时读取云配置开关（纯读取，不写回 settings.json）。
@@ -92,6 +98,7 @@ function AgentConfig() {
     { id: 'powers', label: t('agentConfig.powers'), icon: Zap, count: powersCount },
     { id: 'agents', label: t('agentConfig.agents'), icon: Bot, count: agentsCount },
     { id: 'skills', label: t('agentConfig.skills'), icon: Puzzle, count: skillsCount },
+    { id: 'memories', label: t('agentConfig.memories'), icon: Brain, count: memoriesCount },
     { id: 'hooks', label: t('agentConfig.hooks'), icon: Link2, count: hooksCount },
     { id: 'steering', label: t('agentConfig.steering'), icon: FileText, count: steeringCount },
     { id: 'agentsMd', label: t('agentConfig.agentsMd'), icon: FileText, count: agentsMdCount },
@@ -218,6 +225,9 @@ function AgentConfig() {
           </TabsContent>
           <TabsContent value="skills" className="h-full m-0">
             <SkillsPanel onCountChange={setSkillsCount} projectDir={projectDir} readOnly={cloudReadOnly} />
+          </TabsContent>
+          <TabsContent value="memories" className="h-full m-0 overflow-y-auto pr-1">
+            <MemoriesPanel t={t} />
           </TabsContent>
           <TabsContent value="hooks" className="h-full m-0">
             {/* 不再要求先选项目：HooksPanel 支持无项目时只展示用户级 hooks（~/.kiro/hooks），

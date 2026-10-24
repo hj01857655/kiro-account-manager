@@ -17,6 +17,7 @@ import SwitchRow from './SwitchRow'
 import ToggleRow from './ToggleRow'
 import { rowShell } from './rowStyles'
 import KiroAgentAdvancedPanel from './KiroAgentAdvancedPanel'
+import SandboxCard from './SandboxCard'
 
 // Kiro 设置页（kiro tab）的全部内容。
 //
@@ -256,6 +257,9 @@ function SettingsKiro({
 
       {/* 5-7. Agent 高级 / 实验与高级 / 信任与自动批准（子面板）*/}
       <KiroAgentAdvancedPanel t={t} />
+
+      {/* 8. 命令沙箱（sandbox.json，独立文件——Kiro IDE 1.3+，非 settings.json 键）*/}
+      <SandboxCard t={t} />
 
       {/* ========== 9. telemetry.* ========== */}
       <SectionCard

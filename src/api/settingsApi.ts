@@ -34,7 +34,7 @@ export function getKiroSettings<T = any>() {
 }
 
 // 纯读取云配置开关（kiroAgent.experiments.cloudConfig），不写回 settings.json。
-// 用于 KiroConfig 进入时判断是否需要挂只读横幅并禁用写操作。
+// 用于 AgentConfig 进入时判断是否需要挂只读横幅并禁用写操作。
 export function readCloudConfigEnabled() {
   return invoke<boolean>('read_cloud_config_enabled')
 }
@@ -156,4 +156,19 @@ export function detectInstalledBrowsers<T = any>() {
 // 检测系统代理
 export function detectSystemProxy<T = any>() {
   return invoke<T>('detect_system_proxy')
+}
+
+// Command Sandbox 配置（~/.kiro/settings/sandbox.json，独立文件而非 settings.json 键）
+export interface SandboxConfig {
+  enabled: boolean
+  networkAccess: string
+  mcpSandboxing: boolean
+}
+
+export function getSandboxConfig() {
+  return invoke<SandboxConfig>('get_sandbox_config')
+}
+
+export function saveSandboxConfig(config: SandboxConfig) {
+  return invoke<void>('save_sandbox_config', { config })
 }

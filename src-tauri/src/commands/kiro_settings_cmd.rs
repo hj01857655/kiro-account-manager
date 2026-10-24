@@ -107,7 +107,7 @@ impl Default for KiroSettings {
     }
 }
 
-fn get_kiro_settings_path() -> Option<PathBuf> {
+pub(crate) fn get_kiro_settings_path() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         std::env::var("APPDATA").ok().map(|appdata| {
