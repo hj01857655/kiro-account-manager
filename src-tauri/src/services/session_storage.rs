@@ -114,6 +114,12 @@ impl SessionStorage {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
+                // 跳过 Kiro SessionMigration 的迁移标记目录（._migration- / .migrated-）：
+                // 它们不是 workspace，迁移触发时会出现在 workspace-sessions 下，
+                // 不过滤会污染会话列表
+                if name.starts_with("._migration-") || name.starts_with(".migrated-") {
+                    continue;
+                }
                 let modified = entry.metadata()?.modified()?;
                 workspace_with_time.push((name, modified));
             }
