@@ -133,8 +133,12 @@ use commands::cli_session_cmd::{
 use commands::proxy_cmd::{detect_system_proxy, test_account_proxy};
 
 //Powers
-use commands::memory_cmd::{delete_memory, get_memory_mode, list_memories};
-use commands::sandbox_cmd::{get_sandbox_config, save_sandbox_config};
+use commands::memory_cmd::{
+    delete_memory, get_memory_mode, list_memories, list_memories_page, save_memory,
+};
+use commands::sandbox_cmd::{
+    get_effective_sandbox, get_sandbox_config, save_project_sandbox_config, save_sandbox_config,
+};
 use commands::powers_cmd::{
     get_power, get_power_registries, get_powers, get_recommended_powers, get_user_added_powers,
     install_power, install_power_from_local, install_power_from_url,
@@ -636,10 +640,14 @@ fn main() {
             set_kiro_reference_tracker,
             set_kiro_configure_mcp,
             list_memories,
+            list_memories_page,
             delete_memory,
+            save_memory,
             get_memory_mode,
             get_sandbox_config,
             save_sandbox_config,
+            get_effective_sandbox,
+            save_project_sandbox_config,
             set_kiro_telemetry,
             set_kiro_agent_setting,
             // 应用设置命令
