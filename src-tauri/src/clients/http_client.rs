@@ -386,31 +386,68 @@ fn get_proxy_from_kiro_settings() -> Option<String> {
 
 /// 从系统环境变量获取代理配置
 fn get_proxy_from_env() -> Option<String> {
-    // 按优先级尝试不同的环境变量
-    // 1. HTTPS_PROXY (用于 HTTPS 请求)
-    // 2. https_proxy (小写版本)
-    // 3. HTTP_PROXY (通用代理)
-    // 4. http_proxy (小写版本)
-    
-    log::debug!("[HttpClient] 尝试读取系统环境变量代理...");
-    log::debug!("[HttpClient]   HTTPS_PROXY = {:?}", std::env::var("HTTPS_PROXY").ok());
-    log::debug!("[HttpClient]   https_proxy = {:?}", std::env::var("https_proxy").ok());
-    log::debug!("[HttpClient]   HTTP_PROXY = {:?}", std::env::var("HTTP_PROXY").ok());
-    log::debug!("[HttpClient]   http_proxy = {:?}", std::env::var("http_proxy").ok());
-    
-    let proxy = std::env::var("HTTPS_PROXY")
-        .or_else(|_| std::env::var("https_proxy"))
-        .or_else(|_| std::env::var("HTTP_PROXY"))
-        .or_else(|_| std::env::var("http_proxy"))
-        .ok()?;
+    // 不打印四个变量的探测过程：这个函数在每次构造 HTTP 客户端时都会跑，
+    // 而默认环境（四个变量全未设置）下五行输出全是 None，纯粹是噪音。
+    // 只在真的读到代理时记一行，并标出是哪个变量生效——
+    // 排查「代理没生效」时需要知道命中哪一个，这比逐个列 None 有用。
+    let proxy = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
+        .iter()
+        .find_map(|name| std::env::var(name).ok().map(|value| (*name, value)));
+    let Some((source, proxy)) = proxy else {
+        return None;
+    };
     
     if proxy.trim().is_empty() {
         log::warn!("[HttpClient] 环境变量代理为空字符串");
         return None;
     }
     
-    log::info!("[HttpClient] 使用系统环境变量代理: {}", proxy);
+    log::debug!("[HttpClient] 使用系统环境变量代理: {}={}", source, proxy);
     normalize_proxy_url(&proxy)
+}
+
+/// 系统代理探测结果。
+///
+/// 区分「探测成功但没有代理」与「探测失败」：两者对调用方都是 `None`（不出站时不套代理），
+/// 但对用户是两件事——后者是环境故障（注册表读不到、networksetup 不可用），
+/// 得用 warn 报出来，否则用户配了系统代理却直连，日志里什么都看不到。
+enum SystemProxyOutcome {
+    /// 探测成功，且系统代理已启用。
+    Configured(String),
+    /// 探测成功，但系统没配代理（含 TUN 模式：`ProxyEnable = 0`）。
+    NotConfigured,
+    /// 探测本身失败，无法判定有没有代理。
+    ProbeFailed(String),
+}
+
+/// 从系统（操作系统级）代理设置获取代理。
+///
+/// Windows 读 WinINET 注册表（`ProxyEnable` / `ProxyServer`），macOS 走
+/// `networksetup -getwebproxy`，Linux 读环境变量。复用 `proxy_cmd` 里已有的
+/// 跨平台探测，不另写一套注册表读取。
+///
+/// 只在 `ProxyEnable = 1` 时返回代理。TUN 模式（如 mihomo 的 TUN）不设系统代理，
+/// `ProxyEnable` 为 0，这里返回 `NotConfigured`——TUN 在内核路由层接管流量，
+/// 应用层看不到也不需要看到。
+fn get_proxy_from_system() -> SystemProxyOutcome {
+    match crate::commands::proxy_cmd::detect_system_proxy_inner() {
+        Ok(info) => match info.http_proxy {
+            Some(proxy) => SystemProxyOutcome::Configured(proxy),
+            None => {
+                // TUN 模式（mihomo / Clash 等）不设系统代理：`ProxyEnable = 0`，
+                // 但流量已被内核路由接管。应用层必须直连，否则是双重代理。
+                // 打一行日志是为了让日志能解释“为什么没走代理”。
+                if info.tun_mode {
+                    log::debug!(
+                        "[HttpClient] TUN 模式已接管（接口 {}），应用层直连",
+                        info.tun_interface.as_deref().unwrap_or("未知")
+                    );
+                }
+                SystemProxyOutcome::NotConfigured
+            }
+        },
+        Err(e) => SystemProxyOutcome::ProbeFailed(e),
+    }
 }
 
 fn resolve_app_proxy_url() -> Option<String> {
@@ -435,9 +472,29 @@ fn resolve_app_proxy_url() -> Option<String> {
                 return Some(proxy);
             }
 
-            // Kiro IDE 未配置代理，尝试系统环境变量（生产环境静默）
-            // 回退到系统环境变量（HTTP_PROXY, HTTPS_PROXY）
-            get_proxy_from_env()
+            // 其次是环境变量（CI / 容器里常用这个）
+            if let Some(proxy) = get_proxy_from_env() {
+                return Some(proxy);
+            }
+
+            // 最后跟随操作系统代理。没有这一层时，开了系统代理（ProxyEnable=1）
+            // 的机器上浏览器能上网、本应用却直连——这是实际报过的缺口。
+            match get_proxy_from_system() {
+                SystemProxyOutcome::Configured(proxy) => {
+                    log::debug!("[HttpClient] 使用系统代理: {}", proxy);
+                    Some(proxy)
+                }
+                // TUN 模式与「没配代理」在这里合流：都是应用层不该套代理
+                SystemProxyOutcome::NotConfigured => None,
+                // 探测失败不是「没配代理」：用户可能配了但读不出来。
+                // 不能静默直连，否则表现为「浏览器能上网、应用连不上」且无任何线索。
+                SystemProxyOutcome::ProbeFailed(reason) => {
+                    log::warn!(
+                        "[HttpClient] 系统代理探测失败，本次按直连处理（若浏览器可上网而应用不行，请检查系统代理设置）: {reason}"
+                    );
+                    None
+                }
+            }
         }
     }
 }

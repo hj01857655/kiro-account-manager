@@ -136,7 +136,7 @@ fn detect_tun_mode() -> (bool, Option<String>) {
 }
 
 #[cfg(target_os = "windows")]
-fn detect_system_proxy_inner() -> Result<SystemProxyInfo, String> {
+pub(crate) fn detect_system_proxy_inner() -> Result<SystemProxyInfo, String> {
     use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
 
@@ -213,7 +213,7 @@ fn detect_tun_mode() -> (bool, Option<String>) {
 }
 
 #[cfg(target_os = "macos")]
-fn detect_system_proxy_inner() -> Result<SystemProxyInfo, String> {
+pub(crate) fn detect_system_proxy_inner() -> Result<SystemProxyInfo, String> {
     use std::process::Command;
 
     // 获取当前网络服务名称
@@ -350,7 +350,7 @@ fn detect_tun_mode() -> (bool, Option<String>) {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn detect_system_proxy_inner() -> Result<SystemProxyInfo, String> {
+pub(crate) fn detect_system_proxy_inner() -> Result<SystemProxyInfo, String> {
     // Linux: 尝试读取环境变量
     let proxy_server = std::env::var("http_proxy")
         .or_else(|_| std::env::var("HTTP_PROXY"))
