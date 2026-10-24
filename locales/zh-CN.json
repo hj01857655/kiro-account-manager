@@ -611,6 +611,7 @@
   "agentConfig.assetDuplicateDesc": "用户级与项目级存在同名资产，注意去重",
   "agentConfig.recentProjects": "最近项目",
   "agentConfig.browseDir": "浏览…",
+  "agentConfig.projectScope": "项目作用域",
   "agentConfig.memories": "记忆",
   "agentConfig.scopeTagProject": "项目",
   "agentConfig.scopeTagUser": "用户",

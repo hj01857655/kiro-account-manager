@@ -131,6 +131,24 @@ impl SessionStorage {
         Ok(workspaces)
     }
 
+    /// 按项目目录查找 workspace：遍历各 workspace 的会话摘要，
+    /// 归一化比较 workspaceDirectory（Windows 大小写/斜杠差异不敏感）。
+    /// 目录名是 base64 变体、直接编码容易踩填充/字符集差异，路径精确匹配才稳。
+    pub fn find_workspace_by_dir(&self, project_dir: &str) -> Result<Option<String>> {
+        let norm = |p: &str| p.replace('\\', "/").trim_end_matches('/').to_lowercase();
+        let target = norm(project_dir);
+        for hash in self.list_workspaces()? {
+            if let Ok(sessions) = self.list_sessions(&hash) {
+                if let Some(first) = sessions.first() {
+                    if norm(&first.workspace_directory) == target {
+                        return Ok(Some(hash));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
     /// 列出指定 workspace 的所有 sessions
     pub fn list_sessions(&self, workspace_hash: &str) -> Result<Vec<SessionSummary>> {
         // 安全检查：防止路径遍历攻击

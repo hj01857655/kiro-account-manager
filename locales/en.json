@@ -611,6 +611,7 @@
   "agentConfig.assetDuplicateDesc": "Same name exists in both user and project scope — consider deduplicating",
   "agentConfig.recentProjects": "Recent Projects",
   "agentConfig.browseDir": "Browse…",
+  "agentConfig.projectScope": "Project Scope",
   "agentConfig.memories": "Memories",
   "agentConfig.memoryScopeAll": "All",
   "agentConfig.scopeTagProject": "Project",

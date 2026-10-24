@@ -122,7 +122,8 @@ use commands::permissions_cmd::{
     save_permissions,
 };
 use commands::session_manager::{
-    delete_session, delete_workspace, export_session, list_sessions, list_workspaces, load_session,
+    delete_session, delete_workspace, export_session, find_workspace_by_dir, list_sessions,
+    list_workspaces, load_session,
     search_sessions,
 };
 use commands::cli_session_cmd::{
@@ -764,6 +765,7 @@ fn main() {
             get_recommended_powers,
             // Session Manager 命令
             list_workspaces,
+            find_workspace_by_dir,
             list_sessions,
             load_session,
             // CLI Session 命令

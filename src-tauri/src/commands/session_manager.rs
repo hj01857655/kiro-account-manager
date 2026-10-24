@@ -7,6 +7,17 @@ pub async fn list_workspaces(storage: State<'_, SessionStorage>) -> Result<Vec<S
     storage.list_workspaces().map_err(|e| e.to_string())
 }
 
+/// 按项目目录查找 workspace_hash（会话摘要里记录了原始 workspace 路径）
+#[tauri::command]
+pub async fn find_workspace_by_dir(
+    project_dir: String,
+    storage: State<'_, SessionStorage>,
+) -> Result<Option<String>, String> {
+    storage
+        .find_workspace_by_dir(&project_dir)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn list_sessions(
     workspace_hash: String,

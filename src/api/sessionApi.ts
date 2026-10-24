@@ -7,6 +7,11 @@ export const sessionApi = {
     return invoke('list_workspaces')
   },
 
+  // 按项目目录查找 workspace_hash（未命中返回 null）
+  async findWorkspaceByDir(projectDir: string): Promise<string | null> {
+    return invoke('find_workspace_by_dir', { projectDir })
+  },
+
   // 列出指定 workspace 的 sessions
   async listSessions(workspaceHash: string): Promise<SessionSummary[]> {
     return invoke('list_sessions', { workspaceHash })

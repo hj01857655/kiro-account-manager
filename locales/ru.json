@@ -610,6 +610,7 @@
   "agentConfig.assetDuplicateDesc": "Одно имя в пользовательской и проектной области — стоит дедуплицировать",
   "agentConfig.recentProjects": "Недавние проекты",
   "agentConfig.browseDir": "Обзор…",
+  "agentConfig.projectScope": "Область проекта",
   "agentConfig.memories": "Память",
   "agentConfig.memoryScopeAll": "Все",
   "agentConfig.scopeTagProject": "Проект",

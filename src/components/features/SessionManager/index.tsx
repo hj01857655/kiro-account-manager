@@ -21,6 +21,7 @@ import {
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { useDialog } from '@/contexts/DialogContext'
+import { useProjectScope } from '@/contexts/ProjectScopeContext'
 import { useApp } from '@/hooks/useApp'
 import { showSuccess, showError, showWarning } from '@/utils/toast'
 
@@ -33,6 +34,8 @@ interface SessionCounts {
 function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: SessionCounts) => void }) {
   const { t } = useApp()
   const { showConfirm } = useDialog()
+  // 项目作用域：选中项目时会话列表只显示该 workspace
+  const { projectDir } = useProjectScope()
   const [workspaces, setWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set())
@@ -43,10 +46,10 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedWorkspaceHashes, setSelectedWorkspaceHashes] = useState<Set<string>>(new Set())
 
-  // 加载 workspaces
+  // 加载 workspaces：选中项目时只显示该项目的 workspace（未命中则空）；未选项目展示全部
   useEffect(() => {
-    loadWorkspaces()
-  }, [])
+    loadForScope()
+  }, [projectDir])
 
   const toggleWorkspace = async (workspaceHash: string) => {
     const newExpanded = new Set(expandedWorkspaces)
@@ -83,7 +86,7 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await loadWorkspaces()
+      await loadForScope()
       const expanded = Array.from(expandedWorkspaces)
       await Promise.all(expanded.map(loadSessionsForWorkspace))
     } finally {
@@ -114,6 +117,33 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
     } catch (error) {
       console.error('Failed to load workspaces:', error)
       showError(t('sessions.loadWorkspaceFailed', { error }))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 按 projectDir 作用域加载：未选项目 → 全部 workspace；选中 → 只加载匹配该目录的 workspace
+  const loadForScope = async () => {
+    if (!projectDir) {
+      await loadWorkspaces()
+      return
+    }
+    setLoading(true)
+    try {
+      const hash = await sessionApi.findWorkspaceByDir(projectDir)
+      if (hash) {
+        setWorkspaces([hash])
+        setSelectedWorkspace(hash)
+        setExpandedWorkspaces(new Set([hash]))
+        await loadSessionsForWorkspace(hash)
+      } else {
+        setWorkspaces([])
+        setWorkspaceSessions(new Map())
+        setExpandedWorkspaces(new Set())
+        setSelectedWorkspace(null)
+      }
+    } catch (error) {
+      console.error('Failed to find workspace for project:', error)
     } finally {
       setLoading(false)
     }

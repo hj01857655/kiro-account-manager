@@ -1,9 +1,9 @@
 import { Fragment, useState, useEffect, useMemo } from 'react'
 import { getCustomAgents, getHooks, getPowers, getSkills, getSteeringFiles, scanAgentsMd, listSpecs, listWorkflows } from '../../../api/agentConfigApi'
 import { readCloudConfigEnabled } from '../../../api/settingsApi'
-import { open } from '@tauri-apps/plugin-dialog'
+import { Server, Settings2, FileText, Puzzle, Bot, Zap, Link2, Lock, Shield, LayoutDashboard, Brain } from 'lucide-react'
+import { useProjectScope } from '../../../contexts/ProjectScopeContext'
 import { useApp } from '../../../hooks/useApp'
-import { Server, Settings2, FileText, Puzzle, Bot, Zap, FolderOpen, Link2, X, Lock, Shield, LayoutDashboard, Brain, ChevronDown } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import OverviewPanel from './OverviewPanel'
 import MemoriesPanel from './MemoriesPanel'
@@ -36,26 +36,8 @@ function AgentConfig() {
   const [specsCount, setSpecsCount] = useState(0)
   const [workflowsCount, setWorkflowsCount] = useState(0)
   const [memoriesCount, setMemoriesCount] = useState(0)
-  const RECENT_PROJECTS_KEY = 'agentRecentProjects'
-  // 项目目录持久化：重启后恢复上次选择；最近目录列表用于快速切换
-  const [projectDir, setProjectDirState] = useState<string | null>(() => localStorage.getItem('agentProjectDir'))
-  const [recentDirs, setRecentDirs] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(RECENT_PROJECTS_KEY) || '[]') } catch { return [] }
-  })
-  const [showRecentDirs, setShowRecentDirs] = useState(false)
-  const setProjectDir = (dir: string | null) => {
-    setProjectDirState(dir)
-    if (dir) {
-      localStorage.setItem('agentProjectDir', dir)
-      setRecentDirs(prev => {
-        const next = [dir, ...prev.filter(d => d !== dir)].slice(0, 5)
-        localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next))
-        return next
-      })
-    } else {
-      localStorage.removeItem('agentProjectDir')
-    }
-  }
+  // 项目作用域全局化：状态与最近列表在 ProjectScopeContext（侧边栏选择器共享），本页只消费
+  const { projectDir } = useProjectScope()
   // 云配置只读：kiroAgent.experiments.cloudConfig 开启时，steering/skills/extensions(MCP)/
   // powers/hooks/workflows/agents 由 Kiro Cloud 托管，本地写入无效，本管理端应禁用写操作。
   const [cloudReadOnly, setCloudReadOnly] = useState(false)
@@ -100,17 +82,6 @@ function AgentConfig() {
   }, [])
 
 
-  const handleSelectProjectDir = async () => {
-    try {
-      const selected = await open({ directory: true, multiple: false, title: t('agentConfig.selectProjectDir') })
-      if (selected) {
-        setProjectDir(selected as string)
-      }
-    } catch (e) {
-      handleUiError('选择项目目录失败', e, { userMessage: '选择项目目录失败' })
-    }
-  }
-
   const TABS = [
     { id: 'overview', label: t('agentConfig.overview'), icon: LayoutDashboard, count: 0 },
     { id: 'mcp', label: t('agentConfig.mcp'), icon: Server, count: mcpCount, group: 'capabilities' },
@@ -147,65 +118,6 @@ function AgentConfig() {
           <p className="text-sm text-muted-foreground leading-tight truncate">{t('agentConfig.subtitle')}</p>
         </div>
 
-        {/* 项目目录选择器 */}
-        <div className="relative flex items-center gap-1.5 flex-shrink-0">
-          <button
-            onClick={handleSelectProjectDir}
-            className={`flex items-center gap-1.5 px-2.5 h-8 rounded-md text-xs transition-colors cursor-pointer hover:bg-muted/50 border border-border text-foreground focus:outline-none focus:ring-2 ${accent.ring}`}
-            title={t('agentConfig.selectProjectDir')}
-          >
-            <FolderOpen size={13} className="text-amber-500" />
-            {projectDir ? (
-              <span className="max-w-[160px] truncate">{projectDir.split(/[/\\]/).pop()}</span>
-            ) : (
-              <span className="text-muted-foreground">{t('agentConfig.noProjectDir')}</span>
-            )}
-          </button>
-          {recentDirs.length > 0 && (
-            <button
-              onClick={() => setShowRecentDirs(v => !v)}
-              className={`p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 ${accent.ring}`}
-              title={t('agentConfig.recentProjects')}
-            >
-              <ChevronDown size={13} className="text-muted-foreground" />
-            </button>
-          )}
-          {showRecentDirs && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowRecentDirs(false)} />
-              <div className="absolute right-0 top-10 z-50 w-72 glass-card border border-border rounded-lg shadow-xl py-1">
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{t('agentConfig.recentProjects')}</div>
-                {recentDirs.map(d => (
-                  <button
-                    key={d}
-                    onClick={() => { setProjectDir(d); setShowRecentDirs(false) }}
-                    className={`w-full text-left px-3 py-1.5 text-xs truncate hover:bg-muted/50 cursor-pointer ${projectDir === d ? 'text-primary' : 'text-foreground'}`}
-                    title={d}
-                  >
-                    {d.split(/[/\\]/).pop()}
-                    {projectDir === d && <span className="ml-1.5 text-[10px] text-primary">●</span>}
-                  </button>
-                ))}
-                <div className="border-t border-border my-1" />
-                <button
-                  onClick={() => { setShowRecentDirs(false); handleSelectProjectDir() }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer"
-                >
-                  {t('agentConfig.browseDir')}
-                </button>
-              </div>
-            </>
-          )}
-          {projectDir && (
-            <button
-              onClick={() => setProjectDir(null)}
-              className={`p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 ${accent.ring}`}
-              title={t('agentConfig.clearProjectDir')}
-            >
-              <X size={13} className="text-muted-foreground" />
-            </button>
-          )}
-        </div>
       </div>
 
       {/* 云配置只读横幅：开启 experiments.cloudConfig 时，云端托管的配置本地写入无效 */}

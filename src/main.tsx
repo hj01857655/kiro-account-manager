@@ -3,6 +3,7 @@ import './index.css'
 import App from './App'
 import { ThemeProvider } from './components/theme-provider'
 import { DialogProvider } from './contexts/DialogContext'
+import { ProjectScopeProvider } from './contexts/ProjectScopeContext'
 import { AppSettingsProvider } from './contexts/AppSettingsContext'
 import { I18nProvider } from './i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -71,7 +72,9 @@ ReactDOM.createRoot(rootElement).render(
       >
         <TooltipProvider>
           <DialogProvider>
-            <App />
+            <ProjectScopeProvider>
+              <App />
+            </ProjectScopeProvider>
           </DialogProvider>
         </TooltipProvider>
       </ThemeProvider>

@@ -2,7 +2,9 @@
 import { useState, useEffect } from 'react'
 import { getKiroLocalToken } from '../../../api/kiroApi'
 import { getVersion } from '@tauri-apps/api/app'
-import { User, Sun, Moon, Palette, Monitor, ChevronLeft, ChevronRight, LucideIcon } from 'lucide-react'
+import { User, Sun, Moon, Palette, Monitor, ChevronLeft, ChevronRight, FolderOpen, X, ChevronDown, LucideIcon } from 'lucide-react'
+import { open } from '@tauri-apps/plugin-dialog'
+import { useProjectScope } from '../../../contexts/ProjectScopeContext'
 import { Button } from '../../ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip'
 import { cn } from '../../../lib/utils'
@@ -58,6 +60,21 @@ function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
     const newState = !collapsed
     setCollapsed(newState)
     localStorage.setItem('sidebar-collapsed', String(newState))
+  }
+
+  // 项目作用域：全局选择器（AgentConfig 等页面共享），含最近项目快速切换
+  const { projectDir, recentDirs, setProjectDir } = useProjectScope()
+  const [showRecentDirs, setShowRecentDirs] = useState(false)
+
+  const handleSelectProjectDir = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false, title: t('agentConfig.selectProjectDir') })
+      if (selected) {
+        setProjectDir(selected as string)
+      }
+    } catch {
+      // 目录选择对话框取消/失败不需要打扰用户
+    }
   }
 
   const currentTheme = findTheme(theme)
@@ -148,6 +165,83 @@ function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
           )
         })}
       </div>
+
+      {/* 项目作用域：全局选择器，AgentConfig 等页面共享 */}
+      {!collapsed ? (
+        <div className="relative mx-3 mb-2 p-3 rounded-xl sidebar-card">
+          <div className="flex items-center gap-2 mb-1.5">
+            <FolderOpen size={12} className="text-amber-500 flex-shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wide sidebar-muted">{t('agentConfig.projectScope')}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleSelectProjectDir}
+              className="flex items-center gap-1.5 min-w-0 flex-1 px-2 h-7 rounded-md text-xs transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 border border-transparent sidebar-foreground"
+              title={t('agentConfig.selectProjectDir')}
+            >
+              {projectDir ? (
+                <span className="truncate">{projectDir.split(/[/\\]/).pop()}</span>
+              ) : (
+                <span className="sidebar-muted">{t('agentConfig.noProjectDir')}</span>
+              )}
+            </button>
+            {recentDirs.length > 0 && (
+              <button
+                onClick={() => setShowRecentDirs(v => !v)}
+                className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer flex-shrink-0"
+                title={t('agentConfig.recentProjects')}
+              >
+                <ChevronDown size={12} className="sidebar-muted" />
+              </button>
+            )}
+            {projectDir && (
+              <button
+                onClick={() => setProjectDir(null)}
+                className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer flex-shrink-0"
+                title={t('agentConfig.clearProjectDir')}
+              >
+                <X size={12} className="sidebar-muted" />
+              </button>
+            )}
+          </div>
+          {showRecentDirs && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowRecentDirs(false)} />
+              <div className="absolute left-3 right-3 bottom-full mb-1 z-50 rounded-lg bg-background border border-border shadow-xl py-1">
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{t('agentConfig.recentProjects')}</div>
+                {recentDirs.map(d => (
+                  <button
+                    key={d}
+                    onClick={() => { setProjectDir(d); setShowRecentDirs(false) }}
+                    className={`w-full text-left px-3 py-1.5 text-xs truncate hover:bg-muted/50 cursor-pointer ${projectDir === d ? 'text-primary' : 'text-foreground'}`}
+                    title={d}
+                  >
+                    {d.split(/[/\\]/).pop()}
+                    {projectDir === d && <span className="ml-1.5 text-[10px] text-primary">●</span>}
+                  </button>
+                ))}
+                <div className="border-t border-border my-1" />
+                <button
+                  onClick={() => { setShowRecentDirs(false); handleSelectProjectDir() }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer"
+                >
+                  {t('agentConfig.browseDir')}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="flex justify-center mb-2">
+          <button
+            onClick={handleSelectProjectDir}
+            className="p-2 rounded-xl sidebar-card sidebar-foreground sidebar-hover cursor-pointer"
+            title={projectDir ? projectDir.split(/[/\\]/).pop() : t('agentConfig.selectProjectDir')}
+          >
+            <FolderOpen size={14} className={projectDir ? 'text-amber-500' : 'sidebar-muted'} />
+          </button>
+        </div>
+      )}
 
       {localToken && (
         <div className={cn("mx-3 mb-3 p-3 rounded-xl sidebar-card", collapsed && "mx-2 px-0 flex justify-center")}>
