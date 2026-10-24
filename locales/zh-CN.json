@@ -1877,5 +1877,13 @@
   "gatewayMapping.presetExists": "所有预置映射规则均已存在",
   "gatewaySummary.security.keysFixed": "固定为 kiro",
   "settings.openMcpFile": "编辑 MCP 配置",
-  "settings.openSandboxFile": "编辑沙箱配置"
+  "settings.openSandboxFile": "编辑沙箱配置",
+  "sessions.timeJustNow": "刚刚",
+  "sessions.timeMinutesAgo": "{n} 分钟前",
+  "sessions.timeHoursAgo": "{n} 小时前",
+  "sessions.timeDaysAgo": "{n} 天前",
+  "sessions.noSessions": "暂无会话",
+  "sessions.noSessionsForProject": "当前项目没有会话",
+  "sessions.copy": "复制",
+  "sessions.copied": "已复制"
 }

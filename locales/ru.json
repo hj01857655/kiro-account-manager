@@ -1832,5 +1832,13 @@
   "gatewayMapping.presetExists": "Все предустановленные правила уже существуют",
   "gatewaySummary.security.keysFixed": "Фиксированный: kiro",
   "settings.openMcpFile": "Редактировать конфигурацию MCP",
-  "settings.openSandboxFile": "Редактировать конфигурацию песочницы"
+  "settings.openSandboxFile": "Редактировать конфигурацию песочницы",
+  "sessions.timeJustNow": "только что",
+  "sessions.timeMinutesAgo": "{n} мин. назад",
+  "sessions.timeHoursAgo": "{n} ч. назад",
+  "sessions.timeDaysAgo": "{n} дн. назад",
+  "sessions.noSessions": "Пока нет сессий",
+  "sessions.noSessionsForProject": "Для этого проекта нет сессий",
+  "sessions.copy": "Копировать",
+  "sessions.copied": "Скопировано"
 }

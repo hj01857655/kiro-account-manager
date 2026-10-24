@@ -16,6 +16,10 @@ import {
   ChevronRight,
   ChevronDown,
   RefreshCw,
+  Clock,
+  Copy,
+  Check,
+  FileText,
   X
 } from 'lucide-react'
 import { save } from '@tauri-apps/plugin-dialog'
@@ -29,6 +33,68 @@ interface SessionCounts {
   workspaces: number
   loadedSessions: number
   selected: number
+}
+
+// 按 ``` 围栏切分消息文本：代码段深底等宽 + 复制，普通段保持 pre-wrap
+function splitCodeBlocks(text: string): { code: boolean; content: string }[] {
+  const parts: { code: boolean; content: string }[] = []
+  let buf: string[] = []
+  let inCode = false
+  for (const line of text.split('\n')) {
+    if (line.trimStart().startsWith('```')) {
+      parts.push({ code: inCode, content: buf.join('\n') })
+      buf = []
+      inCode = !inCode
+      continue
+    }
+    buf.push(line)
+  }
+  parts.push({ code: inCode, content: buf.join('\n') })
+  return parts.filter(p => p.content.length > 0)
+}
+
+function CopyBtn({ text, t, className }: { text: string; t: (k: string) => string; className?: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        })
+      }}
+      className={className}
+      title={copied ? t('sessions.copied') : t('sessions.copy')}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+    </button>
+  )
+}
+
+function MessageBody({ text, t }: { text: string; t: (k: string) => string }) {
+  return (
+    <>
+      {splitCodeBlocks(text).map((p, i) =>
+        p.code ? (
+          <div key={i} className="relative my-1 rounded-xl bg-zinc-900 ring-1 ring-zinc-700/50">
+            <button
+              onClick={() => navigator.clipboard.writeText(p.content)}
+              title={t('sessions.copy')}
+              className="absolute right-2 top-2 rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer"
+            >
+              <Copy size={12} />
+            </button>
+            <pre className="overflow-x-auto p-3 pr-9 font-mono text-xs leading-5 text-zinc-100">{p.content}</pre>
+          </div>
+        ) : (
+          <div key={i} className="whitespace-pre-wrap break-words rounded-xl bg-background/70 p-3 text-sm leading-6 text-foreground/90 ring-1 ring-border/50">
+            {p.content}
+          </div>
+        )
+      )}
+    </>
+  )
 }
 
 function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: SessionCounts) => void }) {
@@ -349,23 +415,42 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
   }
 
   // 搜索匹配多个字段，与 magpie 的 shown() 一致：标题、路径、id、模型名。
-  // 标题命中优先，其余次之，避免「搜路径却把标题像的排前面」。
-  const filteredSessions = useMemo(() => {
-    const needle = searchQuery.trim().toLowerCase()
-    if (!needle) return []
-    const all = Array.from(workspaceSessions.values()).flat()
-    const titleHits: SessionSummary[] = []
-    const otherHits: SessionSummary[] = []
-    for (const session of all) {
-      if (session.title.toLowerCase().includes(needle)) titleHits.push(session)
-      else if (
-        session.workspaceDirectory.toLowerCase().includes(needle) ||
-        session.sessionId.toLowerCase().includes(needle)
-      )
-        otherHits.push(session)
+  // 全文搜索：后端 search_sessions 遍历所有 workspace 的会话内容，
+  // 前端只做 300ms 防抖，结果集直接来自后端（不再本地过滤标题）
+  const [searchResults, setSearchResults] = useState<SessionSummary[]>([])
+  const [searching, setSearching] = useState(false)
+
+  useEffect(() => {
+    const needle = searchQuery.trim()
+    if (!needle) {
+      setSearchResults([])
+      setSearching(false)
+      return
     }
-    return [...titleHits, ...otherHits]
-  }, [searchQuery, workspaceSessions])
+    setSearching(true)
+    const timer = setTimeout(() => {
+      sessionApi.searchSessions(needle)
+        .then(r => setSearchResults(r))
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  const filteredSessions = searchResults
+
+  // 相对时间：30 天内用「N 前」，超过回退绝对时间
+  const formatRelativeTime = (ms: number) => {
+    const diff = Date.now() - ms
+    const minutes = Math.floor(diff / 60000)
+    if (minutes < 1) return t('sessions.timeJustNow')
+    if (minutes < 60) return t('sessions.timeMinutesAgo', { n: minutes })
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return t('sessions.timeHoursAgo', { n: hours })
+    const days = Math.floor(hours / 24)
+    if (days < 30) return t('sessions.timeDaysAgo', { n: days })
+    return new Date(ms).toLocaleString()
+  }
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`
@@ -479,7 +564,8 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
               {/* 搜索模式：显示所有匹配的会话 */}
               {searchQuery && (
                 <div className="space-y-2">
-                  <div className="px-1 text-[11px] text-muted-foreground" role="status">
+                  <div className="px-1 text-[11px] text-muted-foreground flex items-center gap-1.5" role="status">
+                    {searching && <Loader2 className="h-3 w-3 animate-spin" />}
                     {t('sessions.searchResultCount', { count: filteredSessions.length })}
                   </div>
                   {filteredSessions.length === 0 ? (
@@ -536,12 +622,31 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
                             <span className="text-xs text-muted-foreground">
                               {formatFileSize(session.fileSize)}
                             </span>
+                            {typeof session.modifiedAt === 'number' && (
+                              <span
+                                className="flex items-center gap-1 text-xs text-muted-foreground"
+                                title={new Date(session.modifiedAt).toLocaleString()}
+                              >
+                                <Clock className="h-3 w-3" />
+                                {formatRelativeTime(session.modifiedAt)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </Card>
                       )
                     })
                   )}
+                </div>
+              )}
+
+              {/* 空态：无会话时给出明确反馈（选中项目未命中时尤其重要） */}
+              {!searchQuery && !loading && workspaces.length === 0 && (
+                <div className="py-12 text-center">
+                  <MessageSquare className="mx-auto h-8 w-8 mb-2 opacity-40" />
+                  <p className="text-sm text-muted-foreground">
+                    {projectDir ? t('sessions.noSessionsForProject') : t('sessions.noSessions')}
+                  </p>
                 </div>
               )}
 
@@ -797,11 +902,30 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
                                     {item.executionId.slice(0, 8)}
                                   </Badge>
                                 )}
+                                <CopyBtn
+                                  text={item.message.content.map((c: any) => c.text).join('\n')}
+                                  t={t}
+                                  className="ml-auto rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted/60 hover:text-foreground group-hover:opacity-100 cursor-pointer"
+                                />
                               </div>
-                              {item.message.content.map((content, i) => (
-                                <div key={i} className="whitespace-pre-wrap break-words rounded-xl bg-background/70 p-3 text-sm leading-6 text-foreground/90 ring-1 ring-border/50">
-                                  {content.text}
+                              {item.contextItems && item.contextItems.length > 0 && (
+                                <div className="mb-2 flex flex-wrap gap-1.5">
+                                  {item.contextItems.map((ci: any, ciIdx: number) =>
+                                    ci?.relativePath ? (
+                                      <span
+                                        key={ciIdx}
+                                        title={ci.relativePath}
+                                        className="inline-flex max-w-[220px] items-center gap-1 rounded-md bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground ring-1 ring-border/40"
+                                      >
+                                        <FileText size={10} className="shrink-0" />
+                                        <span className="truncate">{ci.relativePath.split(/[/\\]/).pop()}</span>
+                                      </span>
+                                    ) : null
+                                  )}
                                 </div>
+                              )}
+                              {item.message.content.map((content, i) => (
+                                <MessageBody key={i} text={content.text} t={t} />
                               ))}
                             </div>
                           </div>
