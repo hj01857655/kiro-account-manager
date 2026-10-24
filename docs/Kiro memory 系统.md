@@ -613,6 +613,16 @@ function Pb(t) {
 
 用于统计 `title` / `summary` / `memoryType` 的长度（`gJl({title: Pb(a.title).length, ...})`）——**长度按清洗后计算**，且 `<>` 和反引号会被中和（对 prompt 注入的防御）。
 
+### 2.14 memories.db 的三个访问方
+
+| 访问方 | 入口 |
+| --- | --- |
+| 聊天 agent | ACP `_kiro/memory/*` → `withMemoryController` → `Poi` → `nie` |
+| orchestrator 旁路 | 不读此库，读写 `~/.kiro-manager/memory.jsonl` |
+| 外部进程 | 直接打开 SQLite 文件 |
+
+同一文件可被多个进程同时打开：WAL 模式允许一写多读，写锁冲突由 `busy_timeout` 等待。
+
 ---
 
 ## 3. 四个工具（orchestrator 旁路）

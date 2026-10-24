@@ -2,11 +2,11 @@
 
 本文记录 **Kiro 上游通道的实测结果**与**开源实现的适配情况对账**。
 
-与《Kiro 官方 thinking 与 effort 事实》分工明确：
+与《Kiro 官方 thinking 与 effort》分工明确：
 
 | 文档 | 内容 | 取证方式 |
 | --- | --- | --- |
-| 《Kiro 官方 thinking 与 effort 事实》 | Kiro 官方客户端源码 + 官方文档的事实（thinking / effort / AMRF 形状） | 只读官方 `extension.js` 与官方文档 |
+| 《Kiro 官方 thinking 与 effort》 | Kiro 官方客户端源码 + 官方文档的事实（thinking / effort / AMRF 形状） | 只读官方 `extension.js` 与官方文档 |
 | **本文** | 上游通道的**活体实测**、**开源实现**的适配情况、**社区报告**的复核 | 直连上游打真实请求 + 拉取 GitHub 仓库源码 |
 | 《Kiro 开源项目索引》 | 各仓库的**完整索引**与**核验深度**记录 | 逐仓库拉源码核验 |
 
@@ -671,7 +671,7 @@ Contains the /v1/messages endpoint compatible with Anthropic's Messages API.
 
 分代结论：
 
-- KiroProxy / KiroGate 用的是**旧代机制**——`<thinking_mode>` / `<max_thinking_length>` 提示词标签。官方客户端**不发送**这些 XML 标签（官方事实见《Kiro 官方 thinking 与 effort 事实》），这是社区对早期上游行为的遗留适配。
+- KiroProxy / KiroGate 用的是**旧代机制**——`<thinking_mode>` / `<max_thinking_length>` 提示词标签。官方客户端**不发送**这些 XML 标签（官方事实见《Kiro 官方 thinking 与 effort》），这是社区对早期上游行为的遗留适配。
 - AIClient2API 用的是**新代机制**——AMRF 是否发送按模型 schema 决定、档位按模型枚举，`reasoning.effort`（GPT 系）/ `output_config.effort`（Claude 系）的嵌套位置与官方 `pfd` 取证一致。其"不支持 AMRF 的模型整个省略字段"与本项目的实现规则相同（schema 存在才发，下限保护一致思路）。
 - 响应侧：AIClient2API 把上游 `reasoningContentEvent` 流映射回 chat 的 thinking/reasoning 输出通道（`claude-kiro.js:2504/2957/3287`），并在流尾显式关闭 thinking 块（原生事件不带 `</thinking>` 标签）。KiroProxy / KiroGate 的 chat **响应侧** reasoning 输出未核到证据（本轮 grep 仅命中请求侧）。
 - KiroGate 的 chat 路径**不读** OpenAI 原生 `reasoning_effort`（`request_handler.py` 无该字段引用）——OpenAI 风格客户端要用 thinking 只能传 Anthropic 形态字段；KiroProxy 同理只认 `extra_body.anthropic.thinking`。
@@ -691,7 +691,7 @@ Contains the /v1/messages endpoint compatible with Anthropic's Messages API.
 
 ## 12. 结论汇总
 
-> 以下均为**非官方事实**：来自社区实现源码与本机活体实测。官方事实见《Kiro 官方 thinking 与 effort 事实》。
+> 以下均为**非官方事实**：来自社区实现源码与本机活体实测。官方事实见《Kiro 官方 thinking 与 effort》。
 
 1. **官方出站 CreateResponse 链路真实可用**（§2）：Python 直打 `https://runtime.us-east-1.kiro.dev/v1/responses` 返回 200 + 标准 OpenAI Responses SSE，事件名与官方 §2.2.2 完全一致。**不是"仅存代码"。**
 2. **该端点只支持流式**（§3）：`stream:false` → 400 `unsupported_parameter`（`param:"stream"`）。官方 `pfd` 恒发 `stream:!0`，与此一致。

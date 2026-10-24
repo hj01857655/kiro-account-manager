@@ -16,7 +16,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| 《Kiro 官方 thinking 与 effort 事实》 | Kiro 官方客户端源码的事实（thinking / effort / AMRF 形状 / 开关判定链） |
+| 《Kiro 官方 thinking 与 effort》 | Kiro 官方客户端源码的事实（thinking / effort / AMRF 形状 / 开关判定链） |
 | 《Kiro 上游通道实测与对账》 | 上游通道的活体实测、各实现的通道适配清单、社区结论复核 |
 
 本文只做**索引**——记录有哪些项目、各自适配了什么通道、核验到什么程度。

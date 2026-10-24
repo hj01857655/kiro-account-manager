@@ -1,4 +1,4 @@
-# Kiro 官方 thinking 与 effort 事实
+# Kiro 官方 thinking 与 effort
 
 本文只记录 **Kiro 自身的事实**（官方客户端源码 + 官方文档原文），不做推测。
 每条事实都附取证位置；源码引用为 `extension.js` 原文（未改写）。

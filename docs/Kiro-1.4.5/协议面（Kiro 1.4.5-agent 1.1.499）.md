@@ -16,7 +16,7 @@
 
 - `docs/kiro-re/`（旧目录）= 产品 `1.0.89` / agent `1.0.165`，是**另一代基线**。其 EventStream / 事件名结论只在明确标注时使用。
 - `docs/Kiro 1.1.14/` = agent `1.1.28`（手动更新），其中 G1–G5 与 workspace/Powers 类结论属账号管理器上下文，**不自动适用于 1.4.5**。
-- `docs/Kiro 官方 thinking 与 effort 事实.md` 与 `docs/Kiro 上游通道实测与对账.md` 的**方向切分**在 1.4.5 仍成立，本文沿用（见 §1）。
+- `docs/Kiro 官方 thinking 与 effort.md` 与 `docs/Kiro 上游通道实测与对账.md` 的**方向切分**在 1.4.5 仍成立，本文沿用（见 §1）。
 
 ## 1. 两条出站链路：`/v1/responses` 与 `generateAssistantResponse`
 
