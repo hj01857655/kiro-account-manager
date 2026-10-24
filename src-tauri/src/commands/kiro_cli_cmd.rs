@@ -592,8 +592,7 @@ fn build_switch_payload(
             "kirocli:social:token",
             "kirocli:social:device-registration",
             "social",
-        ),
-        _ => return Err(format!("不支持的 provider: {}", provider)),
+        ),        _ => return Err(format!("不支持的 provider: {}", provider)),
     };
 
     // Social 默认 profile_arn（与 Electron 版本一致；IdC token 不带 profile_arn）
@@ -605,6 +604,10 @@ fn build_switch_payload(
 
     let default_region = "us-east-1".to_string();
     let region = account.region.as_ref().unwrap_or(&default_region);
+
+    // social token 的 provider 字段必须小写（见下方 social 分支注释）。
+    // "Github" 写成 "github"；Google 写成 "google"。
+    let social_provider = provider.to_ascii_lowercase();
 
     // expires_at：真实 kiro-cli 用 RFC3339 + 'Z'（而非 chrono 默认的 +00:00 偏移）
     let token_expires_at = (chrono::Utc::now() + chrono::Duration::hours(1))
@@ -667,6 +670,16 @@ fn build_switch_payload(
             .filter(|s| !s.is_empty())
             .unwrap_or(SOCIAL_PROFILE_ARN);
         token_data["profile_arn"] = serde_json::json!(profile_arn);
+        // provider 必填且**只认小写**（issue #158 / #161）。
+        // kiro-cli 的 SocialToken 结构是 5 字段：
+        //   access_token / expires_at / refresh_token / provider / profile_arn
+        // 实测（同份 token 逐个改 provider）：
+        //   缺失         → whoami: Not logged in
+        //   "GOOGLE"     → whoami: Not logged in
+        //   "Google"     → whoami 显示已登录，但请求报 dispatch failure（NoToken）
+        //   "google"     → 正常
+        // 所以必须写成小写；写 "Google" 是最阴的一种——表面登录成功，实际无法对话。
+        token_data["provider"] = serde_json::json!(social_provider);
     }
 
     let token_value =
@@ -704,7 +717,8 @@ fn build_switch_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::lock_account_store;
+    use super::{build_switch_payload, lock_account_store};
+    use crate::core::account::Account;
     use std::sync::Mutex;
 
     #[test]
@@ -717,5 +731,76 @@ mod tests {
 
         let err = lock_account_store(&mutex).expect_err("poisoned mutex should return error");
         assert!(err.contains("store lock"));
+    }
+
+    fn social_account(provider: &str) -> Account {
+        Account {
+            id: "test-id".to_string(),
+            email: None,
+            password: None,
+            label: "test".to_string(),
+            status: "active".to_string(),
+            added_at: "2026-01-01".to_string(),
+            access_token: Some("access".to_string()),
+            refresh_token: Some("refresh".to_string()),
+            expires_at: None,
+            provider: Some(provider.to_string()),
+            user_id: None,
+            auth_method: None,
+            client_id: None,
+            client_secret: None,
+            region: None,
+            client_id_hash: None,
+            sso_session_id: None,
+            id_token: None,
+            start_url: None,
+            profile_arn: None,
+            token_endpoint: None,
+            issuer_url: None,
+            scopes: None,
+            usage_data: None,
+            group_id: None,
+            tag_links: vec![],
+            machine_id: None,
+            available_models_cache: None,
+            failure_count: 0,
+            last_failure_at: None,
+            disabled_reason: None,
+            success_count: 0,
+            enabled: true,
+            proxy_config: None,
+        }
+    }
+
+    /// issue #158 / #161：social token 必须带小写 provider，否则 kiro-cli 报
+    /// `missing field provider` 或（写成 "Google" 时）表面登录成功但请求 NoToken。
+    #[test]
+    fn social_token_writes_lowercase_provider() {
+        for (input, expected) in [("Google", "google"), ("Github", "github")] {
+            let payload = build_switch_payload(&social_account(input)).expect("payload");
+            let token: serde_json::Value =
+                serde_json::from_str(&payload.token_value).expect("token json");
+            assert_eq!(
+                token["provider"].as_str(),
+                Some(expected),
+                "provider must be lowercase {expected:?} for {input}, got {token:?}"
+            );
+            assert_eq!(payload.token_key, "kirocli:social:token");
+        }
+    }
+
+    /// IdC token 不带 provider（真实 kiro-cli 的 odic token 没有这个字段）。
+    #[test]
+    fn idc_token_omits_provider() {
+        let mut account = social_account("BuilderId");
+        account.access_token = Some("access".to_string());
+        let payload = build_switch_payload(&account).expect("payload");
+        let token: serde_json::Value =
+            serde_json::from_str(&payload.token_value).expect("token json");
+        assert!(
+            token.get("provider").is_none(),
+            "IdC token should not carry provider, got {token:?}"
+        );
+        assert_eq!(payload.token_key, "kirocli:odic:token");
     }
 }
