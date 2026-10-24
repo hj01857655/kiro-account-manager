@@ -172,3 +172,20 @@ export function getSandboxConfig() {
 export function saveSandboxConfig(config: SandboxConfig) {
   return invoke<void>('save_sandbox_config', { config })
 }
+
+/** 全局 + 项目两级生效配置（项目只能收紧） */
+export interface EffectiveSandbox {
+  global: SandboxConfig
+  project?: SandboxConfig
+  effective: SandboxConfig
+  /** 项目配置被收紧/忽略的说明，空数组 = 无冲突 */
+  notes: string[]
+}
+
+export function getEffectiveSandbox(workspaceRoot?: string) {
+  return invoke<EffectiveSandbox>('get_effective_sandbox', { workspaceRoot })
+}
+
+export function saveProjectSandboxConfig(workspaceRoot: string, config: SandboxConfig) {
+  return invoke<void>('save_project_sandbox_config', { workspaceRoot, config })
+}

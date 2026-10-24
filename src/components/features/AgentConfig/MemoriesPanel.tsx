@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Brain, Trash2 } from 'lucide-react'
-import { deleteMemory, getMemoryMode, listMemories, type MemoryItem } from '../../../api/memoryApi'
+import { Brain, ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
+import { deleteMemory, getMemoryMode, listMemoriesPage, saveMemory, type MemoryItem } from '../../../api/memoryApi'
 import { setKiroAgentSetting } from '../../../api/settingsApi'
 import { useDialog } from '../../../contexts/DialogContext'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select'
@@ -9,7 +9,7 @@ import { Label } from '../../ui/label'
 // Agent Memory 管理面板（Kiro 1.4+）：~/.kiro/memories/memories.db 的记忆条目
 // 列表/删除 + kiroAgent.memory 模式切换（settings.json 键，四档映射见 memory_cmd.rs）。
 
-// 官方四档 → {mode, reflection}（docs/Kiro memory 系统事实.md）
+// 官方四档 → {mode, reflection}（docs/Kiro memory 系统.md）
 const MEMORY_MODES = [
   { id: 'off', mode: 'disabled', reflection: false },
   { id: 'useOnly', mode: 'read_only', reflection: false },
@@ -27,12 +27,74 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
   const [loading, setLoading] = useState(true)
   const [dbMissing, setDbMissing] = useState(false)
   const [modeId, setModeId] = useState('off')
+  // 分页状态（口径对齐 IDE：limit 默认 100、上限 1000）
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // scope 过滤（IDE 的 scopeFilter）：空数组 = 不过滤
+  const [scopeFilter, setScopeFilter] = useState<string[]>([])
+  const [scopeLabel, setScopeLabel] = useState<string | undefined>(undefined)
+  // 展开的记忆 id。列表只展示摘要，content/why/howToApply 需要展开才看——
+  // 这三个字段后端已一并查出，不展开就白白浪费了。
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  const load = () => {
+  // 编辑草稿：null = 未在编辑；id 为空 = 新建
+  const [draft, setDraft] = useState<MemoryItem | null>(null)
+
+  const startCreate = () => {
+    setDraft({
+      id: '',
+      memoryType: 'USER_PREFERENCE',
+      scopes: ['Global'],
+      title: '',
+      summary: '',
+      content: '',
+      why: '',
+      howToApply: '',
+      sessionId: '',
+      createdAt: '',
+      updatedAt: '',
+    })
+  }
+
+  const startEdit = (m: MemoryItem) => setDraft({ ...m })
+
+  const saveDraft = async () => {
+    if (!draft) return
+    try {
+      await saveMemory({
+        id: draft.id || undefined,
+        memoryType: draft.memoryType,
+        scopes: draft.scopes,
+        title: draft.title,
+        summary: draft.summary,
+        content: draft.content,
+        why: draft.why || undefined,
+        howToApply: draft.howToApply || undefined,
+      })
+      setDraft(null)
+      load()
+    } catch (err: any) {
+      // 校验错误来自后端（与 IDE 同口径），直接展示原文
+      showError(t('settings.saveFailed'), String(err?.message || err))
+    }
+  }
+
+  const toggleExpanded = (id: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const load = (scopes: string[] = scopeFilter) => {
     setLoading(true)
-    Promise.all([listMemories(), getMemoryMode()])
-      .then(([items, mode]) => {
-        setMemories(items || [])
+    Promise.all([listMemoriesPage(undefined, undefined, scopes.length ? scopes : undefined), getMemoryMode()])
+      .then(([page, mode]) => {
+        setMemories(page.memories || [])
+        setNextCursor(page.nextCursor)
+        setScopeLabel(page.scopeLabel)
         setDbMissing(false)
         setModeId(modeToId(mode.mode, mode.reflection))
       })
@@ -40,6 +102,8 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
         // db 不存在 = Memory 从未启用，按空态处理而不是报错
         if (String(e?.message || e).includes('不存在')) {
           setMemories([])
+          setNextCursor(undefined)
+          setScopeLabel(undefined)
           setDbMissing(true)
           setModeId('off')
         } else {
@@ -49,7 +113,29 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  // 切换 scope 过滤：换过滤条件必须丢掉旧 cursor（后端会拒绝不一致的 cursor）
+  const applyScopeFilter = (scopes: string[]) => {
+    setScopeFilter(scopes)
+    setExpanded(new Set())
+    load(scopes)
+  }
+
+  // 追加下一页：cursor 由后端签发，前端不解释内容
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const page = await listMemoriesPage(undefined, nextCursor, scopeFilter.length ? scopeFilter : undefined)
+      setMemories(prev => [...prev, ...(page.memories || [])])
+      setNextCursor(page.nextCursor)
+    } catch (err: any) {
+      showError(t('common.error'), String(err?.message || err))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  useEffect(() => { load([]) }, [])
 
   const handleModeChange = async (id: string) => {
     setModeId(id)
@@ -100,6 +186,139 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
         </div>
       </div>
 
+      {/* scope 过滤：从当前已加载的记忆里汇总可选 scope */}
+      {(() => {
+        const allScopes = Array.from(new Set(memories.flatMap(m => m.scopes || []))).sort()
+        if (allScopes.length <= 1) return null
+        return (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => applyScopeFilter([])}
+              className={`h-6 px-2 rounded-full text-[11px] transition-colors cursor-pointer ${
+                scopeFilter.length === 0
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/60 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t('agentConfig.memoryScopeAll')}
+            </button>
+            {allScopes.map(s => {
+              const active = scopeFilter.includes(s)
+              return (
+                <button
+                  key={s}
+                  onClick={() => applyScopeFilter(active ? scopeFilter.filter(x => x !== s) : [...scopeFilter, s])}
+                  className={`h-6 px-2 rounded-full text-[11px] font-mono transition-colors cursor-pointer ${
+                    active
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/60 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {s}
+                </button>
+              )
+            })}
+            {scopeLabel && (
+              <span className="text-[10px] text-muted-foreground/70 ml-1">{scopeLabel}</span>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* 新建/编辑表单 */}
+      {draft && (
+        <div className="glass-card border border-primary/40 rounded-xl p-4 space-y-2.5">
+          <div className="text-sm font-medium text-foreground">
+            {draft.id ? t('agentConfig.memoryEdit') : t('agentConfig.memoryCreate')}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <Label className="block text-[11px] text-muted-foreground mb-1">{t('agentConfig.memoryFieldTitle')}</Label>
+              <input
+                value={draft.title}
+                onChange={e => setDraft({ ...draft, title: e.target.value })}
+                placeholder={t('agentConfig.memoryFieldTitleHint')}
+                className="w-full h-8 px-2 rounded-md bg-background border border-border text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <Label className="block text-[11px] text-muted-foreground mb-1">{t('agentConfig.memoryFieldType')}</Label>
+              <Select value={draft.memoryType} onValueChange={v => setDraft({ ...draft, memoryType: v })}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USER_PREFERENCE">USER_PREFERENCE</SelectItem>
+                  <SelectItem value="SEMANTIC">SEMANTIC</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <Label className="block text-[11px] text-muted-foreground mb-1">{t('agentConfig.memoryFieldScopes')}</Label>
+            <input
+              value={draft.scopes.join(', ')}
+              onChange={e => setDraft({ ...draft, scopes: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+              placeholder="Global, workspace:name, repo:github/owner/repo"
+              className="w-full h-8 px-2 rounded-md bg-background border border-border text-xs text-foreground font-mono"
+            />
+          </div>
+
+          <div>
+            <Label className="block text-[11px] text-muted-foreground mb-1">{t('agentConfig.memoryFieldSummary')}</Label>
+            <input
+              value={draft.summary}
+              onChange={e => setDraft({ ...draft, summary: e.target.value })}
+              className="w-full h-8 px-2 rounded-md bg-background border border-border text-xs text-foreground"
+            />
+          </div>
+
+          <div>
+            <Label className="block text-[11px] text-muted-foreground mb-1">{t('agentConfig.memoryContent')}</Label>
+            <textarea
+              value={draft.content}
+              onChange={e => setDraft({ ...draft, content: e.target.value })}
+              rows={4}
+              className="w-full px-2 py-1.5 rounded-md bg-background border border-border text-xs text-foreground font-mono resize-y"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <Label className="block text-[11px] text-muted-foreground mb-1">{t('agentConfig.memoryWhy')}</Label>
+              <input
+                value={draft.why || ''}
+                onChange={e => setDraft({ ...draft, why: e.target.value })}
+                className="w-full h-8 px-2 rounded-md bg-background border border-border text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <Label className="block text-[11px] text-muted-foreground mb-1">{t('agentConfig.memoryHowToApply')}</Label>
+              <input
+                value={draft.howToApply || ''}
+                onChange={e => setDraft({ ...draft, howToApply: e.target.value })}
+                className="w-full h-8 px-2 rounded-md bg-background border border-border text-xs text-foreground"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={saveDraft}
+              className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 cursor-pointer"
+            >
+              {t('common.save')}
+            </button>
+            <button
+              onClick={() => setDraft(null)}
+              className="h-8 px-3 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 记忆列表 */}
       {loading ? (
         <div className="text-center py-10 text-muted-foreground text-sm">{t('common.loading')}</div>
@@ -112,12 +331,27 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
         </div>
       ) : (
         <div className="space-y-2">
-          {memories.map(m => (
+          <button
+            onClick={startCreate}
+            className="w-full h-9 rounded-xl border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Plus size={13} />
+            {t('agentConfig.memoryCreate')}
+          </button>
+          {memories.map(m => {
+            const isOpen = expanded.has(m.id)
+            return (
             <div key={m.id} className="glass-card border border-border rounded-xl p-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-foreground">{m.title || m.id}</span>
+                    <button
+                      onClick={() => toggleExpanded(m.id)}
+                      className="flex items-center gap-1 text-sm font-medium text-foreground hover:text-primary transition-colors cursor-pointer text-left"
+                    >
+                      {isOpen ? <ChevronDown size={13} className="shrink-0" /> : <ChevronRight size={13} className="shrink-0" />}
+                      <span>{m.title || m.id}</span>
+                    </button>
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground font-mono">
                       {m.memoryType}
                     </span>
@@ -129,17 +363,72 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
                   </div>
                   {m.summary && <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{m.summary}</p>}
                   <div className="text-[10px] text-muted-foreground/70 mt-1.5">{m.updatedAt}</div>
+
+                  {isOpen && (
+                    <div className="mt-2.5 pt-2.5 border-t border-border/60 space-y-2">
+                      {m.content && (
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-0.5">
+                            {t('agentConfig.memoryContent')}
+                          </div>
+                          <pre className="text-xs text-foreground whitespace-pre-wrap break-words font-sans leading-relaxed m-0">
+                            {m.content}
+                          </pre>
+                        </div>
+                      )}
+                      {m.why && (
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-0.5">
+                            {t('agentConfig.memoryWhy')}
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed m-0">{m.why}</p>
+                        </div>
+                      )}
+                      {m.howToApply && (
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-0.5">
+                            {t('agentConfig.memoryHowToApply')}
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed m-0">{m.howToApply}</p>
+                        </div>
+                      )}
+                      {m.sessionId && (
+                        <div className="text-[10px] text-muted-foreground/60 font-mono break-all">
+                          {t('agentConfig.memorySession')}: {m.sessionId}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={() => handleDelete(m)}
-                  className="p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors cursor-pointer shrink-0"
-                  title={t('common.delete')}
-                >
-                  <Trash2 size={14} />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => startEdit(m)}
+                    className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                    title={t('common.edit')}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(m)}
+                    className="p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors cursor-pointer"
+                    title={t('common.delete')}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             </div>
-          ))}
+            )
+          })}
+          {nextCursor && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full h-9 rounded-xl border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {loadingMore ? t('common.loading') : t('agentConfig.memoryLoadMore')}
+            </button>
+          )}
         </div>
       )}
     </div>
