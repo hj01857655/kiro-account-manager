@@ -6,7 +6,7 @@ import { useApp } from '../../../hooks/useApp'
 import { getThemeAccent, getGradientAccentButton } from './themeAccent'
 import React from 'react'
 
-function EditMCPModal({ name, config, onClose, onSuccess, projectDir, readOnly }: any) {
+function EditMCPModal({ name, config, source, onClose, onSuccess, projectDir, readOnly }: any) {
   const { t, theme } = useApp()
   const accent = useMemo(() => getThemeAccent(theme), [theme])
   const accentGradientButtonClass = getGradientAccentButton(accent)
@@ -87,7 +87,10 @@ function EditMCPModal({ name, config, onClose, onSuccess, projectDir, readOnly }
         autoApprove: parsed.autoApprove || []
       }
 
-      await saveMcpServer(name, newConfig, projectDir || null)
+      // 写入层级跟随来源：user/power 来源写回用户级，避免把用户级配置
+      // 复制到项目级制造冗余覆盖
+      const targetDir = source === 'user' || source === 'power' ? null : (projectDir || null)
+      await saveMcpServer(name, newConfig, targetDir)
       onSuccess()
     } catch (e) {
       setError(String(e))

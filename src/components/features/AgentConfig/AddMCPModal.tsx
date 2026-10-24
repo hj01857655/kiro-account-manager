@@ -8,6 +8,7 @@ import { getThemeAccent, getGradientAccentButton } from './themeAccent'
 import React from 'react'
 
 const DUPLICATE_STRATEGY_KEY = 'mcpDuplicateStrategy'
+const SCOPE_KEY = 'mcpTargetScope'
 
 function AddMCPModal({ onClose, onSuccess, projectDir, readOnly }: any) {
   const { t, theme } = useApp()
@@ -27,6 +28,11 @@ function AddMCPModal({ onClose, onSuccess, projectDir, readOnly }: any) {
   const [existingServers, setExistingServers] = useState<string[]>([])
   const [duplicates, setDuplicates] = useState<string[]>([])
   const [duplicateStrategy, setDuplicateStrategy] = useState(() => localStorage.getItem(DUPLICATE_STRATEGY_KEY) || 'skip')
+  // 保存层级：有项目目录时可选，默认跟 projectDir；持久化用户上次的选择
+  const [targetScope, setTargetScope] = useState<'user' | 'project'>(
+    () => (localStorage.getItem(SCOPE_KEY) as 'user' | 'project') || (projectDir ? 'project' : 'user')
+  )
+  const saveDir = targetScope === 'project' && projectDir ? projectDir : null
 
   const getUniqueServerName = (baseName: string, occupiedNames: Set<string>) => {
     let i = 1
@@ -49,6 +55,11 @@ function AddMCPModal({ onClose, onSuccess, projectDir, readOnly }: any) {
   useEffect(() => {
     localStorage.setItem(DUPLICATE_STRATEGY_KEY, duplicateStrategy)
   }, [duplicateStrategy])
+
+  // 持久化保存层级选择
+  useEffect(() => {
+    localStorage.setItem(SCOPE_KEY, targetScope)
+  }, [targetScope])
 
   // 初始化示例
   useEffect(() => {
@@ -175,7 +186,7 @@ function AddMCPModal({ onClose, onSuccess, projectDir, readOnly }: any) {
           disabled: config.disabled ?? false,
           autoApprove: config.autoApprove || []
         }
-        await saveMcpServer(targetName, finalConfig, projectDir || null)
+        await saveMcpServer(targetName, finalConfig, saveDir)
         results.success.push(targetName)
         occupiedNames.add(targetName)
       } catch (e) {
@@ -307,6 +318,25 @@ function AddMCPModal({ onClose, onSuccess, projectDir, readOnly }: any) {
               支持 {`{ "name": config }`} 或 {`{ "mcpServers": { ... } }`} 格式
             </div>
           </div>
+
+          {/* 保存层级：仅选择了项目目录时可选 */}
+          {projectDir && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground">保存到:</span>
+              <button
+                onClick={() => setTargetScope('user')}
+                className={`cursor-pointer px-2 py-1 rounded border text-xs transition-colors duration-200 focus:outline-none focus:ring-2 ${accent.ring} ${targetScope === 'user' ? `${accent.border} ${accent.bgSoft}` : `border-border hover:bg-muted/50`}`}
+              >
+                全局（用户级）
+              </button>
+              <button
+                onClick={() => setTargetScope('project')}
+                className={`cursor-pointer px-2 py-1 rounded border text-xs transition-colors duration-200 focus:outline-none focus:ring-2 ${accent.ring} ${targetScope === 'project' ? `${accent.border} ${accent.bgSoft}` : `border-border hover:bg-muted/50`}`}
+              >
+                当前项目
+              </button>
+            </div>
+          )}
 
           {/* 重名处理 */}
           {duplicates.length > 0 && (

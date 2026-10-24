@@ -85,12 +85,20 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
 
   useEffect(() => { loadConfig() }, [loadConfig])
 
+  // 写入层级按来源决定：user/power 来源的配置写在用户级（传 null），
+  // project/overridden/redundant 写在项目级——否则编辑一个用户级 server
+  // 会把它复制到项目级，批量制造「冗余覆盖」
+  const dirFor = (name: string) => {
+    const s = sources[name]
+    return s === 'user' || s === 'power' ? null : (projectDir || null)
+  }
+
   const handleToggle = async (name: string, disabled: boolean) => {
     if (readOnly) return
     const oldDisabled = servers[name]?.disabled
     setServers((prev: any) => ({ ...prev, [name]: { ...prev[name], disabled } }))
     try {
-      await toggleMcpServer(name, disabled, projectDir || null)
+      await toggleMcpServer(name, disabled, dirFor(name))
     } catch (e) {
       setServers((prev: any) => ({ ...prev, [name]: { ...prev[name], disabled: oldDisabled } }))
       handleUiError('切换 MCP 状态失败', e, { userMessage: '切换状态失败' })
@@ -101,7 +109,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
     if (readOnly) return
     if (!await showConfirm(t('mcp.confirmDelete'), `${t('common.confirm')} ${name}?`)) return
     try {
-      await deleteMcpServer(name, projectDir || null)
+      await deleteMcpServer(name, dirFor(name))
       setServers((prev: any) => { const next = { ...prev }; delete next[name]; return next })
     } catch (e) {
       handleUiError('删除 MCP 服务失败', e, { userMessage: '删除失败' })
@@ -204,6 +212,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
         <EditMCPModal
           name={editingServer.name}
           config={editingServer.config}
+          source={sources[editingServer.name]}
           onClose={() => setEditingServer(null)}
           onSuccess={() => { setEditingServer(null); loadConfig() }}
           projectDir={projectDir}
