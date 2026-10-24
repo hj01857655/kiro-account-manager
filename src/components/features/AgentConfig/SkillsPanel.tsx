@@ -38,18 +38,19 @@ const buildSkillContent = (name: string, description: string, body: string) => {
   return fm + '\n---\n' + body
 }
 
-// scope 徽章
+// scope 徽章：标签走 i18n，此前硬编码中文导致英文/俄文界面仍显示「项目/用户」
 const ScopeBadge = ({ scope, accent }: any) => {
+  const { t } = useApp()
   if (scope === 'project') {
     return (
       <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-500 border border-amber-500/30">
-        <FolderOpen size={10} />项目
+        <FolderOpen size={10} />{t('agentConfig.scopeTagProject')}
       </span>
     )
   }
   return (
     <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${accent.scopeBadge}`}>
-      <Globe size={10} />用户
+      <Globe size={10} />{t('agentConfig.scopeTagUser')}
     </span>
   )
 }
