@@ -107,6 +107,50 @@ impl SteeringManager {
         })
     }
 
+    /// 解析 `fileMatchPattern`，保留数组形态。
+    ///
+    /// 不能用 `parse_field`：它的 `([^'"\n]+)` 遇到 `fileMatchPattern: ["a", "b"]`
+    /// 只取到 `[`，refine 往返时会把用户的数组写成畸形值。IDE 的 zod schema 是
+    /// `string | string[]`，两种形态都必须原样保留。
+    fn parse_file_match_pattern(frontmatter: &str) -> Option<String> {
+        for line in frontmatter.lines() {
+            let line = line.trim();
+            let Some(rest) = line.strip_prefix("fileMatchPattern:") else {
+                continue;
+            };
+            let value = rest.trim();
+            if value.is_empty() {
+                return None;
+            }
+            if value.starts_with('[') {
+                return Some(value.to_string());
+            }
+            return Some(value.trim_matches(|c| c == '\'' || c == '"').to_string());
+        }
+        None
+    }
+
+    /// 判断单字符串模式里是否含**字面逗号**（对应 IDE 的 `fileMatchPatternLiteralComma`）。
+    ///
+    /// IDE 的 `tlp` 只看 `[]` 之外的逗号；`elp` 另用 `{-?\d+\.\.-?\d+}` 排除计数区间写法。
+    /// 用户写 `"a, b"` 时以为在写“或”，实际逗号是字面字符，两个模式都匹配不到。
+    fn has_literal_comma(raw: &str) -> bool {
+        let stripped = regex::Regex::new(r"\{-?\d+\.\.-?\d+(\.\.-?\d+)?\}")
+            .ok()
+            .map(|re| re.replace_all(raw, "").to_string())
+            .unwrap_or_else(|| raw.to_string());
+        let mut in_brackets = false;
+        for ch in stripped.chars() {
+            match ch {
+                '[' => in_brackets = true,
+                ']' => in_brackets = false,
+                ',' if !in_brackets => return true,
+                _ => {}
+            }
+        }
+        false
+    }
+
     fn parse_parts(
         content: &str,
     ) -> (
@@ -127,7 +171,7 @@ impl SteeringManager {
                 .unwrap_or_else(|| "always".to_string());
             let name = Self::parse_field(&frontmatter, "name");
             let description = Self::parse_field(&frontmatter, "description");
-            let file_match_pattern = Self::parse_field(&frontmatter, "fileMatchPattern");
+            let file_match_pattern = Self::parse_file_match_pattern(&frontmatter);
             (inclusion, name, description, file_match_pattern, body)
         } else {
             ("always".to_string(), None, None, None, content.to_string())
@@ -162,7 +206,13 @@ impl SteeringManager {
 
         if inclusion == "fileMatch" {
             let pattern = file_match_pattern.unwrap_or("**/*").trim();
-            frontmatter.push_str(&format!("\nfileMatchPattern: '{pattern}'"));
+            // 数组形态原样写入（IDE 支持 string[]）；单值加引号，
+            // 避免含逗号的模式被 YAML 解析成多值
+            if pattern.starts_with('[') {
+                frontmatter.push_str(&format!("\nfileMatchPattern: {pattern}"));
+            } else {
+                frontmatter.push_str(&format!("\nfileMatchPattern: '{pattern}'"));
+            }
         }
 
         format!("{frontmatter}\n---\n{}\n", body.trim())
@@ -337,19 +387,23 @@ impl SteeringManager {
                     .to_string(),
             );
         }
-        if inclusion.as_deref() == Some("fileMatch")
-            && Self::parse_field(frontmatter, "fileMatchPattern").is_none()
-        {
-            issues.push(
-                "inclusion: fileMatch 建议提供 fileMatchPattern，缺失时按 **/* 全匹配".to_string(),
-            );
-        }
-        // 数组形态提示：bundle 支持 string[]，编辑器只产出单值
-        if frontmatter.contains("fileMatchPattern:") && frontmatter.matches("\n- ").count() > 0 {
-            issues.push(
-                "fileMatchPattern 检测到数组写法：IDE 支持 string[]，但本编辑器保存时会按单值处理"
-                    .to_string(),
-            );
+        if inclusion.as_deref() == Some("fileMatch") {
+            match Self::parse_file_match_pattern(frontmatter) {
+                None => issues.push(
+                    "inclusion: fileMatch 建议提供 fileMatchPattern，缺失时按 **/* 全匹配"
+                        .to_string(),
+                ),
+                Some(raw) => {
+                    // 对齐 IDE 的 fileMatchPatternLiteralComma：单字符串里的逗号是字面字符，
+                    // 不是“或”分隔符。IDE 只在 [] 之外出现逗号时报，且排除 {n..m} 写法。
+                    if !raw.trim_start().starts_with('[') && Self::has_literal_comma(&raw) {
+                        issues.push(
+                            "fileMatchPattern 里的逗号按字面字符匹配，不会分隔多个模式；如需多个模式请写成数组：fileMatchPattern: [\"a\", \"b\"]"
+                                .to_string(),
+                        );
+                    }
+                }
+            }
         }
         issues
     }
@@ -528,6 +582,12 @@ const SKIP_DIRS: &[&str] = &[
     ".nuxt",
     ".venv",
     "venv",
+    // 与 IDE 的 Goe 列表对齐：它还跳 `.vs`（Visual Studio）和 `env`/`.env`
+    // （Python 虚拟环境）。少了这三项，Windows 上的 C# 项目会把 `.vs` 下的
+    // AGENTS.md 也扫进来，而 IDE 侧不会。
+    "env",
+    ".env",
+    ".vs",
     "__pycache__",
     ".idea",
     ".vscode",
@@ -535,6 +595,14 @@ const SKIP_DIRS: &[&str] = &[
 
 /// 递归深度上限，防止超大仓库或异常符号链接导致长时间遍历。
 const MAX_DEPTH: usize = 12;
+
+/// 扫描总量上限，对齐 IDE `scanNestedAgentsMd` 的默认参数
+/// （`maxDirectories: 2e4`、`maxResults: 200`）。
+///
+/// 只有深度限制时，一个每层都有子目录的仓库仍可能遍历上万次；
+/// IDE 本身会在这个量级截断，管理端保持同口径才不会“扫出 IDE 看不到的文件”。
+const MAX_SCAN_DIRS: usize = 20_000;
+const MAX_SCAN_RESULTS: usize = 200;
 
 /// 忽略规则文件，按优先级从高到低。
 ///
@@ -754,7 +822,8 @@ impl SteeringManager {
         let mut out: Vec<AgentsMdFile> = Vec::new();
         // 项目根的忽略文件先入栈，子目录的随后追加（gitignore 语义：越深优先级越高）
         let root_rules = Self::load_ignore_rules(&root, DEFAULT_IGNORE_FILES);
-        Self::walk_agents_md(&root, &root, 0, &root_rules, &mut out);
+        let mut visited_dirs = 0usize;
+        Self::walk_agents_md(&root, &root, 0, &root_rules, &mut out, &mut visited_dirs);
         out.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| a.rel_path.cmp(&b.rel_path)));
         Ok(out)
     }
@@ -777,8 +846,14 @@ impl SteeringManager {
         depth: usize,
         parent_rules: &IgnoreRules,
         out: &mut Vec<AgentsMdFile>,
+        visited_dirs: &mut usize,
     ) {
-        if depth > MAX_DEPTH {
+        // 与 IDE scanNestedAgentsMd 同口径截断：目录数与结果数都有上限，
+        // 否则巨型仓库上管理端会比 IDE 多扫出文件，两边清单对不上。
+        if depth > MAX_DEPTH
+            || *visited_dirs >= MAX_SCAN_DIRS
+            || out.len() >= MAX_SCAN_RESULTS
+        {
             return;
         }
         let entries = match fs::read_dir(dir) {
@@ -812,6 +887,7 @@ impl SteeringManager {
             }
 
             if is_dir {
+                *visited_dirs += 1;
                 // 子目录若有自己的忽略文件，合并后向下传递；否则沿用父级。
                 // 用 clone 而非 Rc：规则集很小，且避免了把生命周期缠进递归签名。
                 let mut child_rules = parent_rules.clone();
@@ -821,7 +897,7 @@ impl SteeringManager {
                 {
                     child_rules.extend_from(&text);
                 }
-                Self::walk_agents_md(root, &path, depth + 1, &child_rules, out);
+                Self::walk_agents_md(root, &path, depth + 1, &child_rules, out, visited_dirs);
                 continue;
             }
 
@@ -1002,6 +1078,12 @@ mod tests {
         let project_root = temp_dir("kiroignore");
         fs::create_dir_all(project_root.join("src")).expect("src dir should exist");
         fs::create_dir_all(project_root.join("vendor")).expect("vendor dir should exist");
+        // 对齐 IDE 的 Goe 列表：`.vs` / `env` 也在硬跳过之列
+        for name in [".vs", "env"] {
+            let dir = project_root.join(name);
+            fs::create_dir_all(&dir).expect("skip dir should exist");
+            fs::write(dir.join("AGENTS.md"), name).expect("nested agents written");
+        }
         fs::write(project_root.join(".kiroignore"), "vendor/\n").expect("kiroignore written");
         fs::write(project_root.join("AGENTS.md"), "root").expect("root agents written");
         fs::write(project_root.join("src/AGENTS.md"), "src").expect("src agents written");
@@ -1018,8 +1100,49 @@ mod tests {
             !rel_paths.contains(&"vendor/AGENTS.md"),
             "vendor/AGENTS.md should be ignored by .kiroignore, got {rel_paths:?}"
         );
+        for name in [".vs", "env"] {
+            let skipped = format!("{name}/AGENTS.md");
+            assert!(
+                !rel_paths.contains(&skipped.as_str()),
+                "{skipped} should be hard-skipped like the IDE does, got {rel_paths:?}"
+            );
+        }
 
         fs::remove_dir_all(project_root).ok();
+    }
+
+    #[test]
+    fn diagnose_flags_literal_comma_in_single_string_pattern() {
+        // 单字符串里的逗号是字面字符，IDE 会报 fileMatchPatternLiteralComma
+        let issues = SteeringManager::diagnose_content(
+            "---\ninclusion: fileMatch\nfileMatchPattern: 'src/**, lib/**'\n---\nBody",
+        );
+        assert!(
+            issues.iter().any(|i| i.contains("逗号")),
+            "literal comma should be flagged, got {issues:?}"
+        );
+
+        // 数组形态是合法写法，不应报
+        let issues = SteeringManager::diagnose_content(
+            "---\ninclusion: fileMatch\nfileMatchPattern: [\"src/**\", \"lib/**\"]\n---\nBody",
+        );
+        assert!(
+            issues.is_empty(),
+            "array form is valid and should not be flagged, got {issues:?}"
+        );
+    }
+
+    #[test]
+    fn refine_content_preserves_array_file_match_pattern() {
+        // 数组形态必须原样往返，不能退化成 "["
+        let refined = SteeringManager::refine_content(
+            "a.md",
+            "---\ninclusion: fileMatch\nfileMatchPattern: [\"src/**\", \"lib/**\"]\n---\nBody",
+        );
+        assert!(
+            refined.contains("[\"src/**\", \"lib/**\"]"),
+            "array pattern should survive refine, got:\n{refined}"
+        );
     }
 
     #[test]
