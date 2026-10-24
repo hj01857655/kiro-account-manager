@@ -324,6 +324,22 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
                         <div className="flex-1 min-w-0">
                           <span className={`font-bold text-sm ${isSelected ? accent.text : "text-foreground"} truncate block`}>
                             {skill.name}
+                            {skill.issues?.length > 0 && (
+                              <span
+                                title={skill.issues.join('\n')}
+                                className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-normal align-middle"
+                              >
+                                {t('agentConfig.skillInvalid')}
+                              </span>
+                            )}
+                            {skills.filter(s => s.name === skill.name).length > 1 && (
+                              <span
+                                title={t('agentConfig.assetDuplicateDesc')}
+                                className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-normal align-middle"
+                              >
+                                {t('agentConfig.assetDuplicate')}
+                              </span>
+                            )}
                           </span>
                           {parsed.description && (
                             <span className={`text-xs text-muted-foreground truncate block mt-0.5`}>{parsed.description}</span>

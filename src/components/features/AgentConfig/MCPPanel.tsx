@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { getMcpConfig, getMcpToolStats, toggleMcpServer, deleteMcpServer } from '../../../api/mcpApi'
+import { getMcpConfig, getMcpSources, getMcpToolStats, toggleMcpServer, deleteMcpServer } from '../../../api/mcpApi'
 import { useApp } from '../../../hooks/useApp'
 import { useDialog } from '../../../contexts/DialogContext'
 import { Server, Plus, Edit2, Trash2, Terminal, Search, X, Wrench } from 'lucide-react'
@@ -61,6 +61,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
   const [editingServer, setEditingServer] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [toolCount, setToolCount] = useState(0)
+  const [sources, setSources] = useState<Record<string, string>>({})
 
   const loadConfig = useCallback(async () => {
     try {
@@ -68,10 +69,13 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
       const mcpServers = config.mcpServers || {}
       setServers(mcpServers)
       onCountChange?.(Object.keys(mcpServers).length)
-      
+
       // 加载工具统计
       const stats = await getMcpToolStats(projectDir || null)
       setToolCount(stats.estimatedTools)
+
+      // 加载各 server 的配置来源（用户级/项目级/覆盖/冗余/插件）
+      getMcpSources(projectDir || null).then(setSources).catch(() => setSources({}))
     } catch (e) {
       handleUiError('加载 MCP 配置失败', e, { userMessage: '加载 MCP 配置失败' })
     } finally {
@@ -175,6 +179,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
                 key={name}
                 name={name}
                 config={config}
+                source={sources[name]}
                 accent={accent}
                 colors={colors}
                 t={t}
@@ -229,7 +234,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
 }
 
 // MCP 服务器卡片
-function MCPServerItem({ name, config, accent, colors, onToggle, onEdit, onDelete, t, readOnly }: any) {
+function MCPServerItem({ name, config, source, accent, colors, onToggle, onEdit, onDelete, t, readOnly }: any) {
   const isDisabled = config.disabled
   const commandStr = [config.command, ...(config.args || [])].join(' ')
   const envCount = Object.keys(config.env || {}).length
@@ -246,6 +251,20 @@ function MCPServerItem({ name, config, accent, colors, onToggle, onEdit, onDelet
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <h3 className={`font-semibold text-foreground ${isDisabled ? 'opacity-50' : ''}`}>{name}</h3>
+          {source && (
+            <span
+              title={t(`agentConfig.mcpSource_${source}Desc`)}
+              className={`text-[10px] px-1.5 py-0.5 rounded ${
+                source === 'redundant' ? 'bg-red-500/15 text-red-600 dark:text-red-400'
+                : source === 'overridden' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                : source === 'project' ? 'bg-primary/10 text-primary'
+                : source === 'power' ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                : 'bg-muted/60 text-muted-foreground'
+              }`}
+            >
+              {t(`agentConfig.mcpSource_${source}`)}
+            </span>
+          )}
           {isDisabled && (
             <span className={`text-xs px-2 py-0.5 rounded ${colors.badgeDisabled}`}>{t('mcp.disabled')}</span>
           )}

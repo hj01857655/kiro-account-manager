@@ -25,6 +25,9 @@ pub struct SkillInfo {
     pub size: u64,
     pub modified_at: Option<String>,
     pub extra_files: Vec<String>,
+    /// 内容级诊断（diagnose_skill_content），空 = 通过；list 路径随条目返回供前端展示
+    #[serde(default)]
+    pub issues: Vec<String>,
     /// "user" 或 "project"
     pub scope: String,
 }
@@ -92,12 +95,14 @@ impl SkillsManager {
                 })
                 .unwrap_or_default();
 
+            let issues = Self::diagnose_skill_content(&content);
             skills.push(SkillInfo {
                 name,
                 content,
                 size,
                 modified_at,
                 extra_files,
+                issues,
                 scope: scope.to_string(),
             });
         }
@@ -534,12 +539,14 @@ impl SkillsManager {
             })
             .unwrap_or_default();
 
+        let issues = Self::diagnose_skill_content(&content);
         Ok(SkillInfo {
             name: name.to_string(),
             content,
             size,
             modified_at,
             extra_files,
+            issues,
             scope: scope.to_string(),
         })
     }

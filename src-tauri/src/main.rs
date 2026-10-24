@@ -108,7 +108,8 @@ use commands::machine_guid::{
     reset_system_machine_guid, restart_as_admin, set_custom_machine_guid,
 };
 use commands::mcp_cmd::{
-    delete_mcp_server, get_mcp_config, get_mcp_tool_stats, save_mcp_server, toggle_mcp_server,
+    delete_mcp_server, get_mcp_config, get_mcp_sources, get_mcp_tool_stats, save_mcp_server,
+    toggle_mcp_server,
 };
 
 use commands::custom_agents_cmd::{
@@ -667,6 +668,7 @@ fn main() {
             detect_installed_browsers,
             // MCP 管理命令
             get_mcp_config,
+            get_mcp_sources,
             save_mcp_server,
             delete_mcp_server,
             toggle_mcp_server,

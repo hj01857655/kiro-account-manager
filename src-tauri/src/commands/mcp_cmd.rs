@@ -152,3 +152,49 @@ pub async fn get_mcp_tool_stats(project_dir: Option<String>) -> Result<serde_jso
     })
     .await
 }
+
+/// 每个 MCP server 的配置来源：
+/// user（仅用户级）/ project（仅项目级）/ redundant（项目级覆盖但内容相同，冗余）
+/// overridden（项目级覆盖且内容不同）/ power（来自 powers 插件注册的 url 型）
+#[tauri::command]
+pub async fn get_mcp_sources(
+    project_dir: Option<String>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    run_blocking_task(move || {
+        let user_path = McpConfig::config_path().ok_or("无法获取用户目录")?;
+        let user_cfg = McpConfig::load_from_path(&user_path)?;
+        let project_cfg = match project_dir.as_deref() {
+            Some(pd) => McpConfig::load_from_path(&McpConfig::project_config_path(pd))?,
+            None => McpConfig::default(),
+        };
+
+        let mut map = std::collections::HashMap::new();
+        for name in user_cfg.mcp_servers.keys() {
+            map.insert(name.clone(), "user".to_string());
+        }
+        for (name, server) in &project_cfg.mcp_servers {
+            match user_cfg.mcp_servers.get(name) {
+                None => {
+                    map.insert(name.clone(), "project".to_string());
+                }
+                Some(user_server) => {
+                    // 内容比较：序列化等值。相同的项目级覆盖是冗余（去重场景主盯它），
+                    // 不同的覆盖真实生效
+                    let same = serde_json::to_value(user_server).ok()
+                        == serde_json::to_value(server).ok();
+                    map.insert(
+                        name.clone(),
+                        if same { "redundant".to_string() } else { "overridden".to_string() },
+                    );
+                }
+            }
+        }
+        if let Some(powers) = &user_cfg.powers {
+            for name in powers.mcp_servers.keys() {
+                map.entry(name.clone()).or_insert_with(|| "power".to_string());
+            }
+        }
+        Ok(map)
+    })
+    .await
+}

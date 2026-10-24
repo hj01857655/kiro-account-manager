@@ -6,6 +6,11 @@ export function getMcpConfig<T = any>(projectDir: string | null = null) {
   return invoke<T>('get_mcp_config', { projectDir })
 }
 
+// 每个 server 的配置来源：user / project / redundant / overridden / power
+export function getMcpSources(projectDir: string | null = null) {
+  return invoke<Record<string, string>>('get_mcp_sources', { projectDir })
+}
+
 // 获取 MCP 工具统计
 export function getMcpToolStats<T = any>(projectDir: string | null = null) {
   return invoke<T>('get_mcp_tool_stats', { projectDir })

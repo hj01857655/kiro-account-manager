@@ -440,6 +440,24 @@ pub fn save_memory_impl(draft: MemoryDraft) -> Result<String, String> {
         .transaction()
         .map_err(|e| format!("开启事务失败: {e}"))?;
 
+    // title 唯一性（归一化后比较，对齐 §2.3 的匹配语义）：
+    // 存储层允许重名，但重复 title 会让 IDE 的按名查询报 ambiguous——
+    // 管理端写时就拒绝，避免造出这种状态。排除自身 id（编辑不改名时放行）。
+    // title 已被形状校验限定为 ASCII [a-zA-Z0-9-]，SQL lower/trim 与 Rust 侧一致。
+    let norm_title = draft.title.trim().to_lowercase();
+    let dup: Option<String> = tx
+        .query_row(
+            "SELECT id FROM memories WHERE lower(trim(title)) = ?1 AND id != ?2 LIMIT 1",
+            rusqlite::params![norm_title, draft.id.as_deref().unwrap_or("")],
+            |r| r.get(0),
+        )
+        .ok();
+    if let Some(other) = dup {
+        return Err(format!(
+            "同名记忆已存在（title 与 {other} 归一化后冲突），换一个 title 或直接编辑那条"
+        ));
+    }
+
     let scopes_json = serde_json::to_string(&draft.scopes)
         .map_err(|e| format!("序列化 scopes 失败: {e}"))?;
     let now = now_rfc3339();

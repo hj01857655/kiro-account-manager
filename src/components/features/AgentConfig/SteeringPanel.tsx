@@ -477,6 +477,14 @@ function FileList({ files, selectedFile, onSelect, onDelete, onRefresh, onCreate
                             <div className="flex-1 min-w-0">
                               <span className={`font-semibold text-sm ${isSelected ? accent.text : "text-foreground"} truncate block leading-tight`}>
                                 {parsed.name || file.fileName.replace('.md', '')}
+                                {files.filter((f: any) => f.fileName === file.fileName).length > 1 && (
+                                  <span
+                                    title={t('agentConfig.assetDuplicateDesc')}
+                                    className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-normal align-middle"
+                                  >
+                                    {t('agentConfig.assetDuplicate')}
+                                  </span>
+                                )}
                               </span>
                               {parsed.description && (
                                 <span className={`text-xs text-muted-foreground truncate block mt-0.5 leading-tight`}>{parsed.description}</span>
