@@ -46,9 +46,9 @@ export function readRemoteSessionsEnvOverride() {
   return invoke<string | null>('read_remote_sessions_env_override')
 }
 
-// 用系统默认程序打开 Kiro IDE 的 settings.json（文件不存在时会先创建）
-export function openKiroSettingsFile() {
-  return invoke('open_kiro_settings_file')
+// 用系统默认程序打开 Kiro 配置文件（kind: settings/mcp/sandbox，文件不存在时会先创建）
+export function openKiroConfigFile(kind: 'settings' | 'mcp' | 'sandbox') {
+  return invoke('open_kiro_config_file', { kind })
 }
 
 // 设置 Kiro IDE 代理

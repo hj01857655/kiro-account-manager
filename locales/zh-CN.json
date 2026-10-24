@@ -354,7 +354,7 @@
   "settings.agentStartupMode_agentFocus": "Agent 聚焦",
   "settings.agentNumberInvalid": "请输入有效的非负数字",
   "settings.agentJsonInvalid": "JSON 格式无效",
-  "settings.openSettingsFile": "打开 settings.json",
+  "settings.openSettingsFile": "编辑 Kiro 设置",
   "settings.telemetry": "遥测与隐私",
   "settings.telemetryDesc": "控制 Kiro IDE 收集的数据类型",
   "settings.telemetryContentCollection": "内容收集（用于改进服务）",
@@ -1825,5 +1825,7 @@
   "gatewayMapping.addedRule": "已添加映射规则: {{name}}",
   "gatewayMapping.presetLoaded": "成功载入 {{count}} 条预置映射规则",
   "gatewayMapping.presetExists": "所有预置映射规则均已存在",
-  "gatewaySummary.security.keysFixed": "固定为 kiro"
+  "gatewaySummary.security.keysFixed": "固定为 kiro",
+  "settings.openMcpFile": "编辑 MCP 配置",
+  "settings.openSandboxFile": "编辑沙箱配置"
 }

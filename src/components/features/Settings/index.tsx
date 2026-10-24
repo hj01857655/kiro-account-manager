@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getKiroSettings, getAppSettings, getCustomKiroPath, checkIdeInstallation, getAppDataDir, setKiroProxy, setKiroModel, clearCustomKiroPath, detectInstalledBrowsers, detectSystemProxy, openAppDataDir, openKiroSettingsFile, setKiroNotification, setKiroTelemetry } from '../../../api/settingsApi'
+import { getKiroSettings, getAppSettings, getCustomKiroPath, checkIdeInstallation, getAppDataDir, setKiroProxy, setKiroModel, clearCustomKiroPath, detectInstalledBrowsers, detectSystemProxy, openAppDataDir, openKiroConfigFile, setKiroNotification, setKiroTelemetry } from '../../../api/settingsApi'
 import { getSystemMachineGuid, resetSystemMachineGuid, restartAsAdmin } from '../../../api/kiroApi'
 import { emit } from '@tauri-apps/api/event'
 import { Palette, Settings as SettingsIcon, LayoutDashboard, Cpu, FileJson } from 'lucide-react'
@@ -419,10 +419,10 @@ function Settings() {
         }
     }
 
-    // 用系统默认程序打开 Kiro IDE 的 settings.json（原始配置文件）
-    const handleOpenKiroSettingsFile = async () => {
+    // 用系统默认程序打开 Kiro 配置文件（settings/mcp/sandbox，原始文件直接编辑）
+    const handleOpenKiroConfigFile = async (kind: 'settings' | 'mcp' | 'sandbox') => {
         try {
-            await openKiroSettingsFile()
+            await openKiroConfigFile(kind)
         } catch (err: any) {
             await showError(t('settings.openFailed'), err.toString())
         }
@@ -461,10 +461,16 @@ function Settings() {
                     {/* 仅内容区滚动：标题与标签栏固定，不随内容一起滚 */}
                     <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                     <TabsContent value="ide">
-                        {/* 打开 Kiro IDE 原始 settings.json，便于直接编辑配置文件 */}
-                        <div className="mb-3 flex items-center justify-end">
-                            <Button variant="outline" size="sm" onClick={handleOpenKiroSettingsFile}>
+                        {/* 打开 Kiro 原始配置文件（settings/mcp/sandbox），便于直接编辑；悬停显示真实路径 */}
+                        <div className="mb-3 flex items-center justify-end gap-2">
+                            <Button variant="outline" size="sm" title="~/.kiro/settings/settings.json" onClick={() => handleOpenKiroConfigFile('settings')}>
                                 <FileJson size={14} /> {t('settings.openSettingsFile')}
+                            </Button>
+                            <Button variant="outline" size="sm" title="~/.kiro/settings/mcp.json" onClick={() => handleOpenKiroConfigFile('mcp')}>
+                                <FileJson size={14} /> {t('settings.openMcpFile')}
+                            </Button>
+                            <Button variant="outline" size="sm" title="~/.kiro/settings/sandbox.json" onClick={() => handleOpenKiroConfigFile('sandbox')}>
+                                <FileJson size={14} /> {t('settings.openSandboxFile')}
                             </Button>
                         </div>
                         {/* KiroAgentAdvancedPanel 已并入 SettingsKiro，

@@ -97,7 +97,7 @@ use commands::kiro_cli_cmd::{
 };
 //kiroshe
 use commands::kiro_settings_cmd::{
-    get_kiro_settings, open_kiro_settings_file, read_cloud_config_enabled,
+    get_kiro_settings, open_kiro_config_file, read_cloud_config_enabled,
     read_remote_sessions_env_override, set_kiro_agent_autonomy,
     set_kiro_agent_setting, set_kiro_codebase_indexing, set_kiro_configure_mcp, set_kiro_debug_logs,
     set_kiro_model, set_kiro_notification, set_kiro_proxy, set_kiro_reference_tracker,
@@ -624,7 +624,7 @@ fn main() {
             is_kiro_ide_running,
             // Kiro IDE 设置命令
             get_kiro_settings,
-            open_kiro_settings_file,
+            open_kiro_config_file,
             read_cloud_config_enabled,
             read_remote_sessions_env_override,
             get_permissions,

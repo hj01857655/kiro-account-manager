@@ -354,7 +354,7 @@
   "settings.agentStartupMode_agentFocus": "Agent focus",
   "settings.agentNumberInvalid": "Enter a valid non-negative number",
   "settings.agentJsonInvalid": "Invalid JSON",
-  "settings.openSettingsFile": "Open settings.json",
+  "settings.openSettingsFile": "Edit Kiro Settings",
   "settings.telemetry": "Telemetry & Privacy",
   "settings.telemetryDesc": "Control data types collected by Kiro IDE",
   "settings.telemetryContentCollection": "Content collection (for service improvement)",
@@ -1825,5 +1825,7 @@
   "gatewayMapping.addedRule": "Added mapping rule: {{name}}",
   "gatewayMapping.presetLoaded": "Successfully loaded {{count}} preset mapping rules",
   "gatewayMapping.presetExists": "All preset mapping rules already exist",
-  "gatewaySummary.security.keysFixed": "Fixed: kiro"
+  "gatewaySummary.security.keysFixed": "Fixed: kiro",
+  "settings.openMcpFile": "Edit MCP Config",
+  "settings.openSandboxFile": "Edit Sandbox Config"
 }

@@ -354,7 +354,7 @@
   "settings.agentStartupMode_agentFocus": "Фокус на агенте",
   "settings.agentNumberInvalid": "Введите корректное неотрицательное число",
   "settings.agentJsonInvalid": "Некорректный JSON",
-  "settings.openSettingsFile": "Открыть settings.json",
+  "settings.openSettingsFile": "Редактировать настройки Kiro",
   "settings.telemetry": "Телеметрия и конфиденциальность",
   "settings.telemetryDesc": "Управление типами данных, собираемых Kiro IDE",
   "settings.telemetryContentCollection": "Сбор содержимого (для улучшения службы)",
@@ -1825,5 +1825,7 @@
   "gatewayMapping.addedRule": "Добавлено правило сопоставления: {{name}}",
   "gatewayMapping.presetLoaded": "Успешно загружено {{count}} предустановленных правил",
   "gatewayMapping.presetExists": "Все предустановленные правила уже существуют",
-  "gatewaySummary.security.keysFixed": "Фиксированный: kiro"
+  "gatewaySummary.security.keysFixed": "Фиксированный: kiro",
+  "settings.openMcpFile": "Редактировать конфигурацию MCP",
+  "settings.openSandboxFile": "Редактировать конфигурацию песочницы"
 }

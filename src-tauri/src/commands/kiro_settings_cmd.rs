@@ -1006,19 +1006,27 @@ pub async fn set_kiro_agent_setting(key: String, value: serde_json::Value) -> Re
     run_kiro_blocking(move || set_kiro_generic_inner(key, value)).await
 }
 
-/// 用系统默认程序打开 Kiro IDE 的 `settings.json`，便于直接编辑原始配置。
+/// 用系统默认程序打开 Kiro 配置文件（kind: "settings" | "mcp" | "sandbox"）。
 ///
-/// 文件不存在时会先创建（父目录 + 空 JSON 对象），保证「打开」始终有目标；
+/// 文件不存在时会先创建（父目录 + 空对象），保证「打开」始终有目标；
 /// 与 `app_data_cmd::open_app_data_dir` 采用同样的平台分支（explorer / open / xdg-open）。
 #[tauri::command]
-pub fn open_kiro_settings_file() -> Result<(), String> {
-    let path = get_kiro_settings_path().ok_or("无法定位 Kiro settings.json 路径")?;
+pub fn open_kiro_config_file(kind: String) -> Result<(), String> {
+    let path = match kind.as_str() {
+        "settings" => get_kiro_settings_path().ok_or("无法定位 Kiro settings.json 路径")?,
+        "mcp" => crate::kiro::settings::mcp::McpConfig::config_path()
+            .ok_or("无法定位 Kiro mcp.json 路径")?,
+        "sandbox" => dirs::home_dir()
+            .map(|h| h.join(".kiro").join("settings").join("sandbox.json"))
+            .ok_or("无法定位 Kiro sandbox.json 路径")?,
+        other => return Err(format!("未知的配置文件类型: {other}")),
+    };
 
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("创建目录失败: {e}"))?;
     }
     if !path.exists() {
-        std::fs::write(&path, "{\n}\n").map_err(|e| format!("创建 settings.json 失败: {e}"))?;
+        std::fs::write(&path, "{\n}\n").map_err(|e| format!("创建配置文件失败: {e}"))?;
     }
 
     #[cfg(target_os = "windows")]
@@ -1026,7 +1034,7 @@ pub fn open_kiro_settings_file() -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(&path)
             .spawn()
-            .map_err(|e| format!("打开 settings.json 失败: {e}"))?;
+            .map_err(|e| format!("打开配置文件失败: {e}"))?;
     }
 
     #[cfg(target_os = "macos")]
@@ -1034,7 +1042,7 @@ pub fn open_kiro_settings_file() -> Result<(), String> {
         std::process::Command::new("open")
             .arg(&path)
             .spawn()
-            .map_err(|e| format!("打开 settings.json 失败: {e}"))?;
+            .map_err(|e| format!("打开配置文件失败: {e}"))?;
     }
 
     #[cfg(target_os = "linux")]
@@ -1042,7 +1050,7 @@ pub fn open_kiro_settings_file() -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(&path)
             .spawn()
-            .map_err(|e| format!("打开 settings.json 失败: {e}"))?;
+            .map_err(|e| format!("打开配置文件失败: {e}"))?;
     }
 
     Ok(())
