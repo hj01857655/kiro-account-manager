@@ -39,7 +39,7 @@ function Settings() {
     }
     const { updateSettings: updateAppSettings } = useAppSettings()
     const { privacyMode, setPrivacyMode } = usePrivacy()
-    const [activeTab, setActiveTab] = useState('general')
+    const [activeTab, setActiveTab] = useState('ide')
 
     const [aiModel, setAiModel] = useState('claude-sonnet-4.5')
     const [lockModel, setLockModel] = useState(false)
@@ -67,7 +67,6 @@ function Settings() {
 
     // 新增 Kiro IDE 设置
     const [referenceTracker, setReferenceTracker] = useState(false)
-    const [configureMcp, setConfigureMcp] = useState('Enabled')
 
     // 通知 / 遥测（同样是 Kiro IDE settings.json 里的键，原独立「通知」tab）
     const [notifications, setNotifications] = useState<NotificationState>(DEFAULT_NOTIFICATIONS)
@@ -119,7 +118,6 @@ function Settings() {
                 setEnableDebugLogs(kiroSettings.enableDebugLogs ?? false)
                 // 新增设置
                 setReferenceTracker(kiroSettings.referenceTracker ?? false)
-                setConfigureMcp(kiroSettings.configureMcp || 'Enabled')
                 // 通知（默认值对齐 Kiro 1.0：failure / success 默认 false）
                 setNotifications({
                     notifyActionRequired: kiroSettings.notifyActionRequired ?? true,
@@ -303,11 +301,6 @@ function Settings() {
 
     const handleReferenceTrackerChange = makeKiroBoolToggle(setReferenceTracker, runKiroCommand, 'set_kiro_reference_tracker', 'referenceTracker')
 
-    const handleConfigureMcpChange = async (mode: string) => {
-        setConfigureMcp(mode)
-        await runKiroCommand('set_kiro_configure_mcp', { mode }, { configureMcp: mode })
-    }
-
     // 通知开关：写 Kiro IDE settings.json，并按字段映射同步 app-settings.json
     const handleNotificationChange = async (key: string, checked: boolean, field: keyof NotificationState) => {
         setNotifications(prev => ({ ...prev, [field]: checked }))
@@ -451,6 +444,10 @@ function Settings() {
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
                     <TabsList className="glass-card mb-4 flex h-10 w-full justify-start overflow-x-auto rounded-lg border-none p-0.5 no-scrollbar lg:w-fit shrink-0">
+                        <TabsTrigger value="ide" className="gap-1.5 px-3 h-9 shrink-0 text-sm font-medium data-[state=active]:shadow-sm">
+                            <Cpu size={14} />
+                            {t('settings.kiro')}
+                        </TabsTrigger>
                         <TabsTrigger value="general" className="gap-1.5 px-3 h-9 shrink-0 text-sm font-medium data-[state=active]:shadow-sm">
                             <LayoutDashboard size={14} />
                             {t('settings.general')}
@@ -459,14 +456,55 @@ function Settings() {
                             <Palette size={14} />
                             {t('settings.appearance')}
                         </TabsTrigger>
-                        <TabsTrigger value="kiro" className="gap-1.5 px-3 h-9 shrink-0 text-sm font-medium data-[state=active]:shadow-sm">
-                            <Cpu size={14} />
-                            {t('settings.kiro')}
-                        </TabsTrigger>
                     </TabsList>
 
                     {/* 仅内容区滚动：标题与标签栏固定，不随内容一起滚 */}
                     <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                    <TabsContent value="ide">
+                        {/* 打开 Kiro IDE 原始 settings.json，便于直接编辑配置文件 */}
+                        <div className="mb-3 flex items-center justify-end">
+                            <Button variant="outline" size="sm" onClick={handleOpenKiroSettingsFile}>
+                                <FileJson size={14} /> {t('settings.openSettingsFile')}
+                            </Button>
+                        </div>
+                        {/* KiroAgentAdvancedPanel 已并入 SettingsKiro，
+                            以便按命名空间统一排序（代理压尾）；
+                            MCP 配置与权限规则已迁至侧边栏「Agent 配置」页 */}
+                        <SettingsKiro
+                            aiModel={aiModel}
+                            lockModel={lockModel}
+                            agentAutonomy={agentAutonomy}
+                            httpProxy={httpProxy}
+                            setHttpProxy={setHttpProxy}
+                            originalProxy={originalProxy}
+                            appProxyMode={appProxyMode}
+                            savingProxy={savingProxy}
+                            detectingProxy={detectingProxy}
+                            savingModel={savingModel}
+                            enableCodebaseIndexing={enableCodebaseIndexing}
+                            enableTabAutocomplete={enableTabAutocomplete}
+                            usageSummary={usageSummary}
+                            enableDebugLogs={enableDebugLogs}
+                            referenceTracker={referenceTracker}
+                            notifications={notifications}
+                            telemetry={telemetry}
+                            handleApplyModel={handleApplyModel}
+                            handleLockModelChange={handleLockModelChange}
+                            handleAgentAutonomyChange={handleAgentAutonomyChange}
+                            handleApplyProxy={handleApplyProxy}
+                            handleDetectProxy={handleDetectProxy}
+                            handleAppProxyModeChange={handleAppProxyModeChange}
+                            handleCodebaseIndexingChange={handleCodebaseIndexingChange}
+                            handleTabAutocompleteChange={handleTabAutocompleteChange}
+                            handleUsageSummaryChange={handleUsageSummaryChange}
+                            handleDebugLogsChange={handleDebugLogsChange}
+                            handleReferenceTrackerChange={handleReferenceTrackerChange}
+                            handleNotificationChange={handleNotificationChange}
+                            handleTelemetryChange={handleTelemetryChange}
+                            t={t}
+                        />
+                    </TabsContent>
+
                     <TabsContent value="general">
                         <SettingsGeneral
                             autoRefresh={autoRefresh}
@@ -517,52 +555,6 @@ function Settings() {
                             setUiScale={handleUiScaleChange}
                             reduceMotion={reduceMotion}
                             setReduceMotion={handleReduceMotionChange}
-                            t={t}
-                        />
-                    </TabsContent>
-
-                    <TabsContent value="kiro">
-                        {/* 打开 Kiro IDE 原始 settings.json，便于直接编辑配置文件 */}
-                        <div className="mb-3 flex items-center justify-end">
-                            <Button variant="outline" size="sm" onClick={handleOpenKiroSettingsFile}>
-                                <FileJson size={14} /> {t('settings.openSettingsFile')}
-                            </Button>
-                        </div>
-                        {/* PermissionsPanel / KiroAgentAdvancedPanel 已并入 SettingsKiro，
-                            以便按命名空间统一排序（代理压尾） */}
-                        <SettingsKiro
-                            aiModel={aiModel}
-                            lockModel={lockModel}
-                            agentAutonomy={agentAutonomy}
-                            configureMcp={configureMcp}
-                            httpProxy={httpProxy}
-                            setHttpProxy={setHttpProxy}
-                            originalProxy={originalProxy}
-                            appProxyMode={appProxyMode}
-                            savingProxy={savingProxy}
-                            detectingProxy={detectingProxy}
-                            savingModel={savingModel}
-                            enableCodebaseIndexing={enableCodebaseIndexing}
-                            enableTabAutocomplete={enableTabAutocomplete}
-                            usageSummary={usageSummary}
-                            enableDebugLogs={enableDebugLogs}
-                            referenceTracker={referenceTracker}
-                            notifications={notifications}
-                            telemetry={telemetry}
-                            handleApplyModel={handleApplyModel}
-                            handleLockModelChange={handleLockModelChange}
-                            handleAgentAutonomyChange={handleAgentAutonomyChange}
-                            handleConfigureMcpChange={handleConfigureMcpChange}
-                            handleApplyProxy={handleApplyProxy}
-                            handleDetectProxy={handleDetectProxy}
-                            handleAppProxyModeChange={handleAppProxyModeChange}
-                            handleCodebaseIndexingChange={handleCodebaseIndexingChange}
-                            handleTabAutocompleteChange={handleTabAutocompleteChange}
-                            handleUsageSummaryChange={handleUsageSummaryChange}
-                            handleDebugLogsChange={handleDebugLogsChange}
-                            handleReferenceTrackerChange={handleReferenceTrackerChange}
-                            handleNotificationChange={handleNotificationChange}
-                            handleTelemetryChange={handleTelemetryChange}
                             t={t}
                         />
                     </TabsContent>

@@ -9,7 +9,7 @@ import {
   DialogBody,
   DialogFooter} from '../../shared/dialog'
 import { Button } from '../../shared/button'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import React from 'react'
 
 interface ConfirmModalProps {

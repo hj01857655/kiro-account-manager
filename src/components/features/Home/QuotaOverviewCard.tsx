@@ -3,7 +3,7 @@ import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { TrendingUp } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import { useMemo } from 'react'
 
 

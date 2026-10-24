@@ -4,7 +4,7 @@ import { Filter, X } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import { useTranslation } from 'react-i18next'
 import SearchableTagSelect from './SearchableTagSelect'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 
 import { buildFilterSummaryItems, countActiveFilters } from './utils/filterDropdownState'
 import { isPointerInsideContainer } from './utils/pointerInside'

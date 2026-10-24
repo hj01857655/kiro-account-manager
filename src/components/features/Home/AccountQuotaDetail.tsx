@@ -8,7 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Stack, Group, Text } from '@/components/shared/layout'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import { useMemo } from 'react'
 
 // 当前账号配额详情

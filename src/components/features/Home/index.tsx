@@ -9,7 +9,7 @@ import { useDialog } from '../../../contexts/DialogContext'
 import { showSuccess } from '../../../utils/toast'
 import { useAccount } from '../../../contexts/AccountContext'
 import { usePrivacy } from '../../../contexts/PrivacyContext'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import { getQuota, getUsed, getSubPlan } from '../../../utils/accountStats'
 import { getProviderDisplayName, isGitHubProvider } from '../../../utils/accountProvider'
 import { Card, CardContent } from '@/components/ui/card'
@@ -163,7 +163,7 @@ function Home({ onNavigate }: HomeProps) {
       value: mcpToolCount, 
       label: 'MCP 工具', 
       delay: 'delay-500',
-      onClick: () => onNavigate?.('kiroConfig'),
+      onClick: () => onNavigate?.('agentConfig'),
       warning: mcpToolCount > 50
     },
   ], [accent, stats, mcpToolCount, t, onNavigate])

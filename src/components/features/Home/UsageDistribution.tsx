@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { usePrivacy } from '../../../contexts/PrivacyContext'
 import { formatUsage, getAccountDisplayName, getQuota, getUsed } from '../../../utils/accountStats'
 import { useApp } from '../../../hooks/useApp'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'

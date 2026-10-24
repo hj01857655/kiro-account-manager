@@ -33,7 +33,7 @@ import EditAccountModal from './EditAccountModal'
 import BatchEditModal from './BatchEditModal'
 import ConfirmModal from './ConfirmModal'
 import { AccountListSkeleton, AccountTableSkeleton } from '../../shared/Skeleton'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import { ListAvailableModelsResponse } from '../../../types/account'
 import React from 'react'
 

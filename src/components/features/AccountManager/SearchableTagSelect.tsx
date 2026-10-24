@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { X, ChevronDown, Tag } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import { isPointerInsideContainer } from './utils/pointerInside'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import React from 'react'
 
 interface TagItem {

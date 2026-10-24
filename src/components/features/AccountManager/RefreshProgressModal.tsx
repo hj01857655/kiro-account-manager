@@ -1,7 +1,7 @@
 import { RefreshCw } from 'lucide-react'
 import { useMemo } from 'react'
 import { useApp } from '../../../hooks/useApp'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 
 function RefreshProgressModal({ refreshProgress }) {
   const { t, theme } = useApp()

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Search, RefreshCw, Check, Sparkles, Bot, Network, Wrench, Lock, Bell, ShieldQuestion } from 'lucide-react'
+import { Search, RefreshCw, Check, Sparkles, Bot, Network, Lock, Bell, ShieldQuestion } from 'lucide-react'
 import { Input } from '../../ui/input'
-import { Textarea } from '../../ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select'
 import { Label } from '../../ui/label'
 import {
@@ -18,7 +17,6 @@ import SwitchRow from './SwitchRow'
 import ToggleRow from './ToggleRow'
 import { rowShell } from './rowStyles'
 import KiroAgentAdvancedPanel from './KiroAgentAdvancedPanel'
-import PermissionsPanel from './PermissionsPanel'
 
 // Kiro 设置页（kiro tab）的全部内容。
 //
@@ -39,7 +37,6 @@ interface SettingsKiroProps {
   aiModel: string
   lockModel: boolean
   agentAutonomy: string
-  configureMcp: string
   // 代理
   httpProxy: string
   setHttpProxy: (value: string) => void
@@ -61,7 +58,6 @@ interface SettingsKiroProps {
   handleApplyModel: (model: string) => Promise<void>
   handleLockModelChange: (checked: boolean) => Promise<void>
   handleAgentAutonomyChange: (mode: string) => Promise<void>
-  handleConfigureMcpChange: (mode: string) => Promise<void>
   handleApplyProxy: () => Promise<void>
   handleDetectProxy: () => Promise<void>
   handleAppProxyModeChange: (mode: string) => Promise<void>
@@ -76,13 +72,10 @@ interface SettingsKiroProps {
 }
 
 const STARTUP_MODES = ['code', 'agentFocus'] as const
-const lines = (v: string) => v.split('\n').map(s => s.trim()).filter(Boolean)
-
 function SettingsKiro({
   aiModel,
   lockModel,
   agentAutonomy,
-  configureMcp,
   httpProxy,
   setHttpProxy,
   originalProxy,
@@ -100,7 +93,6 @@ function SettingsKiro({
   handleApplyModel,
   handleLockModelChange,
   handleAgentAutonomyChange,
-  handleConfigureMcpChange,
   handleApplyProxy,
   handleDetectProxy,
   handleAppProxyModeChange,
@@ -116,9 +108,9 @@ function SettingsKiro({
   const { showError } = useDialog()
   const proxyChanged = httpProxy !== originalProxy
 
-  // 少量键（kiro.startupMode / kiroAgent.mcpApprovedEnvVars）自取自写，
+  // 少量键（kiro.startupMode）自取自写，
   // 省掉一层 props 透传；写入后由后端双向同步到 settings.json 与 app-settings.json。
-  const [extras, setExtras] = useState({ startupMode: 'code', mcpApprovedEnvVars: '' })
+  const [extras, setExtras] = useState({ startupMode: 'code' })
 
   useEffect(() => {
     let cancelled = false
@@ -127,7 +119,6 @@ function SettingsKiro({
         if (cancelled || !v) return
         setExtras({
           startupMode: v.startupMode ?? 'code',
-          mcpApprovedEnvVars: (v.mcpApprovedEnvVars ?? []).join('\n'),
         })
       })
       .catch(() => {})
@@ -244,37 +235,6 @@ function SettingsKiro({
         </div>
       </SectionCard>
 
-      {/* 3. 配置 MCP（含 mcpApprovedEnvVars，把 MCP 相关键收在一处）*/}
-      <SectionCard
-        title={t('settings.configureMCP')}
-        accent="amber"
-        icon={<Wrench size={14} className="text-amber-500" />}
-        desc={t('settings.configureMCPDesc')}
-      >
-        <Select value={configureMcp} onValueChange={handleConfigureMcpChange}>
-          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Enabled">{t('settings.configureMCPEnabled')}</SelectItem>
-            <SelectItem value="Disabled">{t('settings.configureMCPDisabled')}</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <div>
-          <Label className="block text-[11px] text-muted-foreground mb-1">
-            {t('settings.agentMcpApprovedEnvVars')}
-          </Label>
-          <Textarea
-            value={extras.mcpApprovedEnvVars}
-            onChange={e => patchExtras({ mcpApprovedEnvVars: e.target.value })}
-            onBlur={() => applyExtra('kiroAgent.mcpApprovedEnvVars', lines(extras.mcpApprovedEnvVars))}
-            placeholder="GITHUB_TOKEN"
-            className="font-mono text-xs"
-            rows={2}
-          />
-          <p className="text-[11px] text-muted-foreground mt-1">{t('settings.agentMcpApprovedEnvVarsDesc')}</p>
-        </div>
-      </SectionCard>
-
       {/* 4. 通知 */}
       <SectionCard
         title={t('settings.notifications')}
@@ -296,10 +256,6 @@ function SettingsKiro({
 
       {/* 5-7. Agent 高级 / 实验与高级 / 信任与自动批准（子面板）*/}
       <KiroAgentAdvancedPanel t={t} />
-
-      {/* ========== 8. 权限规则（独立配置，不属于 settings.json）==========
-          紧贴上面的「信任与自动批准」：两者同属「agent 能否不经询问就动手」。 */}
-      <PermissionsPanel t={t} />
 
       {/* ========== 9. telemetry.* ========== */}
       <SectionCard

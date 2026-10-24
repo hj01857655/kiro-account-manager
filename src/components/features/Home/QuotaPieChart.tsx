@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { useApp } from '../../../hooks/useApp'
 import { usePrivacy } from '../../../contexts/PrivacyContext'
 import { getAccountDisplayName } from '../../../utils/accountStats'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 
 import { getQuota as getQuotaFromUtils } from '../../../utils/accountStats'
 

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Search, Download, Upload, RefreshCcw, RotateCw, Trash2, ArrowUp, ArrowDown, X, TrendingUp, Clock, Calendar, CheckSquare, Square, Sparkles, LayoutGrid, List, Edit } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import FilterDropdown from './FilterDropdown'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 
 interface AccountHeaderProps {
   searchTerm: string;

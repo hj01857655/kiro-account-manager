@@ -12,7 +12,7 @@ import { useDialog } from '../../../contexts/DialogContext'
 import alipayQR from '../../../assets/donate/alipay.jpg'
 import wechatQR from '../../../assets/donate/wechat.jpg'
 import { isLightTheme as checkIsLightTheme } from '../../../utils/themeMode'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import SectionCard from '../Settings/SectionCard'
 
 const CURRENT_YEAR = new Date().getFullYear()

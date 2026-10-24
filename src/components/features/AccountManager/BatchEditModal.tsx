@@ -13,7 +13,7 @@ import {
   DialogBody,
   DialogFooter} from '../../shared/dialog'
 import { Button } from '../../shared/button'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import { Account, TagDefinition, GroupDefinition } from '../../../types/account'
 import React from 'react'
 

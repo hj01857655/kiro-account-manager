@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { getUsageHistory, saveUsageHistoryEntry } from '../../../api/usageApi'
 import { Calendar } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 
 
 export default function UsageTrendChart({ accounts, stats }) {

@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { RefreshCw, Users, Clock } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import { useMemo } from 'react'
-import { getThemeAccent } from '../KiroConfig/themeAccent'
+import { getThemeAccent } from '../AgentConfig/themeAccent'
 import { getProviderDisplayName, isGitHubProvider } from '../../../utils/accountProvider'
 import React from 'react'
 
