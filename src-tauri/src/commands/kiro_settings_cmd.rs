@@ -996,6 +996,9 @@ pub async fn set_kiro_agent_setting(key: String, value: serde_json::Value) -> Re
         // 隐藏键（未在 IDE registerConfiguration 中声明），但确有实际作用：
         // 决定「在浏览器打开远程会话」的跳转地址
         "kiroAgent.remoteSessions.endpoint",
+        // Memory 四档模式（{mode: read_write|read_only|disabled, reflection}），
+        // IDE 的 Memory 设置键；默认 Off 时键不存在，记忆面板经此通道写入
+        "kiroAgent.memory",
     ];
     if !ALLOWED.contains(&key.as_str()) {
         return Err(format!("不允许的 Kiro Agent key: {key}"));
