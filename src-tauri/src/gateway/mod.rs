@@ -160,6 +160,11 @@ pub struct GatewayConfig {
     /// 指定 x-account-id 时该头优先，粘性不介入。
     #[serde(default)]
     pub session_affinity: bool,
+    /// 记录流式逐事件明细（SSE event log）：每个流式请求多落一个事件文件。
+    /// 排查流式协议问题（toolUse 分片、reasoning 分片顺序）时打开，
+    /// 平时关闭省磁盘。关闭不影响请求日志主条目。
+    #[serde(default)]
+    pub log_stream_events: bool,
 }
 
 fn default_cache_ttl() -> u64 {
@@ -450,6 +455,7 @@ impl Default for GatewayConfig {
             web_search_enabled: true,
             tool_search_enabled: true,
             session_affinity: false,
+            log_stream_events: false,
         }
     }
 }

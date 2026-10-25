@@ -9,6 +9,11 @@ tokio::task_local! {
     /// 而 SSE 日志必须能按请求过滤，否则面板里点开一个请求只能去翻整个文件。
     /// 用 task-local 而不改签名：流任务入口 set 一次，内层所有调用自动继承。
     pub(crate) static SSE_LOG_REQUEST_ID: String;
+    /// 是否记录本次流式请求的逐事件明细（`logStreamEvents` 配置）。
+    ///
+    /// 与 `SSE_LOG_REQUEST_ID` 同模式：`send_event` 拿不到 config，
+    /// 由流任务入口按配置 set 一次，内层落盘处读它决定是否写文件。
+    pub(crate) static SSE_LOG_ENABLED: bool;
 }
 
 
@@ -80,7 +85,61 @@ pub fn stream_proxy_response(
     // 整个流任务包在 task-local 作用域里：内层 `send_event` 落 SSE 日志时
     // 能拿到本次请求的 request_id，日志行因此可按请求过滤。
     let sse_request_id = log_context.request_id.clone();
+    let sse_log_enabled = state.config.log_stream_events;
     tokio::spawn(SSE_LOG_REQUEST_ID.scope(sse_request_id, async move {
+        SSE_LOG_ENABLED.scope(sse_log_enabled, async move {
+            stream_proxy_response_inner(
+                state,
+                tx,
+                format,
+                model,
+                request_messages,
+                request_tools,
+                request_tool_choice,
+                previous_response_id,
+                tool_name_map,
+                include_usage,
+                stop_sequences,
+                log_context,
+                connection_guard,
+                upstream_resp,
+            )
+            .await;
+        })
+        .await;
+    }));
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("text/event-stream"),
+        )
+        .header(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"))
+        .header(header::CONNECTION, HeaderValue::from_static("keep-alive"))
+        .body(Body::from_stream(ReceiverStream::new(rx)))
+        .unwrap_or_else(|_| Response::new(Body::empty()))
+}
+
+/// `stream_proxy_response` 的任务体：从函数里拆出是为了把 task-local 的
+/// 两层 scope（request id + 日志开关）收在入口一处，内层逻辑保持平铺。
+#[allow(clippy::too_many_arguments)]
+async fn stream_proxy_response_inner(
+    state: RouterState,
+    tx: mpsc::Sender<Result<Bytes, Infallible>>,
+    format: ResponseFormat,
+    model: String,
+    request_messages: Vec<NormalizedMessage>,
+    request_tools: Option<Vec<Tool>>,
+    request_tool_choice: Option<Value>,
+    previous_response_id: Option<String>,
+    tool_name_map: std::collections::HashMap<String, String>,
+    include_usage: bool,
+    stop_sequences: Option<Vec<String>>,
+    log_context: RequestLogContext<'static>,
+    connection_guard: crate::gateway::load_balancer::ConnectionGuard,
+    upstream_resp: reqwest::Response,
+) {
         // guard 在本任务结束时 Drop，覆盖整个流式生命周期
         let _connection_guard = connection_guard;
         // 辅助函数：还原工具名称（sanitized -> original）
@@ -1593,18 +1652,6 @@ function_call: None,
             aggregated.metering_usage,
             &state,
         );
-    })); // tokio::spawn 闭合（外层是 SSE_LOG_REQUEST_ID.scope）
-
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("text/event-stream"),
-        )
-        .header(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"))
-        .header(header::CONNECTION, HeaderValue::from_static("keep-alive"))
-        .body(Body::from_stream(ReceiverStream::new(rx)))
-        .unwrap_or_else(|_| Response::new(Body::empty()))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1809,10 +1856,14 @@ pub async fn send_event(
     tx: &mpsc::Sender<Result<Bytes, Infallible>>,
     event: Option<&str>,
     payload: &str,
-) -> bool {    // 写入发给客户端的每个 SSE 事件到文件
+) -> bool {
+    // 写入发给客户端的每个 SSE 事件到文件（logStreamEvents 开关控制）。
     // 注意：SSE 明细体积不可控（一次流式请求可达数万条），但本函数是公共
-    // 底层、拿不到 config。上游事件落盘已在调用点按 log_requests 与预算节流；
-    // 这里保持无条件写入，由外层 log_requests 关闭时整体短路（见调用方）。
+    // 底层、拿不到 config。用 task-local 由流任务入口按配置 set 一次；
+    // 未在流任务作用域内（测试/非流式调用）时默认关闭，不写文件。
+    if SSE_LOG_ENABLED
+        .try_with(|enabled| *enabled)
+        .unwrap_or(false)
     {
         let log_dir = crate::core::paths::app_data_dir_or_default().join("logs");
         let body_end = safe_truncate(payload, 2000);

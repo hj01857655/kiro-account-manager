@@ -1920,5 +1920,7 @@
   "gateway.cacheReadWriteTitle": "缓存读取 tokens（命中，节省成本）/ 缓存写入 tokens（首次，+25% 成本）",
   "gateway.creditsTitle": "上游 meteringEvent 给出的本次请求真实计费消耗；非流式请求无此值",
   "gateway.sessionAffinityToggle": "会话粘性",
-  "gateway.sessionAffinityHint": "同客户端 IP 固定路由到同一账号：上游缓存按账号生效，固定路由可提升缓存命中（日志缓存读列可见）"
+  "gateway.sessionAffinityHint": "同客户端 IP 固定路由到同一账号：上游缓存按账号生效，固定路由可提升缓存命中（日志缓存读列可见）",
+  "gateway.logStreamEventsToggle": "记录流式事件",
+  "gateway.logStreamEventsHint": "每个流式请求额外落一个 SSE 逐事件明细文件，用于排查分片顺序等问题；平时关闭省磁盘"
 }
