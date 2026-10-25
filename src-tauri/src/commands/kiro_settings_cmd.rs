@@ -1058,7 +1058,7 @@ pub fn open_kiro_config_file(kind: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{upsert_bool_if_changed, upsert_string_if_changed};
+    use super::upsert_bool_if_changed;
 
     #[test]
     fn upsert_bool_if_changed_only_marks_when_value_changes() {

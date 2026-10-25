@@ -149,10 +149,6 @@ fn compare_recency(a: &MemoryItem, b: &MemoryItem) -> std::cmp::Ordering {
     compare_keys(&a.created_at, &a.id, &b.created_at, &b.id)
 }
 
-fn encode_cursor(item: &MemoryItem) -> Result<String, String> {
-    encode_cursor_with_scopes(item, &item.scopes)
-}
-
 /// 编码 cursor，scope 集合用当前遍历的过滤集（IDE 的 `Weu(p, n)` 第二参是 `n` 即 walkScopes 结果）。
 fn encode_cursor_with_scopes(item: &MemoryItem, scopes: &[String]) -> Result<String, String> {
     let payload = CursorPayload {
@@ -789,7 +785,7 @@ mod tests {
     #[test]
     fn cursor_round_trips() {
         let m = item("mem-1", "2026-10-24T10:00:00.000Z");
-        let encoded = encode_cursor(&m).expect("encode");
+        let encoded = encode_cursor_with_scopes(&m, &m.scopes).expect("encode");
         let decoded = decode_cursor(&encoded).expect("decode");
         assert_eq!(decoded.id, "mem-1");
         assert_eq!(decoded.created_at, "2026-10-24T10:00:00.000Z");
