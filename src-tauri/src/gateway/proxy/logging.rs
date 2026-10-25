@@ -162,6 +162,8 @@ pub fn write_request_log(
     output_tokens: Option<i32>,
     cache_read_input_tokens: Option<i32>,
     cache_creation_input_tokens: Option<i32>,
+    // 上游 meteringEvent 的真实计费消耗（credits）；调用方没有则为 None
+    credits: Option<f64>,
     state: &RouterState,
 ) {
     let duration_ms = context
@@ -279,6 +281,7 @@ pub fn write_request_log(
         output_tokens,
         cache_read_input_tokens,
         cache_creation_input_tokens,
+        credits,
         error_type: error_type.map(str::to_string),
         request_summary,
         response_summary,
@@ -408,6 +411,7 @@ pub async fn gateway_error_with_log(
         output_tokens,
         cache_read,
         cache_creation,
+        None, // 错误路径无上游 meteringEvent
         state,
     );
     gateway_error_response(

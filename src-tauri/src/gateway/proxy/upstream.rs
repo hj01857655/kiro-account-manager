@@ -336,6 +336,7 @@ pub async fn proxy_handler(
                     Some(cached.output_tokens),
                     None,
                     None,
+                    None, // 缓存命中不重新计费
                     &state,
                 );
                 return Json(cached_response).into_response();
@@ -1594,6 +1595,7 @@ pub async fn proxy_handler(
         Some(aggregated.output_tokens),
         aggregated.cache_read_input_tokens,
         aggregated.cache_creation_input_tokens,
+        aggregated.metering_usage,
         &state,
     );
     Json(response).into_response()

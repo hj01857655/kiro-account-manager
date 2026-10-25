@@ -132,6 +132,15 @@ pub async fn generate_local_response(
     }
 
     let serialized = serialize_logged_value(&response_body);
+    // 非流式响应体自带 usage：提取四项 token 计数入日志
+    // （此前硬编码 None，非流式请求的 token 与缓存列全空）
+    let usage = response_body.get("usage");
+    let get_tok = |key: &str| {
+        usage
+            .and_then(|u| u.get(key))
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32)
+    };
     write_request_log(
         &log_context,
         StatusCode::OK,
@@ -139,10 +148,11 @@ pub async fn generate_local_response(
         None,
         None, // error_type
         Some(serialized.as_str()),
-        None, // input_tokens
-        None, // output_tokens
-        None, // cache_read_input_tokens
-        None, // cache_creation_input_tokens
+        get_tok("input_tokens"),
+        get_tok("output_tokens"),
+        get_tok("cache_read_input_tokens"),
+        get_tok("cache_creation_input_tokens"),
+        None, // 非流式响应体不带 meteringEvent
         &state,
     );
     Json(response_body).into_response()

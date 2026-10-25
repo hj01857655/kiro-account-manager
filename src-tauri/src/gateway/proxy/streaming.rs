@@ -1590,6 +1590,7 @@ function_call: None,
             Some(aggregated.output_tokens),
             aggregated.cache_read_input_tokens,
             aggregated.cache_creation_input_tokens,
+            aggregated.metering_usage,
             &state,
         );
     })); // tokio::spawn 闭合（外层是 SSE_LOG_REQUEST_ID.scope）

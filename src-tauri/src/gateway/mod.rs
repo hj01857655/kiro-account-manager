@@ -237,6 +237,10 @@ pub struct GatewayRequestLogEntry {
     /// Prompt Caching: 缓存写入 tokens（首次写入成本 +25%）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_creation_input_tokens: Option<i32>,
+    /// 上游 meteringEvent 给出的本次请求计费消耗（credits，真实值非估算）。
+    /// 仅流式路径可得：非流式响应体不带该事件时为 None。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credits: Option<f64>,
     /// 错误类型（如 invalid_request_error, authentication_error 等）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_type: Option<String>,
@@ -709,7 +713,18 @@ fn clear_gateway_request_logs_at_path(path: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    fs::remove_file(path).map_err(|e| format!("清空请求日志失败: {e}"))
+    fs::remove_file(path).map_err(|e| format!("清空请求日志失败: {e}"))?;
+    // 轮转备份（32MB 上限触发的 `.jsonl.1`）也一并删：
+    // 只删主文件时，重启网关启动恢复会从备份把旧日志灌回内存，
+    // 表现为「清空后过一会儿日志又回来了」。
+    let backup = path.with_extension(format!(
+        "{}.1",
+        path.extension().and_then(|e| e.to_str()).unwrap_or("jsonl")
+    ));
+    if backup.exists() {
+        let _ = fs::remove_file(&backup);
+    }
+    Ok(())
 }
 
 fn gateway_data_dir() -> PathBuf {
@@ -1245,16 +1260,15 @@ async fn spawn_runtime(
     // 避免重启后内存视图只覆盖最近 500 条的断层）
     if let Ok(path) = request_log_path() {
         if let Ok(history) = get_gateway_request_logs_from_path(&path, Some(10000)) {
-            let store_clone = log_store.clone();
-            tokio::spawn(async move {
-                // 历史日志是倒序的（最新在前），需要反转后逐条添加
-                let restored = history.len();
-                for entry in history.into_iter().rev() {
-                    store_clone.add(entry).await;
-                }
-                // 回灌的是历史：之后的 add 才算「本次运行」的流量（概览按会话取数）
-                store_clone.set_session_start(restored).await;
-            });
+            // 必须在服务器开始受理请求前同步完成：若 spawn 异步回灌，
+            // session_start 迟迟未 set，概览「最近请求」会把历史当实时流量返回
+            // 历史日志是倒序的（最新在前），需要反转后逐条添加
+            let restored = history.len();
+            for entry in history.into_iter().rev() {
+                log_store.add(entry).await;
+            }
+            // 回灌的是历史：之后的 add 才算「本次运行」的流量（概览按会话取数）
+            log_store.set_session_start(restored).await;
         }
     }
 

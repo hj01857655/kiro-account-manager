@@ -340,6 +340,7 @@ mod tests {
             output_tokens: Some(50),
             cache_read_input_tokens: None,
             cache_creation_input_tokens: None,
+            credits: None,
             error_type: None,
             stream_info: None,
             request_summary: None,
