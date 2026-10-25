@@ -88,20 +88,6 @@ export function getGatewayRequestStats<T = any>() {
   return invoke<T>('get_gateway_request_stats')
 }
 
-// 按模型 / 端点维度聚合的统计（与 request_stats 同源，均读 LogStore）
-export function getGatewayModelStats<T = any[]>() {
-  return invoke<T>('get_gateway_model_stats')
-}
-
-export function getGatewayEndpointStats<T = any[]>() {
-  return invoke<T>('get_gateway_endpoint_stats')
-}
-
-/** 按客户端 UA 产品名分组的用量（Key 固定为 kiro 后不再有 Key 维度），回答「谁在用这个网关」 */
-export function getGatewayClientStats<T = any[]>() {
-  return invoke<T>('get_gateway_client_stats')
-}
-
 export function getCacheStats<T = any>() {
   return invoke<T>('get_cache_stats')
 }
