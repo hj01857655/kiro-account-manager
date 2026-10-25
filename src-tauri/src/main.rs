@@ -58,6 +58,7 @@ use commands::cli_config_cmd::{
 use commands::gateway_cmd::{
     cleanup_stale_health,
     clear_gateway_request_logs,
+    get_mask_audit_entries,
     clear_rate_limit_account,
     get_all_account_health,
     get_available_models,
@@ -73,6 +74,7 @@ use commands::gateway_cmd::{
     // 负载均衡 API
     get_rate_limited_accounts,
     open_gateway_log_dir,
+    preview_masking,
     read_gateway_sse_log,
     reset_account_health,
     save_gateway_config,
@@ -689,8 +691,10 @@ fn main() {
             get_gateway_endpoint_stats,
             get_gateway_client_stats,
             open_gateway_log_dir,
+            preview_masking,
             read_gateway_sse_log,
             clear_gateway_request_logs,
+            get_mask_audit_entries,
             test_account_proxy,
             // Gateway 负载均衡 API
             get_rate_limited_accounts,

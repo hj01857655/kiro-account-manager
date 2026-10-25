@@ -153,6 +153,7 @@ pub async fn generate_local_response(
         get_tok("cache_read_input_tokens"),
         get_tok("cache_creation_input_tokens"),
         None, // 非流式响应体不带 meteringEvent
+        None, // 非流式响应体不带 contextUsageEvent
         &state,
     );
     Json(response_body).into_response()

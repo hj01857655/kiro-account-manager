@@ -35,6 +35,8 @@ fn proxy_test_state() -> RouterState {
                 None,
             ),
         )),
+        mask_engine: Arc::new(AsyncMutex::new(crate::gateway::masking::MaskEngine::new())),
+        mask_audit: Arc::new(crate::gateway::masking::MaskAuditLog::new(10)),
         store: Arc::new(std::sync::Mutex::new(
             crate::core::account::AccountStore::new(),
         )),

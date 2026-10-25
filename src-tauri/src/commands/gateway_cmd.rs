@@ -100,6 +100,36 @@ pub async fn get_gateway_client_stats(
     get_gateway_client_stats_inner(&state).await
 }
 
+/// 读取最近的遮蔽审计记录（只含元数据，不含真值）。
+#[tauri::command]
+pub async fn get_mask_audit_entries(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<crate::gateway::masking::MaskAuditEntry>, String> {
+    let audit = {
+        let guard = state
+            .gateway
+            .lock()
+            .map_err(|_| "获取 gateway 状态失败".to_string())?;
+        guard.as_ref().map(|rt| rt.mask_audit.clone())
+    };
+    match audit {
+        Some(audit) => Ok(audit.recent(limit.unwrap_or(100))),
+        // 网关未运行：没有审计记录可看（遮蔽只发生在请求路径上）
+        None => Ok(Vec::new()),
+    }
+}
+
+/// Try-it：对一段文本跑遮蔽，返回占位符版与命中条目（不落任何存储）。
+///
+/// 与请求路径的区别：不碰请求的映射表（避免试用污染真实请求的
+/// 占位符一致性），用一个一次性引擎现场跑。
+#[tauri::command]
+pub async fn preview_masking(text: String) -> Result<crate::gateway::masking::MaskOutcome, String> {
+    let mut engine = crate::gateway::masking::MaskEngine::new();
+    Ok(engine.mask_text(&text))
+}
+
 #[tauri::command]
 pub async fn open_gateway_log_dir(app: AppHandle) -> Result<String, String> {
     open_gateway_log_dir_inner(&app)

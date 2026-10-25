@@ -14,6 +14,13 @@ tokio::task_local! {
     /// 与 `SSE_LOG_REQUEST_ID` 同模式：`send_event` 拿不到 config，
     /// 由流任务入口按配置 set 一次，内层落盘处读它决定是否写文件。
     pub(crate) static SSE_LOG_ENABLED: bool;
+    /// 隐私遮蔽的占位符映射表（`privacy_mask_enabled` 开启时随流任务下发）。
+    ///
+    /// 出站回替：上游响应里的 `{{API_KEY_xxx}}` 在发给客户端前换回真值。
+    /// 拿不到 `RouterState`（`send_event` 是公共底层），与另两个
+    /// task-local 同模式由流任务入口 set 一次；未设置（遮蔽关闭或
+    /// 非流式路径）时 `try_with` 返回 None，直接放行原文。
+    pub(crate) static SSE_MASK_MAP: Option<crate::gateway::masking::PlaceholderMap>;
 }
 
 
@@ -86,24 +93,41 @@ pub fn stream_proxy_response(
     // 能拿到本次请求的 request_id，日志行因此可按请求过滤。
     let sse_request_id = log_context.request_id.clone();
     let sse_log_enabled = state.config.log_stream_events;
+    // 遮蔽开启时取映射表快照随流任务下发：请求侧遮蔽已在本函数返回前完成，
+    // 之后不会有新占位符进来，快照在整个流期间有效。
+    // 用 try_lock 而非 await：本函数不是 async，且拿不到锁只是降级为
+    // 不回替（遮蔽刚开启、首个请求正在遮蔽的极小窗口），不值得为此改签名。
+    let mask_map: Option<crate::gateway::masking::PlaceholderMap> =
+        if state.config.privacy_mask_enabled {
+            state
+                .mask_engine
+                .try_lock()
+                .ok()
+                .map(|engine| engine.maps().snapshot())
+        } else {
+            None
+        };
     tokio::spawn(SSE_LOG_REQUEST_ID.scope(sse_request_id, async move {
         SSE_LOG_ENABLED.scope(sse_log_enabled, async move {
-            stream_proxy_response_inner(
-                state,
-                tx,
-                format,
-                model,
-                request_messages,
-                request_tools,
-                request_tool_choice,
-                previous_response_id,
-                tool_name_map,
-                include_usage,
-                stop_sequences,
-                log_context,
-                connection_guard,
-                upstream_resp,
-            )
+            SSE_MASK_MAP.scope(mask_map, async move {
+                stream_proxy_response_inner(
+                    state,
+                    tx,
+                    format,
+                    model,
+                    request_messages,
+                    request_tools,
+                    request_tool_choice,
+                    previous_response_id,
+                    tool_name_map,
+                    include_usage,
+                    stop_sequences,
+                    log_context,
+                    connection_guard,
+                    upstream_resp,
+                )
+                .await;
+            })
             .await;
         })
         .await;
@@ -1650,6 +1674,7 @@ function_call: None,
             aggregated.cache_read_input_tokens,
             aggregated.cache_creation_input_tokens,
             aggregated.metering_usage,
+            aggregated.context_usage_percentage,
             &state,
         );
 }
@@ -1857,6 +1882,14 @@ pub async fn send_event(
     event: Option<&str>,
     payload: &str,
 ) -> bool {
+    // 出站回替：遮蔽开启时，把上游响应里的占位符换回真值再发给客户端。
+    // 未在流任务作用域内（遮蔽关闭/非流式/测试）时 try_with 为 None，放行原文。
+    let payload_out: String = match SSE_MASK_MAP.try_with(|map| map.clone()) {
+        Ok(Some(map)) => map.unmask(payload),
+        _ => payload.to_string(),
+    };
+    let payload = payload_out.as_str();
+
     // 写入发给客户端的每个 SSE 事件到文件（logStreamEvents 开关控制）。
     // 注意：SSE 明细体积不可控（一次流式请求可达数万条），但本函数是公共
     // 底层、拿不到 config。用 task-local 由流任务入口按配置 set 一次；

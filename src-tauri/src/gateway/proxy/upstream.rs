@@ -2,6 +2,88 @@
 
 use super::*;
 
+/// 对请求 payload 做隐私遮蔽：逐字段递归处理所有字符串值
+/// （messages / system / tools / input 全部覆盖）。
+///
+/// 返回 (遮蔽后的 payload, 是否触发 Block)。Block 由调用方负责
+/// fail-closed（拒绝请求），本函数只如实报告。
+pub fn mask_payload_for_upstream(
+    payload: &Value,
+    engine: &mut crate::gateway::masking::MaskEngine,
+) -> (Value, bool) {
+    let mut blocked = false;
+    let masked = mask_value(payload, engine, &mut blocked);
+    (masked, blocked)
+}
+
+/// 递归遮蔽 JSON 值里的所有字符串。
+fn mask_value(
+    value: &Value,
+    engine: &mut crate::gateway::masking::MaskEngine,
+    blocked: &mut bool,
+) -> Value {
+    match value {
+        Value::String(s) => {
+            let outcome = engine.mask_text(s);
+            if outcome.blocked {
+                *blocked = true;
+            }
+            Value::String(outcome.text)
+        }
+        Value::Array(arr) => Value::Array(
+            arr.iter()
+                .map(|item| mask_value(item, engine, blocked))
+                .collect(),
+        ),
+        Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, v) in map {
+                out.insert(k.clone(), mask_value(v, engine, blocked));
+            }
+            Value::Object(out)
+        }
+        other => other.clone(),
+    }
+}
+
+/// 收集 payload 遮蔽时的审计条目（只含元数据，不含真值）。
+///
+/// 与 `mask_payload_for_upstream` 分开跑：遮蔽本身已把 payload 换成占位符版，
+/// 这里对**原始 payload** 再扫一遍只为拿条目（遮蔽幂等——同一值第二次
+/// 命中的占位符与第一次一致，重扫不会污染映射表）。
+fn collect_mask_items(
+    payload: &Value,
+    engine: &mut crate::gateway::masking::MaskEngine,
+) -> Vec<crate::gateway::masking::MaskRecordItem> {
+    let mut items = Vec::new();
+    collect_items_recursive(payload, engine, &mut items);
+    items
+}
+
+fn collect_items_recursive(
+    value: &Value,
+    engine: &mut crate::gateway::masking::MaskEngine,
+    items: &mut Vec<crate::gateway::masking::MaskRecordItem>,
+) {
+    match value {
+        Value::String(s) => {
+            let outcome = engine.mask_text(s);
+            items.extend(outcome.items);
+        }
+        Value::Array(arr) => {
+            for item in arr {
+                collect_items_recursive(item, engine, items);
+            }
+        }
+        Value::Object(map) => {
+            for (_, v) in map {
+                collect_items_recursive(v, engine, items);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// 按协议跑字段消费判定，命中 `Rejected` 就返回 (字段名, 客户端可见原因)。
 ///
 /// 顶层字段与嵌套路径都查：Responses 的 `text.format` 是两层结构，
@@ -116,6 +198,73 @@ pub async fn proxy_handler(
         )
         .await;
     }
+
+    // 隐私遮蔽：对发给上游的 payload 做值替换（本地 *.log 已保留原文）。
+    // Block 命中即 fail-closed：拒绝请求，绝不带敏感值发出去。
+    let payload = if state.config.privacy_mask_enabled {
+        let (masked_payload, blocked, items) = {
+            let mut engine = state.mask_engine.lock().await;
+            let (masked_payload, blocked) = mask_payload_for_upstream(&payload, &mut engine);
+            // 重新扫一遍拿审计条目：mask_payload_for_upstream 只回文本与
+            // blocked 标志，条目在遮蔽过程中产生。这里用 items 收集版重跑
+            // 一遍（遮蔽幂等：第二次跑时值已在映射表里，占位符一致）。
+            let audit_items = collect_mask_items(&payload, &mut engine);
+            (masked_payload, blocked, audit_items)
+        };
+
+        // 有命中（Mask 或 Warn）就记审计：记录只含元数据，不含真值
+        if !items.is_empty() {
+            use crate::gateway::masking::MaskAuditEntry;
+            let preview = safe_truncate(&masked_payload.to_string(), 2048).to_string();
+            let audit = state.mask_audit.clone();
+            let entry = MaskAuditEntry {
+                occurred_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                request_id: request_id.clone(),
+                endpoint: endpoint.to_string(),
+                client_user_agent: extract_client_user_agent(&headers),
+                items,
+                masked_preview: preview,
+            };
+            tokio::spawn(async move {
+                audit.record(entry);
+            });
+        }
+
+        if blocked {
+            let sanitized = "请求包含被策略禁止外发的敏感内容，已拒绝".to_string();
+            return gateway_error_with_log(
+                &state,
+                format,
+                &RequestLogContext {
+                    request_index,
+                    endpoint,
+                    client_addr,
+                    request: None,
+                    upstream: None,
+                    upstream_source_hint: None,
+                    region_hint: None,
+                    started_at,
+                    request_body: Some(raw_request_body.as_str()),
+                    request_body_hint: None,
+                    model_hint: model_hint.clone(),
+                    is_stream: None,
+                    client_user_agent: None,
+                    request_id: request_id.clone(),
+                },
+                GatewayErrorDetails {
+                    status: StatusCode::FORBIDDEN,
+                    error_type: "permission_error",
+                    message: &sanitized,
+                    response_body: None,
+                },
+            )
+            .await;
+        }
+        masked_payload
+    } else {
+        payload
+    };
+
     let client_user_agent = extract_client_user_agent(&headers);
 
     let base_log_context = RequestLogContext {
@@ -337,6 +486,7 @@ pub async fn proxy_handler(
                     None,
                     None,
                     None, // 缓存命中不重新计费
+                    None, // 缓存命中不重算上下文占用
                     &state,
                 );
                 return Json(cached_response).into_response();
@@ -1599,6 +1749,7 @@ pub async fn proxy_handler(
         aggregated.cache_read_input_tokens,
         aggregated.cache_creation_input_tokens,
         aggregated.metering_usage,
+        aggregated.context_usage_percentage,
         &state,
     );
     Json(response).into_response()

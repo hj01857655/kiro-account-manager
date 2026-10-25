@@ -4,6 +4,7 @@ mod converter;
 mod eventstream;
 pub(crate) mod load_balancer;
 pub mod log_store;
+pub mod masking;
 mod models;
 pub mod prompt_cache;
 pub mod prompt_filter;
@@ -165,6 +166,12 @@ pub struct GatewayConfig {
     /// 平时关闭省磁盘。关闭不影响请求日志主条目。
     #[serde(default)]
     pub log_stream_events: bool,
+    /// 隐私遮蔽：请求离开本机前把敏感值换成占位符，响应回来再换回真值。
+    /// 默认关：开启后所有发往上游的文本（messages/system/tools/input）
+    /// 都会过一遍规则引擎，极小概率误伤（见 masking.rs 的规则清单）。
+    /// 真实值只在内存，不落盘；遮蔽失败时 fail-closed 拒绝请求。
+    #[serde(default)]
+    pub privacy_mask_enabled: bool,
 }
 
 fn default_cache_ttl() -> u64 {
@@ -252,6 +259,10 @@ pub struct GatewayRequestLogEntry {
     /// 仅流式路径可得：非流式响应体不带该事件时为 None。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credits: Option<f64>,
+    /// 上游 contextUsageEvent 给出的上下文窗口占用百分比（0-100）。
+    /// 仅流式路径可得：上游在流末帧报告本次请求占了模型窗口多少。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_usage_percentage: Option<f32>,
     /// 错误类型（如 invalid_request_error, authentication_error 等）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_type: Option<String>,
@@ -305,6 +316,8 @@ pub struct GatewayRequestStats {
     pub total_output_tokens: i64,
     pub total_cache_read_tokens: i64,
     pub total_cache_creation_tokens: i64,
+    /// 上游 meteringEvent 的真实计费消耗合计（credits）
+    pub total_credits: f64,
     pub requests_with_cache: usize,
     pub max_duration_ms: u64,
     pub avg_duration_ms: u64,
@@ -317,6 +330,11 @@ pub struct GatewayRuntime {
     pub log_store: Arc<log_store::LogStore>,
     pub response_cache: Arc<AsyncMutex<response_cache::ResponseCache>>,
     pub load_balancer: Arc<load_balancer::LoadBalancer>,
+    /// 隐私遮蔽引擎（值→占位符映射表跨请求保留，同值永远同占位符）。
+    /// `Arc<AsyncMutex<..>>`：mask_text 需要可变访问映射表。
+    pub mask_engine: Arc<AsyncMutex<masking::MaskEngine>>,
+    /// 遮蔽审计记录（内存环形缓冲，只存元数据不留真值）。
+    pub mask_audit: Arc<masking::MaskAuditLog>,
     shutdown_tx: Option<oneshot::Sender<()>>,
     server_task: Option<JoinHandle<()>>,
 }
@@ -348,6 +366,11 @@ struct RouterState {
     load_balancer: Arc<load_balancer::LoadBalancer>,
     log_store: Arc<log_store::LogStore>,
     response_cache: Arc<AsyncMutex<response_cache::ResponseCache>>,
+    /// 隐私遮蔽引擎（值→占位符映射表跨请求保留，同值永远同占位符）。
+    /// `Arc<AsyncMutex<..>>`：mask_text 需要可变访问映射表。
+    mask_engine: Arc<AsyncMutex<masking::MaskEngine>>,
+    /// 遮蔽审计记录（内存环形缓冲，只存元数据不留真值）。
+    mask_audit: Arc<masking::MaskAuditLog>,
     /// 账号状态的唯一共享副本（= `AppState.store`）。
     ///
     /// gateway 不得自行 `AccountStore::new()`：那会得到与 Tauri 命令
@@ -456,6 +479,7 @@ impl Default for GatewayConfig {
             tool_search_enabled: true,
             session_affinity: false,
             log_stream_events: false,
+            privacy_mask_enabled: false,
         }
     }
 }
@@ -902,6 +926,7 @@ pub async fn get_gateway_request_stats(
             total_output_tokens: stats.total_output_tokens as i64,
             total_cache_read_tokens: stats.total_cache_read_tokens as i64,
             total_cache_creation_tokens: stats.total_cache_creation_tokens as i64,
+            total_credits: stats.total_credits,
             requests_with_cache: stats.requests_with_cache,
             max_duration_ms,
             avg_duration_ms: stats.avg_duration_ms,
@@ -981,6 +1006,7 @@ fn get_gateway_request_stats_from_path(path: &Path) -> Result<GatewayRequestStat
             total_output_tokens: 0,
             total_cache_read_tokens: 0,
             total_cache_creation_tokens: 0,
+            total_credits: 0.0,
             requests_with_cache: 0,
             max_duration_ms: 0,
             avg_duration_ms: 0,
@@ -998,6 +1024,7 @@ fn get_gateway_request_stats_from_path(path: &Path) -> Result<GatewayRequestStat
     let mut total_output_tokens: i64 = 0;
     let mut total_cache_read_tokens: i64 = 0;
     let mut total_cache_creation_tokens: i64 = 0;
+    let mut total_credits: f64 = 0.0;
     let mut requests_with_cache = 0;
     let mut max_duration_ms = 0u64;
     let mut total_duration_ms = 0u64;
@@ -1027,6 +1054,7 @@ fn get_gateway_request_stats_from_path(path: &Path) -> Result<GatewayRequestStat
             total_output_tokens += entry.output_tokens.unwrap_or(0) as i64;
             total_cache_read_tokens += entry.cache_read_input_tokens.unwrap_or(0) as i64;
             total_cache_creation_tokens += entry.cache_creation_input_tokens.unwrap_or(0) as i64;
+            total_credits += entry.credits.unwrap_or(0.0);
 
             if entry.cache_read_input_tokens.unwrap_or(0) > 0
                 || entry.cache_creation_input_tokens.unwrap_or(0) > 0
@@ -1054,6 +1082,7 @@ fn get_gateway_request_stats_from_path(path: &Path) -> Result<GatewayRequestStat
         total_output_tokens,
         total_cache_read_tokens,
         total_cache_creation_tokens,
+        total_credits,
         requests_with_cache,
         max_duration_ms,
         avg_duration_ms,
@@ -1269,6 +1298,11 @@ async fn spawn_runtime(
     // 初始化内存日志存储（保存最近 10000 条日志）
     let log_store = Arc::new(log_store::LogStore::new(10000));
 
+    // 隐私遮蔽：引擎（映射表跨请求保留）+ 审计记录（内存环形缓冲）。
+    // 两者在 runtime 生命周期内存活，停止即释放——审计元数据刻意不落盘。
+    let mask_engine = Arc::new(AsyncMutex::new(masking::MaskEngine::new()));
+    let mask_audit = Arc::new(masking::MaskAuditLog::new(500));
+
     // 从文件加载历史日志到内存（启动时恢复，容量对齐内存上限 10000，
     // 避免重启后内存视图只覆盖最近 500 条的断层）
     if let Ok(path) = request_log_path() {
@@ -1307,6 +1341,8 @@ async fn spawn_runtime(
         load_balancer: load_balancer.clone(),
         log_store: log_store.clone(),
         response_cache: response_cache.clone(),
+        mask_engine: mask_engine.clone(),
+        mask_audit: mask_audit.clone(),
         store,
     };
 
@@ -1347,6 +1383,8 @@ async fn spawn_runtime(
         log_store,
         response_cache,
         load_balancer,
+        mask_engine,
+        mask_audit,
         shutdown_tx: Some(shutdown_tx),
         server_task: Some(server_task),
     })

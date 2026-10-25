@@ -99,6 +99,7 @@ impl LogStore {
             total_output_tokens: 0,
             total_cache_read_tokens: 0,
             total_cache_creation_tokens: 0,
+            total_credits: 0.0,
             avg_duration_ms: 0,
             requests_with_cache: 0,
         };
@@ -124,6 +125,7 @@ impl LogStore {
             stats.total_output_tokens += log.output_tokens.unwrap_or(0);
             stats.total_cache_read_tokens += log.cache_read_input_tokens.unwrap_or(0);
             stats.total_cache_creation_tokens += log.cache_creation_input_tokens.unwrap_or(0);
+            stats.total_credits += log.credits.unwrap_or(0.0);
 
             if log.cache_read_input_tokens.unwrap_or(0) > 0
                 || log.cache_creation_input_tokens.unwrap_or(0) > 0
@@ -257,6 +259,8 @@ pub struct LogStats {
     pub total_output_tokens: i32,
     pub total_cache_read_tokens: i32,
     pub total_cache_creation_tokens: i32,
+    /// 上游 meteringEvent 的真实计费消耗合计（credits）
+    pub total_credits: f64,
     pub avg_duration_ms: u64,
     pub requests_with_cache: usize,
 }
@@ -341,6 +345,7 @@ mod tests {
             cache_read_input_tokens: None,
             cache_creation_input_tokens: None,
             credits: None,
+            context_usage_percentage: None,
             error_type: None,
             stream_info: None,
             request_summary: None,
