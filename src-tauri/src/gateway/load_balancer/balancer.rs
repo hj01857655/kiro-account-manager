@@ -420,19 +420,52 @@ impl LoadBalancer {
     }
 }
 
-/// 计算账号剩余配额百分比
+/// 计算账号剩余配额比例（0-1；WeightedRandom 会 ×100 转百分比）
+///
+/// 真实形状是 usageBreakdownList（usageLimit/currentUsage），此前读的
+/// usage_data.remaining/total 两个键全仓无人写入，导致 MostQuota 恒平手、
+/// WeightedRandom 恒等权，两个策略退化为随机/固定选号。无 breakdown
+/// 数据时回落 1.0（= 旧默认 100%）。
 fn remaining_quota(account: &Account) -> f64 {
-    // 从 usage_data 中提取配额信息
-    if let Some(usage_data) = &account.usage_data {
-        // 尝试提取 remaining 和 total
-        if let (Some(remaining), Some(total)) = (
-            usage_data.get("remaining").and_then(|v| v.as_i64()),
-            usage_data.get("total").and_then(|v| v.as_i64()),
-        ) {
-            if total > 0 {
-                return (remaining as f64 / total as f64) * 100.0;
+    crate::core::usage::UsageDetails::from_usage_data(account.usage_data.as_ref())
+        .map(|d| {
+            let total_limit = d.main_limit + d.trial_limit + d.bonus_limit + d.overage_cap;
+            if total_limit <= 0.0 {
+                1.0
+            } else {
+                (d.remaining() / total_limit).clamp(0.0, 1.0)
             }
-        }
+        })
+        .unwrap_or(1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn account_with_usage(usage: Option<serde_json::Value>) -> Account {
+        let mut acc = Account::new_enterprise("u1".to_string(), "test".to_string());
+        acc.usage_data = usage;
+        acc
     }
-    100.0 // 默认 100%
+
+    #[test]
+    fn remaining_quota_reads_usage_breakdown() {
+        // 100 总配额用掉 30 → 0.7；没有 trial/bonus/overage
+        let acc = account_with_usage(Some(serde_json::json!({
+            "usageBreakdownList": [{
+                "usageLimit": 100.0,
+                "currentUsage": 30.0
+            }]
+        })));
+        assert!((remaining_quota(&acc) - 0.7).abs() < 0.01);
+    }
+
+    #[test]
+    fn remaining_quota_falls_back_without_breakdown() {
+        // 旧代码读的 remaining/total 键并不是真实形状：这里保证不再被它误导
+        let acc = account_with_usage(Some(serde_json::json!({ "remaining": 5, "total": 100 })));
+        assert!((remaining_quota(&acc) - 1.0).abs() < 0.01);
+        assert_eq!(remaining_quota(&account_with_usage(None)), 1.0);
+    }
 }
