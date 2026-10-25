@@ -15,6 +15,7 @@ import {
 import GatewayConfigComponent from './GatewayConfig'
 import { GatewayStatusBar } from './GatewayStatusBar'
 import { GatewayOverview } from './GatewayOverview'
+import { MaskingPanel } from './MaskingPanel'
 import { RequestLogsDialog } from './RequestLogsDialog'
 import { ProtocolTestDialog } from './ProtocolTestDialog'
 import { GatewayConfig, GatewayStatus, type GatewayOverviewStats } from './gatewayPageState'
@@ -427,6 +428,9 @@ function GatewayPage() {
             <TabsTrigger value="logs" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
               {t('gateway.tabRequestLogs')}
             </TabsTrigger>
+            <TabsTrigger value="masking" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
+              {t('gatewayMasking.tabMasking')}
+            </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
               {t('gateway.tabSettings')}
               {hasFieldErrors && (
@@ -462,6 +466,11 @@ function GatewayPage() {
               onLogRequestsChange={(enabled) => setField('logRequests', enabled)}
             />
           </TabsContent>
+
+          <TabsContent value="masking" className="m-0">
+            <MaskingPanel />
+          </TabsContent>
+
 
           <TabsContent value="settings" className="m-0">
             <GatewayConfigComponent

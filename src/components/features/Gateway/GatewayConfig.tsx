@@ -385,6 +385,10 @@ function GatewayConfig({
                   <Label className="text-sm" title={t('gateway.logStreamEventsHint')}>{t('gateway.logStreamEventsToggle')}</Label>
                   <Switch checked={!!config.logStreamEvents} onCheckedChange={(checked: boolean) => setField('logStreamEvents', checked)} />
                 </div>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                  <Label className="text-sm" title={t('gateway.privacyMaskHint')}>{t('gateway.privacyMaskToggle')}</Label>
+                  <Switch checked={!!config.privacyMaskEnabled} onCheckedChange={(checked: boolean) => setField('privacyMaskEnabled', checked)} />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs text-muted-foreground">{t('gateway.cacheTTLSeconds')}</Label>
                   <Input

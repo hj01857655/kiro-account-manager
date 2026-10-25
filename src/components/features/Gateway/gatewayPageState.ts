@@ -38,6 +38,7 @@ export interface GatewayConfig {
   toolSearchEnabled: boolean;
   sessionAffinity: boolean;
   logStreamEvents: boolean;
+  privacyMaskEnabled: boolean;
   upstreamProxy: string;
   maxToolDescriptionLength: number;
 }
@@ -99,6 +100,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   toolSearchEnabled: true,
   sessionAffinity: false,
   logStreamEvents: false,
+  privacyMaskEnabled: false,
   upstreamProxy: '',
   maxToolDescriptionLength: 10237
 }
@@ -184,6 +186,7 @@ export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
   toolSearchEnabled: gatewayConfig?.toolSearchEnabled ?? true,
   sessionAffinity: gatewayConfig?.sessionAffinity ?? false,
   logStreamEvents: gatewayConfig?.logStreamEvents ?? false,
+  privacyMaskEnabled: gatewayConfig?.privacyMaskEnabled ?? false,
   upstreamProxy: typeof gatewayConfig?.upstreamProxy === 'string' ? gatewayConfig.upstreamProxy : '',
   maxToolDescriptionLength: gatewayConfig?.maxToolDescriptionLength ?? 10237
 })

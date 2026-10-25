@@ -150,3 +150,29 @@ export function testRouteConfig(config: any) {
     error: string | null
   }>('test_route_config', { config })
 }
+
+/** 遮蔽审计记录（只含元数据，不含真值） */
+export interface MaskAuditEntry {
+  occurredAt: string
+  requestId: string
+  endpoint: string
+  clientUserAgent?: string | null
+  items: Array<{
+    kind: string
+    action: 'mask' | 'warn' | 'block'
+    placeholder: string
+    valueLength: number
+    valueHead: string
+    rule: string
+  }>
+  maskedPreview: string
+}
+
+export function getMaskAuditEntries<T = MaskAuditEntry[]>(limit = 100) {
+  return invoke<T>('get_mask_audit_entries', { limit })
+}
+
+/** Try-it：对一段文本试跑遮蔽，返回占位符版与命中条目（不落存储） */
+export function previewMasking(text: string) {
+  return invoke<{ text: string; items: unknown[]; blocked: boolean }>('preview_masking', { text })
+}
