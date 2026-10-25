@@ -377,6 +377,10 @@ function GatewayConfig({
                   <Label className="text-sm">{t('gateway.toolSearchToggle')}</Label>
                   <Switch checked={!!config.toolSearchEnabled} onCheckedChange={(checked: boolean) => setField('toolSearchEnabled', checked)} />
                 </div>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                  <Label className="text-sm" title={t('gateway.sessionAffinityHint')}>{t('gateway.sessionAffinityToggle')}</Label>
+                  <Switch checked={!!config.sessionAffinity} onCheckedChange={(checked: boolean) => setField('sessionAffinity', checked)} />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs text-muted-foreground">{t('gateway.cacheTTLSeconds')}</Label>
                   <Input

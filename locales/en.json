@@ -1918,5 +1918,7 @@
   "gatewayLogs.colCreditsTitle": "Real billing cost from the upstream meteringEvent; absent for non-streaming requests",
   "gateway.cacheReadWrite": "Cache R/W",
   "gateway.cacheReadWriteTitle": "Cache-read tokens (hit, saves cost) / cache-write tokens (first time, +25% cost)",
-  "gateway.creditsTitle": "Real billing cost from the upstream meteringEvent; absent for non-streaming requests"
+  "gateway.creditsTitle": "Real billing cost from the upstream meteringEvent; absent for non-streaming requests",
+  "gateway.sessionAffinityToggle": "Session affinity",
+  "gateway.sessionAffinityHint": "Route the same client IP to the same account: upstream cache is per-account, so a fixed route improves cache hits (see the cache-read column in logs)"
 }

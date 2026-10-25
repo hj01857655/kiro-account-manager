@@ -1753,7 +1753,7 @@
   "gatewayLogs.cacheSaved": "(Сэкономлено {{pct}}% входного кэша)",
   "gatewayLogs.cacheLabel": "Кэш:",
   "gatewayLogs.cacheItems": "эл. (Delta: {{delta}} / LRU: {{lru}})",
-  "gatewayLogs.logRequests": "Записывать журнал",
+  "gatewayLogs.logRequests": "Записывать журнал запросов",
   "gatewayLogs.clearCache": "Очистить кэш",
   "gatewayLogs.searchPlaceholder": "Поиск аккаунта, модели, пути, источника или кода ответа...",
   "gatewayLogs.filterAll": "Все коды ответа",
@@ -1918,5 +1918,7 @@
   "gatewayLogs.colCreditsTitle": "Реальный расход из meteringEvent вышестоящего сервера; отсутствует для нестриминговых запросов",
   "gateway.cacheReadWrite": "Кэш Ч/З",
   "gateway.cacheReadWriteTitle": "Токены чтения кэша (попадание, экономия) / записи кэша (первый раз, +25% стоимости)",
-  "gateway.creditsTitle": "Реальный расход из meteringEvent вышестоящего сервера; отсутствует для нестриминговых запросов"
+  "gateway.creditsTitle": "Реальный расход из meteringEvent вышестоящего сервера; отсутствует для нестриминговых запросов",
+  "gateway.sessionAffinityToggle": "Привязка сессии",
+  "gateway.sessionAffinityHint": "Направлять один IP клиента на один аккаунт: кэш вышестоящего сервера привязан к аккаунту, фиксированная маршрутизация повышает попадания кэша (см. столбец чтения кэша в журналах)"
 }

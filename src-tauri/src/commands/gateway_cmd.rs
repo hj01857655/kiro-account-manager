@@ -334,7 +334,8 @@ pub async fn test_route_config(
     };
 
     let selected_account: Option<Account> = if let Some(lb) = balancer {
-        lb.select_account(&matched_accounts).await
+        // 路由测试没有真实客户端 IP：不带粘性 key，按配置策略选号
+        lb.select_account(&matched_accounts, None).await
     } else {
         // Gateway 未初始化时使用默认策略（轮询）
         matched_accounts.first().cloned()

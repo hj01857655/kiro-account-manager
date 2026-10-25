@@ -109,10 +109,11 @@ pub async fn resolve_upstream_credentials(
     config: &GatewayConfig,
     state: &RouterState,
     preferred_account_id: Option<&str>,
+    client_ip: &str,
 ) -> Result<UpstreamCredentials, String> {
     match config.account_mode.as_str() {
         "single" | "group" | "pool" => {
-            resolve_managed_account_credentials(config, state, preferred_account_id).await
+            resolve_managed_account_credentials(config, state, preferred_account_id, client_ip).await
         }
         "local" => Err("kiro2api 不再支持 local 模式，请改用 single/group/pool 账号池模式".to_string()),
         _ => Err("accountMode 必须是 single/group/pool".to_string()),
@@ -123,6 +124,7 @@ pub async fn resolve_managed_account_credentials(
     config: &GatewayConfig,
     state: &RouterState,
     preferred_account_id: Option<&str>,
+    client_ip: &str,
 ) -> Result<UpstreamCredentials, String> {
     // 共享副本即唯一真相：不再 AccountStore::new() + reload()，
     // 否则拿到的是与 Tauri 命令互不知情的独立快照，后写覆盖前写。
@@ -226,8 +228,18 @@ pub async fn resolve_managed_account_credentials(
         return Err(GatewayError::NoAvailableAccount.to_string());
     }
 
+    // 会话粘性：开关打开且未指定 x-account-id 时，按客户端 IP 固定选号
+    let affinity_key = if config.session_affinity && preferred_account_id.is_none() {
+        Some(client_ip)
+    } else {
+        None
+    };
+
     // 使用 LoadBalancer 选择账号
-    let selected_account = state.load_balancer.select_account(&accounts).await;
+    let selected_account = state
+        .load_balancer
+        .select_account(&accounts, affinity_key)
+        .await;
 
     let Some(account) = selected_account else {
         return Err(GatewayError::BalancerNoSelection.to_string());

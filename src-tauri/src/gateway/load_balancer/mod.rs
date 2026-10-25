@@ -120,90 +120,77 @@ mod tests {
         });
     }
 
+    /// 测试账号：两个 enabled/active 且带 token 的账号，
+    /// 走 `with_store` 路径时共享一份独立 AccountStore。
+    fn test_accounts() -> Vec<Account> {
+        let make = |id: &str, label: &str| Account {
+            id: id.to_string(),
+            email: Some(format!("{label}@example.com")),
+            password: None,
+            label: label.to_string(),
+            status: "active".to_string(),
+            added_at: "2024-01-01".to_string(),
+            access_token: Some(format!("token-{id}")),
+            refresh_token: None,
+            expires_at: None,
+            provider: None,
+            user_id: None,
+            auth_method: None,
+            client_id: None,
+            client_secret: None,
+            region: Some("us-east-1".to_string()),
+            client_id_hash: None,
+            sso_session_id: None,
+            id_token: None,
+            start_url: None,
+            profile_arn: None,
+            token_endpoint: None,
+            issuer_url: None,
+            scopes: None,
+            usage_data: None,
+            group_id: None,
+            tag_links: vec![],
+            machine_id: None,
+            available_models_cache: None,
+            failure_count: 0,
+            last_failure_at: None,
+            disabled_reason: None,
+            success_count: 0,
+            enabled: true,
+            proxy_config: None,
+        };
+        vec![make("1", "account1"), make("2", "account2")]
+    }
+
     #[tokio::test]
     async fn test_load_balancer_round_robin() {
         let lb = LoadBalancer::new(LoadBalancerStrategy::RoundRobin);
-        let accounts = vec![
-            Account {
-                id: "1".to_string(),
-                email: Some("test1@example.com".to_string()),
-                password: None,
-                label: "Account 1".to_string(),
-                status: "active".to_string(),
-                added_at: "2024-01-01".to_string(),
-                access_token: Some("token1".to_string()),
-                refresh_token: None,
-                expires_at: None,
-                provider: None,
-                user_id: None,
-                auth_method: None,
-                client_id: None,
-                client_secret: None,
-                region: Some("us-east-1".to_string()),
-                client_id_hash: None,
-                sso_session_id: None,
-                id_token: None,
-                start_url: None,
-                profile_arn: None,
-                token_endpoint: None,
-                issuer_url: None,
-                scopes: None,
-                usage_data: None,
-                group_id: None,
-                tag_links: vec![],
-                machine_id: None,
-                available_models_cache: None,
-                failure_count: 0,
-                last_failure_at: None,
-                disabled_reason: None,
-                success_count: 0,
-                enabled: true,
-                proxy_config: None,
-            },
-            Account {
-                id: "2".to_string(),
-                email: Some("test2@example.com".to_string()),
-                password: None,
-                label: "Account 2".to_string(),
-                status: "active".to_string(),
-                added_at: "2024-01-01".to_string(),
-                access_token: Some("token2".to_string()),
-                refresh_token: None,
-                expires_at: None,
-                provider: None,
-                user_id: None,
-                auth_method: None,
-                client_id: None,
-                client_secret: None,
-                region: Some("us-east-1".to_string()),
-                client_id_hash: None,
-                sso_session_id: None,
-                id_token: None,
-                start_url: None,
-                profile_arn: None,
-                token_endpoint: None,
-                issuer_url: None,
-                scopes: None,
-                usage_data: None,
-                group_id: None,
-                tag_links: vec![],
-                machine_id: None,
-                available_models_cache: None,
-                failure_count: 0,
-                last_failure_at: None,
-                disabled_reason: None,
-                success_count: 0,
-                enabled: true,
-                proxy_config: None,
-            },
-        ];
+        let accounts = test_accounts();
 
-        let acc1 = lb.select_account(&accounts).await.unwrap();
-        let acc2 = lb.select_account(&accounts).await.unwrap();
-        let acc3 = lb.select_account(&accounts).await.unwrap();
+        let acc1 = lb.select_account(&accounts, None).await.unwrap();
+        let acc2 = lb.select_account(&accounts, None).await.unwrap();
+        let acc3 = lb.select_account(&accounts, None).await.unwrap();
 
         assert_eq!(acc1.id, "1");
         assert_eq!(acc2.id, "2");
         assert_eq!(acc3.id, "1"); // 轮回到第一个
+    }
+
+    #[tokio::test]
+    async fn sticky_selection_is_deterministic_per_key() {
+        let lb = LoadBalancer::new(LoadBalancerStrategy::RoundRobin);
+        let accounts = test_accounts();
+
+        // 同 key 多次选号必须落在同一账号（粘性的全部意义）
+        let first = lb.select_account(&accounts, Some("10.0.0.7")).await.unwrap();
+        for _ in 0..10 {
+            let next = lb.select_account(&accounts, Some("10.0.0.7")).await.unwrap();
+            assert_eq!(next.id, first.id, "同 key 必须选到同一账号");
+        }
+
+        // 无粘性 key 时走原策略（这里 RoundRobin），与粘性路径互不干扰
+        let rr1 = lb.select_account(&accounts, None).await.unwrap();
+        let rr2 = lb.select_account(&accounts, None).await.unwrap();
+        assert_ne!(rr1.id, rr2.id, "无粘性 key 应继续轮询");
     }
 }

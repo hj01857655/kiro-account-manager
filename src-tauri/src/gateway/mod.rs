@@ -154,6 +154,12 @@ pub struct GatewayConfig {
     /// 客户端仍收标准 SSE。关闭后 defer_loading 字段被忽略，行为与旧版一致。
     #[serde(default = "default_true_val")]
     pub tool_search_enabled: bool,
+    /// 会话粘性：同客户端 IP 固定路由到同一账号。
+    /// 上游 prompt cache 按账号维度生效，同客户端在账号间跳动会反复丢缓存，
+    /// 固定路由可显著提升缓存命中（日志缓存读列可见）；顺带分散风控面。
+    /// 指定 x-account-id 时该头优先，粘性不介入。
+    #[serde(default)]
+    pub session_affinity: bool,
 }
 
 fn default_cache_ttl() -> u64 {
@@ -443,6 +449,7 @@ impl Default for GatewayConfig {
             response_cache_ttl: default_cache_ttl(),
             web_search_enabled: true,
             tool_search_enabled: true,
+            session_affinity: false,
         }
     }
 }

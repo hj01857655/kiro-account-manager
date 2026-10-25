@@ -2,6 +2,17 @@
 
 use super::*;
 
+/// 粘性哈希：进程内稳定即可（无需跨进程一致，进程重启映射自然重建）。
+///
+/// `DefaultHasher::new` 是零种子，同 key 同结果；`RandomState` 的种子每次
+/// 启动随机，会让「同 key 同账号」的跨重启稳定性失效，故不用它。
+fn stable_hash(key: &str) -> usize {
+    use std::hash::Hasher;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    hasher.write(key.as_bytes());
+    hasher.finish() as usize
+}
+
 /// 负载均衡器
 pub struct LoadBalancer {
     /// 负载均衡策略
@@ -68,8 +79,16 @@ impl LoadBalancer {
         }
     }
 
-    /// 选择账号
-    pub async fn select_account(&self, accounts: &[Account]) -> Option<Account> {
+    /// 选择账号。
+    ///
+    /// `affinity_key` 非空时启用会话粘性：同 key 固定映射到健康集合中的
+    /// 同一个账号（key 哈希取模），让上游 prompt cache 按账号维度持续命中。
+    /// 无粘性 key 或健康集合变化时自然回落到当前策略。
+    pub async fn select_account(
+        &self,
+        accounts: &[Account],
+        affinity_key: Option<&str>,
+    ) -> Option<Account> {
         if accounts.is_empty() {
             return None;
         }
@@ -78,9 +97,14 @@ impl LoadBalancer {
         let healthy_accounts = self.filter_healthy_accounts(accounts).await;
 
         if healthy_accounts.is_empty() {
-            // 如果没有健康的账号，尝试重置健康状态
+            // 如果没有健康的，尝试重置健康状态
             self.reset_health_if_all_unhealthy(accounts).await;
             return accounts.first().cloned();
+        }
+
+        // 会话粘性：同客户端固定选号，优先于策略
+        if let Some(key) = affinity_key {
+            return Some(self.select_sticky(&healthy_accounts, key));
         }
 
         match self.strategy {
@@ -97,6 +121,19 @@ impl LoadBalancer {
         }
     }
 
+    /// 粘性选号：key 哈希在健康集合里固定取一个。
+    ///
+    /// 有意不做「账号-客户端」映射表：映射表要维护 TTL 与清理，而按 id 排序后
+    /// 哈希取模即可保证同一 key 在集合不变时永远命中同一账号；账号增减只影响
+    /// 落在边界上的少数 key，代价可接受（换来的是 cache 命中的大多数场景）。
+    fn select_sticky(&self, accounts: &[Account], key: &str) -> Account {
+        let mut sorted: Vec<&Account> = accounts.iter().collect();
+        // 先按 id 排序：账号 Vec 的顺序来自账号库遍历，不排序时同一 key
+        // 可能因底层顺序变化而落到不同账号
+        sorted.sort_by(|a, b| a.id.cmp(&b.id));
+        let hash = stable_hash(key);
+        sorted[hash % sorted.len()].clone()
+    }
     /// 过滤健康的账号（排除速率限制和已封禁的账号）
     async fn filter_healthy_accounts(&self, accounts: &[Account]) -> Vec<Account> {
         let health_map = self.health_map.read().await;

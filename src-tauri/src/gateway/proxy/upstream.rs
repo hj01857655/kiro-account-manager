@@ -353,10 +353,12 @@ pub async fn proxy_handler(
     //  为避免可变借用冲突，把绑定挪到改写完成之后——见下方。）
 
     let preferred_account_id_ref = preferred_account_id.as_deref();
+    let client_ip = client_addr.ip().to_string();
     let upstream = match resolve_upstream_credentials(
         &state.config,
         &state,
         preferred_account_id_ref,
+        &client_ip,
     )
     .await
     {
@@ -373,7 +375,7 @@ pub async fn proxy_handler(
                     || message.to_lowercase().contains("too many requests"))
             {
                 log::warn!("[Gateway] Token 刷新被限流，尝试换账号: {}", sanitize_error(&message));
-                match resolve_upstream_credentials(&state.config, &state, None).await {
+                match resolve_upstream_credentials(&state.config, &state, None, &client_ip).await {
                     Ok(creds) => creds,
                     Err(retry_message) => {
                         let sanitized = sanitize_error(&retry_message);
@@ -756,6 +758,7 @@ pub async fn proxy_handler(
                 &state.config,
                 &state,
                 preferred_account_id_ref,
+                &client_ip,
             )
             .await
             {
