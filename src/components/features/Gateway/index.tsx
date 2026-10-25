@@ -165,7 +165,7 @@ function GatewayPage() {
   // 不再单设「最近错误」卡片（同粒度不两处呈现）。
   const refreshRecentLogs = useCallback(async () => {
     try {
-      setRecentLogs(await getGatewayRequestLogs<any[]>(8))
+      setRecentLogs(await getGatewayRequestLogs<any[]>(5, true))
     } catch {
       // 网关未运行时后端改读落盘日志；仍失败就留空，由表格显示占位
       setRecentLogs([])
@@ -390,7 +390,7 @@ function GatewayPage() {
   }
 
   return (
-    <div className="flex h-full flex-col max-w-full overflow-hidden glass-main">
+    <div className="flex h-full flex-col max-w-full overflow-hidden surface-main">
       {/* 页头：只承担「这是什么」，动作全部下沉到状态条 */}
       <div className="flex items-center gap-3 px-5 py-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/80 to-primary flex items-center justify-center shadow-md ring-1 ring-primary/20 flex-shrink-0">
@@ -420,7 +420,7 @@ function GatewayPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <div className="px-5 pt-3 pb-1">
-          <TabsList className="glass-card flex h-10 w-full justify-start rounded-lg border-none p-0.5 lg:w-fit">
+          <TabsList className="surface-card flex h-10 w-full justify-start rounded-lg border-none p-0.5 lg:w-fit">
             <TabsTrigger value="overview" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
               {t('gateway.tabOverview')}
             </TabsTrigger>

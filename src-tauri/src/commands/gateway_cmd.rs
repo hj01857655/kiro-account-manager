@@ -67,8 +67,9 @@ pub async fn get_gateway_log_dir(app: AppHandle) -> Result<String, String> {
 pub async fn get_gateway_request_logs(
     state: State<'_, AppState>,
     limit: Option<usize>,
+    session_only: Option<bool>,
 ) -> Result<Vec<GatewayRequestLogEntry>, String> {
-    get_gateway_request_logs_inner(&state, limit).await
+    get_gateway_request_logs_inner(&state, limit, session_only.unwrap_or(false)).await
 }
 
 #[tauri::command]

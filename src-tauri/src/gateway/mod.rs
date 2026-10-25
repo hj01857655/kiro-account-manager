@@ -807,6 +807,7 @@ pub fn append_gateway_request_log(entry: &GatewayRequestLogEntry) -> Result<(), 
 pub async fn get_gateway_request_logs(
     state: &tauri::State<'_, crate::state::AppState>,
     limit: Option<usize>,
+    session_only: bool,
 ) -> Result<Vec<GatewayRequestLogEntry>, String> {
     // 尝试从运行中的 gateway 的内存存储获取
     let log_store_opt = {
@@ -819,9 +820,19 @@ pub async fn get_gateway_request_logs(
     };
 
     if let Some(log_store) = log_store_opt {
-        // 从内存存储获取
-        let logs = log_store.get_last(limit.unwrap_or(50)).await;
+        // session_only=true 只取本次运行的条目（概览「最近请求」），
+        // 不把启动回灌的历史误当成实时流量
+        let logs = if session_only {
+            log_store.get_last_session(limit.unwrap_or(50)).await
+        } else {
+            log_store.get_last(limit.unwrap_or(50)).await
+        };
         return Ok(logs);
+    }
+
+    // gateway 未运行：session_only 语义下没有「本次运行」可言
+    if session_only {
+        return Ok(Vec::new());
     }
 
     // 如果 gateway 未运行，从文件读取
@@ -1230,15 +1241,19 @@ async fn spawn_runtime(
     // 初始化内存日志存储（保存最近 10000 条日志）
     let log_store = Arc::new(log_store::LogStore::new(10000));
 
-    // 从文件加载历史日志到内存（启动时恢复）
+    // 从文件加载历史日志到内存（启动时恢复，容量对齐内存上限 10000，
+    // 避免重启后内存视图只覆盖最近 500 条的断层）
     if let Ok(path) = request_log_path() {
-        if let Ok(history) = get_gateway_request_logs_from_path(&path, Some(500)) {
+        if let Ok(history) = get_gateway_request_logs_from_path(&path, Some(10000)) {
             let store_clone = log_store.clone();
             tokio::spawn(async move {
                 // 历史日志是倒序的（最新在前），需要反转后逐条添加
+                let restored = history.len();
                 for entry in history.into_iter().rev() {
                     store_clone.add(entry).await;
                 }
+                // 回灌的是历史：之后的 add 才算「本次运行」的流量（概览按会话取数）
+                store_clone.set_session_start(restored).await;
             });
         }
     }

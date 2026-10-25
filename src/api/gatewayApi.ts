@@ -76,8 +76,8 @@ export function readGatewaySseLog(requestId: string, endpoint?: string) {
   return invoke<string[]>('read_gateway_sse_log', { requestId, endpoint: endpoint ?? null })
 }
 
-export function getGatewayRequestLogs<T = any[]>(limit = 120) {
-  return invoke<T>('get_gateway_request_logs', { limit })
+export function getGatewayRequestLogs<T = any[]>(limit = 120, sessionOnly = false) {
+  return invoke<T>('get_gateway_request_logs', { limit, sessionOnly })
 }
 
 export function clearGatewayRequestLogs() {

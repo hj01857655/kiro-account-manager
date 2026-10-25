@@ -16,6 +16,8 @@ struct LogStoreInner {
     logs: Vec<GatewayRequestLogEntry>,
     /// 最大保存条数
     max_logs: usize,
+    /// 本次运行的起点：启动恢复的历史条目数。get_last_session 只取这之后的条目
+    session_start: usize,
 }
 impl LogStore {
     /// 创建新的日志存储
@@ -27,6 +29,7 @@ impl LogStore {
             inner: Arc::new(RwLock::new(LogStoreInner {
                 logs: Vec::with_capacity(max_logs.min(1000)),
                 max_logs,
+                session_start: 0,
             })),
         }
     }
@@ -43,6 +46,8 @@ impl LogStore {
             // 保留最新的 max_logs 条
             let drain_count = inner.logs.len() - inner.max_logs;
             inner.logs.drain(0..drain_count);
+            // 会话起点是相对索引，截断后前移
+            inner.session_start = inner.session_start.saturating_sub(drain_count);
         }
     }
 
@@ -59,10 +64,26 @@ impl LogStore {
         inner.logs[start..].to_vec()
     }
 
+    /// 标记启动恢复的历史条数：之后的 add 才算「本次运行」的流量
+    pub async fn set_session_start(&self, restored: usize) {
+        let mut inner = self.inner.write().await;
+        inner.session_start = restored.min(inner.logs.len());
+    }
+
+    /// 获取本次运行（会话）内的最近 N 条——不含启动时从文件回灌的历史。
+    /// 概览「最近请求」用它：看到的永远是正在发生的流量，不是上一轮会话的旧数据。
+    pub async fn get_last_session(&self, count: usize) -> Vec<GatewayRequestLogEntry> {
+        let inner = self.inner.read().await;
+        let session = &inner.logs[inner.session_start.min(inner.logs.len())..];
+        let start = session.len().saturating_sub(count);
+        session[start..].to_vec()
+    }
+
     /// 清空所有日志
     pub async fn clear(&self) {
         let mut inner = self.inner.write().await;
         inner.logs.clear();
+        inner.session_start = 0;
     }
 
     /// 获取日志统计信息

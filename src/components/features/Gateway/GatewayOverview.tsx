@@ -21,6 +21,9 @@ export interface RecentRequestLog {
   clientUserAgent?: string
   inputTokens?: number
   outputTokens?: number
+  /** Prompt Caching：缓存读取（节省成本）/ 缓存写入（首次 +25% 成本） */
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
   /** 原始请求体 / 响应体（后端已截断到 64KB），供行内展开查看 */
   requestBody?: string
   responseBody?: string
@@ -29,7 +32,7 @@ export interface RecentRequestLog {
 interface GatewayOverviewProps {
   recipes: ClientRecipe[]
   onCopy: (text: string, message: string) => void
-  /** 最近请求（后端 getGatewayRequestLogs 的 8 条切片）——概览用一张表呈现
+  /** 最近请求（后端 getGatewayRequestLogs 的 5 条切片，与 10s 轮询同频）——概览用一张表呈现
     请求与错误，错误只是其中一行的状态，不再单设「最近错误」卡片 */
   recentLogs: RecentRequestLog[]
   /** 账号池里是否真能取到号（只看启用账号），与概览顶部那条告警直接挂钩 */
@@ -207,7 +210,9 @@ export function GatewayOverview({
 
       {/* B5 最近请求：明细的切片。错误只是表格里一行的状态，
           不再单设「最近错误」卡片——同粒度不两处呈现。
-          整行可点，落到日志 tab 看完整字段。 */}
+          整行可点，落到日志 tab 看完整字段。
+          数据本身按运行会话隔离（后端 sessionOnly）：停止/重启后归零，
+          这里不需要再按运行状态做条件渲染。 */}
       <AccordionItem value="recent">
         <AccordionTrigger className="py-2 hover:no-underline">
           <span className="flex min-w-0 flex-1 items-center gap-2 pr-2">
@@ -233,6 +238,8 @@ export function GatewayOverview({
                   <th className="py-1 pr-2 font-medium">{t('gateway.model')}</th>
                   <th className="py-1 pr-2 font-medium">{t('gateway.status')}</th>
                   <th className="py-1 pr-2 text-right font-medium">{t('gateway.tokens')}</th>
+                  <th className="py-1 pr-2 text-right font-medium">{t('gateway.cacheRead')}</th>
+                  <th className="py-1 pr-2 text-right font-medium">{t('gateway.cacheWrite')}</th>
                   <th className="py-1 pr-2 text-right font-medium">{t('gateway.duration')}</th>
                 </tr>
               </thead>
@@ -270,11 +277,17 @@ export function GatewayOverview({
                             ? `${log.inputTokens ?? 0}/${log.outputTokens ?? 0}`
                             : '-'}
                         </td>
+                        <td className="py-1 pr-2 text-right text-emerald-600 dark:text-emerald-400">
+                          {log.cacheReadInputTokens ? log.cacheReadInputTokens.toLocaleString() : '-'}
+                        </td>
+                        <td className="py-1 pr-2 text-right text-amber-600 dark:text-amber-400">
+                          {log.cacheCreationInputTokens ? log.cacheCreationInputTokens.toLocaleString() : '-'}
+                        </td>
                         <td className="py-1 pr-2 text-right text-muted-foreground">{formatGatewayRequestDuration(log.durationMs)}</td>
                       </tr>
                       {expanded && (
                         <tr className="border-t border-border/50">
-                          <td colSpan={7} className="p-0">
+                          <td colSpan={9} className="p-0">
                             <div className="flex flex-col gap-2 bg-muted/20 px-3 py-2">
                               {log.error && (
                                 <div className="break-all text-[11px] text-red-500">{log.error}</div>
