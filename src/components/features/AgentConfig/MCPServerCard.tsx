@@ -23,7 +23,7 @@ function MCPServerCard({ name, config, onToggle, onEdit, onDelete }: any) {
   }
 
   return (
-    <div className={`glass-card border border-border rounded-xl p-4 transition-all hover:shadow-lg`}>
+    <div className={`surface-card border border-border rounded-xl p-4 transition-all hover:shadow-lg`}>
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           {/* 状态指示器 */}

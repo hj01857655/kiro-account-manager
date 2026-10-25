@@ -1,7 +1,8 @@
 
 import { useState, useEffect } from 'react'
-import { Coffee, X, Users, ExternalLink, Github } from 'lucide-react'
+import { AlertTriangle, Coffee, X, Users, ExternalLink, Github } from 'lucide-react'
 import { useApp } from '../../hooks/useApp'
+import { getThemeAccent } from '../features/AgentConfig/themeAccent'
 import alipayQR from '../../assets/donate/alipay.jpg'
 import wechatQR from '../../assets/donate/wechat.jpg'
 
@@ -12,7 +13,8 @@ const TelegramIcon = ({ size = 14 }: { size?: number }) => (
 )
 
 function WelcomeModal() {
-  const { t } = useApp()
+  const { t, theme } = useApp()
+  const accent = getThemeAccent(theme)
   const [open, setOpen] = useState(false)
   const [previewImg, setPreviewImg] = useState(null)
 
@@ -38,9 +40,9 @@ function WelcomeModal() {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className={`glass-card rounded-2xl w-[760px] max-w-full shadow-2xl border border-border relative overflow-hidden flex flex-col`}>
-        {/* 背景装饰 */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+      <div className={`surface-card rounded-2xl w-[760px] max-w-full shadow-2xl border border-border relative overflow-hidden flex flex-col`}>
+        {/* 背景装饰：随主题 accent 的淡渐变，无模糊 */}
+        <div className={`absolute top-0 right-0 w-64 h-64 ${accent.bgSoft} rounded-full -translate-y-1/2 translate-x-1/2`} />
 
         {/* 关闭按钮 */}
         <button
@@ -55,7 +57,7 @@ function WelcomeModal() {
           <div className="flex items-center gap-4">
             {/* Logo */}
             <div className="relative flex-shrink-0">
-              <div className="w-14 h-14 bg-gradient-to-br from-[#4361ee] to-[#7c3aed] rounded-2xl flex items-center justify-center shadow-lg">
+              <div className={`w-14 h-14 bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} rounded-2xl flex items-center justify-center shadow-lg`}>
                 <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
                   <path d="M20 4C12 4 6 10 6 18C6 22 8 25 8 25C8 25 7 28 7 30C7 32 8 34 10 34C11 34 12 33 13 32C14 33 16 34 20 34C24 34 26 33 27 32C28 33 29 34 30 34C32 34 33 32 33 30C33 28 32 25 32 25C32 25 34 22 34 18C34 10 28 4 20 4ZM14 20C12.5 20 11 18.5 11 17C11 15.5 12.5 14 14 14C15.5 14 17 15.5 17 17C17 18.5 15.5 20 14 20ZM26 20C24.5 20 23 18.5 23 17C23 15.5 24.5 14 26 14C27.5 14 29 15.5 29 17C29 18.5 27.5 20 26 20Z" fill="white" />
                 </svg>
@@ -80,11 +82,11 @@ function WelcomeModal() {
             <div className={`border-l-4 border-amber-500 bg-muted/30 rounded-r-xl p-4`}>
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                  <span className="text-lg">⚠️</span>
+                  <AlertTriangle size={16} className="text-amber-500" />
                 </div>
                 <div className="flex-1">
                   <p className={`text-sm font-semibold text-foreground mb-2`}>
-                    {t('welcome.permanentlyFree')}
+                    {t('welcome.freeNotice')}
                   </p>
                   <div className={`text-xs text-muted-foreground space-y-1.5 leading-relaxed`}>
                     <p>{t('welcome.openSourceFree')}</p>
@@ -218,7 +220,7 @@ function WelcomeModal() {
         <div className="px-6 py-3 border-t border-border/50 flex justify-end relative">
           <button
             onClick={handleClose}
-            className="px-5 py-2 text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 transition-colors duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30 active:scale-[0.98]"
+            className="px-5 py-2 text-sm font-semibold rounded-xl text-white bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 transition-colors duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-[0.98]"
           >
             {t('welcome.iUnderstand')}
           </button>
@@ -238,7 +240,7 @@ function WelcomeModal() {
               className="max-w-[360px] max-h-[360px] rounded-2xl shadow-2xl"
             />
             <button
-              className={`absolute -top-3 -right-3 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors duration-200 cursor-pointer focus:ring-2 focus:ring-blue-500/30 glass-card border border-border`}
+              className={`absolute -top-3 -right-3 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors duration-200 cursor-pointer focus:ring-2 focus:ring-blue-500/30 surface-card border border-border`}
               onClick={() => setPreviewImg(null)}
             >
               <X size={18} className={"text-foreground"} />

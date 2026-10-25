@@ -223,7 +223,7 @@ function Login({ onLogin }: LoginProps) {
   )
 
   return (
-    <div className="h-full flex flex-col items-center justify-center glass-main relative overflow-hidden p-6">
+    <div className="h-full flex flex-col items-center justify-center surface-main relative overflow-hidden p-6">
       <div className="relative z-10 w-full max-w-md flex flex-col items-center">
         {/* Logo + 标题 */}
         <div className="flex items-center gap-3 mb-8">
@@ -255,7 +255,7 @@ function Login({ onLogin }: LoginProps) {
                 key={provider.id}
                 onClick={() => handleLogin(provider.id)}
                 disabled={loginPending}
-                className={`group relative h-14 px-8 min-w-[280px] rounded-xl glass-card border border-border flex items-center justify-center gap-3 transition-all duration-200 ${
+                className={`group relative h-14 px-8 min-w-[280px] rounded-xl surface-card border border-border flex items-center justify-center gap-3 transition-all duration-200 ${
                   isLoading
                     ? 'opacity-60 cursor-not-allowed'
                     : 'hover:bg-muted/50 hover:border-primary/40 hover:shadow-sm'

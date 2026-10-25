@@ -24,7 +24,7 @@ const allRoutes = { ...routeMap, ...internalRoutes }
 function PageLoading() {
   const { t } = useApp()
   return (
-    <div className="h-full flex items-center justify-center glass-main">
+    <div className="h-full flex items-center justify-center surface-main">
       <div className="animate-pulse text-muted-foreground">{t('common.loading')}</div>
     </div>
   )
@@ -206,7 +206,7 @@ function App() {
             onMenuChange={setActiveMenu}
             onLogout={handleLogout}
           />
-          <main className="flex-1 overflow-hidden glass-main">
+          <main className="flex-1 overflow-hidden surface-main">
             <div className="h-full w-full">
               <Suspense fallback={<PageLoading />}>
                 {renderContent()}

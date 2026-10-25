@@ -64,11 +64,10 @@
   --foreground: #0f172a;
   --surface-rgb: 255 255 255;
   --surface-contrast-rgb: 248 250 252;
-  --card: rgb(var(--surface-rgb) / 0.85);
+  --card: rgb(var(--surface-rgb));
   --card-foreground: #0f172a;
-  --popover: rgb(var(--surface-rgb) / 0.96);
+  --popover: rgb(var(--surface-rgb));
   --popover-foreground: #0f172a;
-  --primary: #0f172a;
   --primary: #3b82f6;
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
@@ -147,7 +146,7 @@
   --muted-foreground: #cbd5e1 !important;
   --input: rgba(255, 255, 255, 0.15) !important;
   --ring: rgba(255, 255, 255, 0.35) !important;
-  --secondary: rgb(var(--surface-rgb) / 0.82) !important;
+  --secondary: rgb(var(--surface-rgb)) !important;
   --muted: rgb(var(--primary-rgb) / 0.1) !important;
   --accent: rgb(var(--primary-rgb) / 0.12) !important;
 
@@ -172,34 +171,100 @@
 [data-theme='tech'] { --background: #020617; --background-rgb: 2 6 23; --surface-rgb: 15 23 42; --surface-contrast-rgb: 2 6 23; --primary: #06b6d4; --primary-rgb: 6 182 212; --bg-color: #020617; --bg-gradient-1: #0b2540; --bg-gradient-1-rgb: 11 37 64; --bg-gradient-2: #071a30; --bg-gradient-2-rgb: 7 26 48; --bg-gradient-3: #030b18; --bg-gradient-3-rgb: 3 11 24; }
 [data-theme='midnight'] { --background: #000000; --background-rgb: 0 0 0; --surface-rgb: 10 10 15; --surface-contrast-rgb: 0 0 0; --primary: #fbbf24; --primary-rgb: 251 191 36; --bg-color: #000000; --bg-gradient-1: #14100a; --bg-gradient-1-rgb: 20 16 10; --bg-gradient-2: #0b0a08; --bg-gradient-2-rgb: 11 10 8; --bg-gradient-3: #040404; --bg-gradient-3-rgb: 4 4 4; }
 
-[data-theme='purple'] { --background: #f5f3ff; --primary: #7c3aed; --primary-rgb: 124 58 237; --bg-color: #f5f3ff; }
-[data-theme='green'] { --background: #f0fdf4; --primary: #059669; --primary-rgb: 5 150 105; --bg-color: #f0fdf4; }
-[data-theme='business'] { --background: #fffaf0; --primary: #c28100; --primary-rgb: 194 129 0; --bg-color: #fffaf0; }
-[data-theme='sunset'] { --background: #fff7ed; --primary: #ea580c; --primary-rgb: 234 88 12; --bg-color: #fff7ed; }
-[data-theme='ocean'] { --background: #f0f9ff; --primary: #0284c7; --primary-rgb: 2 132 199; --bg-color: #f0f9ff; }
-[data-theme='forest'] { --background: #f0fdf4; --primary: #166534; --primary-rgb: 22 101 52; --bg-color: #f0fdf4; }
-[data-theme='rose'] { --background: #fff1f2; --primary: #db2777; --primary-rgb: 219 39 119; --bg-color: #fff1f2; }
-[data-theme='aurora'] { --background: #f0fdfa; --primary: #0d9488; --primary-rgb: 13 148 136; --bg-color: #f0fdfa; }
-[data-theme='sakura'] { --background: #fff5f7; --primary: #db2777; --primary-rgb: 219 39 119; --bg-color: #fff5f7; }
+/* 亮色主题变体：此前只覆盖 background/primary/bg-color 四个变量，
+   卡片（surface）、边框、渐变全部继承默认亮色，主题间切换观感几乎不变。
+   此处为每个主题补全派生变量（色值按各自 primary 的浅色系推导）。 */
+[data-theme='purple'] {
+  --background: #f5f3ff; --background-rgb: 245 243 255; --primary: #7c3aed; --primary-rgb: 124 58 237; --bg-color: #f5f3ff;
+  --surface-rgb: 250 248 255; --surface-contrast-rgb: 245 243 255;
+  --border: #e9e2fb; --input: #e9e2fb; --secondary: #f1ecfd; --muted: #f1ecfd; --accent: #f1ecfd; --ring: #7c3aed;
+  --bg-gradient-1: #e6ddfc; --bg-gradient-1-rgb: 230 221 252;
+  --bg-gradient-2: #efe9fe; --bg-gradient-2-rgb: 239 233 254;
+  --bg-gradient-3: #faf7ff; --bg-gradient-3-rgb: 250 247 255;
+}
+[data-theme='green'] {
+  --background: #f0fdf4; --background-rgb: 240 253 244; --primary: #059669; --primary-rgb: 5 150 105; --bg-color: #f0fdf4;
+  --surface-rgb: 244 252 246; --surface-contrast-rgb: 240 253 244;
+  --border: #d5f0e0; --input: #d5f0e0; --secondary: #e6f7ee; --muted: #e6f7ee; --accent: #e6f7ee; --ring: #059669;
+  --bg-gradient-1: #d2f0e0; --bg-gradient-1-rgb: 210 240 224;
+  --bg-gradient-2: #e3f7eb; --bg-gradient-2-rgb: 227 247 235;
+  --bg-gradient-3: #f2fcf5; --bg-gradient-3-rgb: 242 252 245;
+}
+[data-theme='business'] {
+  --background: #fffaf0; --background-rgb: 255 250 240; --primary: #c28100; --primary-rgb: 194 129 0; --bg-color: #fffaf0;
+  --surface-rgb: 253 250 242; --surface-contrast-rgb: 255 250 240;
+  --border: #f0e4c8; --input: #f0e4c8; --secondary: #f8f0dd; --muted: #f8f0dd; --accent: #f8f0dd; --ring: #c28100;
+  --bg-gradient-1: #f2e6c8; --bg-gradient-1-rgb: 242 230 200;
+  --bg-gradient-2: #f8efd9; --bg-gradient-2-rgb: 248 239 217;
+  --bg-gradient-3: #fdf8ec; --bg-gradient-3-rgb: 253 248 236;
+}
+[data-theme='sunset'] {
+  --background: #fff7ed; --background-rgb: 255 247 237; --primary: #ea580c; --primary-rgb: 234 88 12; --bg-color: #fff7ed;
+  --surface-rgb: 255 250 245; --surface-contrast-rgb: 255 247 237;
+  --border: #fde0cc; --input: #fde0cc; --secondary: #feeee2; --muted: #feeee2; --accent: #feeee2; --ring: #ea580c;
+  --bg-gradient-1: #fdd9bd; --bg-gradient-1-rgb: 253 217 189;
+  --bg-gradient-2: #fee7d5; --bg-gradient-2-rgb: 254 231 213;
+  --bg-gradient-3: #fff3ea; --bg-gradient-3-rgb: 255 243 234;
+}
+[data-theme='ocean'] {
+  --background: #f0f9ff; --background-rgb: 240 249 255; --primary: #0284c7; --primary-rgb: 2 132 199; --bg-color: #f0f9ff;
+  --surface-rgb: 240 250 255; --surface-contrast-rgb: 240 249 255;
+  --border: #d0e9f8; --input: #d0e9f8; --secondary: #e2f2fc; --muted: #e2f2fc; --accent: #e2f2fc; --ring: #0284c7;
+  --bg-gradient-1: #c9e7f8; --bg-gradient-1-rgb: 201 231 248;
+  --bg-gradient-2: #def0fb; --bg-gradient-2-rgb: 222 240 251;
+  --bg-gradient-3: #eff8fe; --bg-gradient-3-rgb: 239 248 254;
+}
+[data-theme='forest'] {
+  --background: #f0fdf4; --background-rgb: 240 253 244; --primary: #166534; --primary-rgb: 22 101 52; --bg-color: #f0fdf4;
+  --surface-rgb: 242 252 245; --surface-contrast-rgb: 240 253 244;
+  --border: #d3ecd9; --input: #d3ecd9; --secondary: #e4f5e9; --muted: #e4f5e9; --accent: #e4f5e9; --ring: #166534;
+  --bg-gradient-1: #cdebd6; --bg-gradient-1-rgb: 205 235 214;
+  --bg-gradient-2: #ddf4e3; --bg-gradient-2-rgb: 221 244 227;
+  --bg-gradient-3: #eefaf1; --bg-gradient-3-rgb: 238 250 241;
+}
+[data-theme='rose'] {
+  --background: #fff1f2; --background-rgb: 255 241 242; --primary: #db2777; --primary-rgb: 219 39 119; --bg-color: #fff1f2;
+  --surface-rgb: 253 244 246; --surface-contrast-rgb: 255 241 242;
+  --border: #fbdce4; --input: #fbdce4; --secondary: #fce7ec; --muted: #fce7ec; --accent: #fce7ec; --ring: #db2777;
+  --bg-gradient-1: #fbd5e0; --bg-gradient-1-rgb: 251 213 224;
+  --bg-gradient-2: #fde3ea; --bg-gradient-2-rgb: 253 227 234;
+  --bg-gradient-3: #fef0f4; --bg-gradient-3-rgb: 254 240 244;
+}
+[data-theme='aurora'] {
+  --background: #f0fdfa; --background-rgb: 240 253 250; --primary: #0d9488; --primary-rgb: 13 148 136; --bg-color: #f0fdfa;
+  --surface-rgb: 240 253 250; --surface-contrast-rgb: 240 253 250;
+  --border: #ccebe6; --input: #ccebe6; --secondary: #dcf3ef; --muted: #dcf3ef; --accent: #dcf3ef; --ring: #0d9488;
+  --bg-gradient-1: #c8eae4; --bg-gradient-1-rgb: 200 234 228;
+  --bg-gradient-2: #ddf3ef; --bg-gradient-2-rgb: 221 243 239;
+  --bg-gradient-3: #edf9f6; --bg-gradient-3-rgb: 237 249 246;
+}
+[data-theme='sakura'] {
+  --background: #fff5f7; --background-rgb: 255 245 247; --primary: #db2777; --primary-rgb: 219 39 119; --bg-color: #fff5f7;
+  --surface-rgb: 255 245 247; --surface-contrast-rgb: 255 245 247;
+  --border: #fbdce6; --input: #fbdce6; --secondary: #fde7ed; --muted: #fde7ed; --accent: #fde7ed; --ring: #db2777;
+  --bg-gradient-1: #fdd6e3; --bg-gradient-1-rgb: 253 214 227;
+  --bg-gradient-2: #fee5ec; --bg-gradient-2-rgb: 254 229 236;
+  --bg-gradient-3: #fff1f5; --bg-gradient-3-rgb: 255 241 245;
+}
 
 /* ============================================================
    SURFACE CORE（实色卡片，不再使用毛玻璃）
    ============================================================ */
-.glass-card {
+.surface-card {
   background: rgb(var(--surface-rgb));
   border: 1px solid var(--border);
   border-radius: 1rem;
   transition: all 0.3s ease;
 }
-.glass-card:hover {
+.surface-card:hover {
   border-color: rgb(var(--primary-rgb) / 0.3);
   background: rgb(var(--surface-rgb));
 }
-.glass-sidebar {
+.surface-sidebar {
   background: rgb(var(--surface-contrast-rgb));
   border-right: 1px solid var(--border);
 }
-.glass-main {
+.surface-main {
   background: transparent;
 }
 .app-text { color: var(--foreground); }
@@ -213,7 +278,7 @@
   background: rgb(var(--primary-rgb) / 0.08);
 }
 .app-input {
-  background: rgb(var(--surface-rgb) / 0.5);
+  background: rgb(var(--surface-rgb));
   border: 1px solid var(--border);
   border-radius: 0.75rem;
 }
@@ -222,7 +287,7 @@
   color: white;
 }
 .app-button-secondary {
-  background: rgb(var(--surface-rgb) / 0.8);
+  background: rgb(var(--surface-rgb));
   border: 1px solid var(--border);
   color: var(--foreground);
 }

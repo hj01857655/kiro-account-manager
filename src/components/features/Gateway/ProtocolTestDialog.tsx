@@ -383,7 +383,7 @@ export function ProtocolTestDialog({
 
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
-      <DialogContent maxWidth="min(94vw, 1280px)" className="h-[85vh] flex flex-col glass-card">
+      <DialogContent maxWidth="min(94vw, 1280px)" className="h-[85vh] flex flex-col surface-card">
         <DialogHeader className="pb-4 border-b border-border/40">
           <DialogTitle className="flex items-center gap-2.5 text-base font-semibold">
             <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10">

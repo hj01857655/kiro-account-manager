@@ -77,7 +77,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
       // 加载各 server 的配置来源（用户级/项目级/覆盖/冗余/插件）
       getMcpSources(projectDir || null).then(setSources).catch(() => setSources({}))
     } catch (e) {
-      handleUiError('加载 MCP 配置失败', e, { userMessage: '加载 MCP 配置失败' })
+      handleUiError(t('mcp.loadFailedInternal'), e, { userMessage: t('mcp.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -101,7 +101,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
       await toggleMcpServer(name, disabled, dirFor(name))
     } catch (e) {
       setServers((prev: any) => ({ ...prev, [name]: { ...prev[name], disabled: oldDisabled } }))
-      handleUiError('切换 MCP 状态失败', e, { userMessage: '切换状态失败' })
+      handleUiError(t('mcp.toggleFailedInternal'), e, { userMessage: t('mcp.toggleFailed') })
     }
   }
 
@@ -112,7 +112,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
       await deleteMcpServer(name, dirFor(name))
       setServers((prev: any) => { const next = { ...prev }; delete next[name]; return next })
     } catch (e) {
-      handleUiError('删除 MCP 服务失败', e, { userMessage: '删除失败' })
+      handleUiError(t('mcp.deleteFailedInternal'), e, { userMessage: t('mcp.deleteFailed') })
     }
   }
 
@@ -135,10 +135,10 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
           </div>
           <div className="flex-1">
             <div className="text-xs font-semibold text-foreground mb-0.5">
-              MCP 工具数量较多
+              {t('mcp.toolCountTitle')}
             </div>
             <div className="text-[11px] text-muted-foreground leading-relaxed">
-              您已配置约 {toolCount} 个 MCP 工具（{serverList.length} 个服务器）。过多的工具可能导致工具选择性能下降和上下文消耗增加。建议禁用不常用的服务器。
+              {t('mcp.toolCountDesc', { tools: toolCount, servers: serverList.length })}
             </div>
           </div>
         </div>
@@ -223,7 +223,7 @@ function MCPPanel({ onCountChange, projectDir, readOnly }: any) {
       {showSettings && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowSettings(false)}>
           <div
-            className="relative glass-card border border-border rounded-lg shadow-2xl w-[520px] max-w-full max-h-[85vh] flex flex-col"
+            className="relative surface-card border border-border rounded-lg shadow-2xl w-[520px] max-w-full max-h-[85vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             <button
@@ -250,7 +250,7 @@ function MCPServerItem({ name, config, source, accent, colors, onToggle, onEdit,
   const autoApproveCount = config.autoApprove?.length || 0
 
   return (
-    <div className={`glass-card border border-border rounded-xl p-4 flex items-center gap-4`}>
+    <div className={`surface-card border border-border rounded-xl p-4 flex items-center gap-4`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
         isDisabled ? "bg-muted/30" : colors.badgeActive
       }`}>

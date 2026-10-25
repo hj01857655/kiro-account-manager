@@ -856,7 +856,7 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
                             <div className="mb-2 font-semibold text-blue-900 dark:text-blue-100">
                               {t('sessions.conversationSummary')}
                             </div>
-                            <div className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white/55 p-3 text-sm leading-6 text-blue-900 ring-1 ring-blue-200/60 dark:bg-black/20 dark:text-blue-100 dark:ring-blue-800/50">
+                            <div className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white p-3 text-sm leading-6 text-blue-900 ring-1 ring-blue-200/60 dark:bg-black/20 dark:text-blue-100 dark:ring-blue-800/50">
                               {selectedSession.history[0].message.content[0].text}
                             </div>
                           </div>
@@ -957,7 +957,7 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
 // ===== Source Switcher =====
 import { lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
-import { Terminal, MonitorSmartphone, ChevronDown as ChevronDownIcon, Check } from 'lucide-react'
+import { Terminal, MonitorSmartphone, ChevronDown as ChevronDownIcon } from 'lucide-react'
 
 const CliSessionManager = lazy(() => import('../CliSessionManager/index'))
 
@@ -1019,7 +1019,7 @@ function SourcePicker({
           setRect(e.currentTarget.getBoundingClientRect())
           setOpen((prev) => !prev)
         }}
-        className="glass-card inline-flex h-9 items-center gap-2 rounded-lg border border-border/70 px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        className="surface-card inline-flex h-9 items-center gap-2 rounded-lg border border-border/70 px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
       >
         <CurrentIcon size={13} className="text-primary" />
         <span>{current.label}</span>
@@ -1031,7 +1031,7 @@ function SourcePicker({
           <div
             ref={panelRef}
             role="menu"
-            className="fixed z-[9999] min-w-[168px] overflow-hidden rounded-xl border border-border glass-card shadow-xl"
+            className="fixed z-[9999] min-w-[168px] overflow-hidden rounded-xl border border-border surface-card shadow-xl"
             style={{
               top: `${rect.bottom + 6}px`,
               left: `${rect.left}px`,

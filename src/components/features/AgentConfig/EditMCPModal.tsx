@@ -42,12 +42,12 @@ function EditMCPModal({ name, config, source, onClose, onSuccess, projectDir, re
     try {
       const parsed = JSON.parse(jsonConfig)
       if (!parsed.command) {
-        setParseError('缺少 command 字段')
+        setParseError(t('mcp.errMissingCommand'))
         return
       }
       setParseError('')
     } catch (e) {
-      setParseError('JSON 格式错误')
+      setParseError(t('mcp.errJsonFormat'))
     }
   }, [jsonConfig])
 
@@ -66,7 +66,7 @@ function EditMCPModal({ name, config, source, onClose, onSuccess, projectDir, re
     try {
       parsed = JSON.parse(jsonConfig)
     } catch (e: any) {
-      setError('JSON 格式错误: ' + e.message)
+      setError(`${t('mcp.errJsonFormat')}: ${e.message}`)
       return
     }
 
@@ -102,7 +102,7 @@ function EditMCPModal({ name, config, source, onClose, onSuccess, projectDir, re
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div 
-        className={`relative overflow-hidden glass-card border border-border rounded-lg shadow-2xl w-[520px] max-h-[85vh] flex flex-col`}
+        className={`relative overflow-hidden surface-card border border-border rounded-lg shadow-2xl w-[520px] max-h-[85vh] flex flex-col`}
         onClick={e => e.stopPropagation()}
       >
         {/* 顶部渐变装饰 */}
@@ -127,7 +127,7 @@ function EditMCPModal({ name, config, source, onClose, onSuccess, projectDir, re
           <div className="flex-1">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
-                <label className={`text-xs text-muted-foreground`}>配置</label>
+                <label className={`text-xs text-muted-foreground`}>{t('mcp.configLabel')}</label>
                 {parseError && (
                   <span className="text-xs text-red-500 flex items-center gap-1">
                     <AlertCircle size={12} />
@@ -140,7 +140,7 @@ function EditMCPModal({ name, config, source, onClose, onSuccess, projectDir, re
                 className={`cursor-pointer text-xs text-muted-foreground ${accent.textHover} flex items-center gap-1 transition-colors`}
               >
                 <Wand2 size={12} />
-                格式化
+                {t('common.format')}
               </button>
             </div>
             <Textarea
@@ -152,7 +152,7 @@ function EditMCPModal({ name, config, source, onClose, onSuccess, projectDir, re
             />
             <p className={`text-xs text-muted-foreground mt-2 flex items-start gap-1.5`}>
               <span className={`${accent.text} font-medium`}>💡</span>
-              <span>autoApprove 支持通配符 <code className={`px-1.5 py-0.5 ${accent.bgSoft} ${accent.text} rounded`}>["*"]</code> 自动批准该服务器的所有工具</span>
+              <span>{t('mcp.autoApproveHint1')} <code className={`px-1.5 py-0.5 ${accent.bgSoft} ${accent.text} rounded`}>["*"]</code> {t('mcp.autoApproveHint2')}</span>
             </p>
           </div>
 

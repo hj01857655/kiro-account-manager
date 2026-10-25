@@ -82,7 +82,7 @@ function FilterField({ label, hint, active, accent, children, fullWidth = false 
     <div
       className={`
         rounded-xl border p-3 space-y-2.5 transition-all duration-200
-        ${active ? `${accent.border} ${accent.bgSoft} shadow-sm ${accent.shadow}` : `border-border glass-card`}
+        ${active ? `${accent.border} ${accent.bgSoft} shadow-sm ${accent.shadow}` : `border-border surface-card`}
         ${fullWidth ? 'sm:col-span-2' : ''}
       `}
     >
@@ -208,7 +208,7 @@ function FilterDropdown({
         className={`relative h-8 w-8 rounded-md inline-flex items-center justify-center transition-colors cursor-pointer focus:outline-none focus:ring-2 ${accent.ring} ${
           activeCount > 0
             ? `${accent.solidBg} text-white shadow-sm`
-            : 'glass-card border border-border hover:bg-muted/50 text-muted-foreground'
+            : 'surface-card border border-border hover:bg-muted/50 text-muted-foreground'
         } ${open ? `ring-2 ${accent.ring}` : ''}`}
         title={t('filter.title')}
         aria-label={t('filter.title')}
@@ -224,7 +224,7 @@ function FilterDropdown({
       {open && buttonRect && createPortal(
         <div
           ref={panelRef}
-          className="fixed w-[380px] max-w-[calc(100vw-32px)] glass-card border border-border rounded-xl shadow-xl z-[9999] overflow-hidden"
+          className="fixed w-[380px] max-w-[calc(100vw-32px)] surface-card border border-border rounded-xl shadow-xl z-[9999] overflow-hidden"
           style={{
             top: `${buttonRect.bottom + 8}px`,
             right: `${window.innerWidth - buttonRect.right}px`,

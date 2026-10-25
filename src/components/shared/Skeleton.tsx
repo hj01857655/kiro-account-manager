@@ -12,7 +12,7 @@ export function SkeletonBox({ className = '' }: { className?: string }) {
 // 账号卡片骨架屏
 export function AccountCardSkeleton() {
   return (
-    <div className={`relative rounded-2xl border border-border glass-card p-4 pt-10`}>
+    <div className={`relative rounded-2xl border border-border surface-card p-4 pt-10`}>
       {/* 选择框占位 */}
       <div className="absolute top-3 left-3">
         <SkeletonBox className="w-4 h-4 rounded" />
@@ -151,7 +151,7 @@ export function AccountTableSkeleton({ count = 8 }: { count?: number }) {
 // 首页统计卡片骨架屏
 export function StatCardSkeleton() {
   return (
-    <div className={`rounded-2xl p-5 border border-border glass-card`}>
+    <div className={`rounded-2xl p-5 border border-border surface-card`}>
       <div className="flex items-center gap-2 mb-2">
         <SkeletonBox className="w-8 h-8 rounded-lg" />
         <SkeletonBox className="h-4 w-20" />

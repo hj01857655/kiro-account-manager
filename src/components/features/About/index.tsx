@@ -147,7 +147,7 @@ function About() {
   }, [showUpdate, showInfo, t])
 
   return (
-    <div className="h-full glass-main overflow-auto p-6">
+    <div className="h-full surface-main overflow-auto p-6">
       <div className="space-y-3">
         {/* === 1. 应用介绍卡（横向布局：logo 左，标题/版本/技术栈右）=== */}
         <Card className="card-glow">
@@ -297,7 +297,7 @@ function About() {
           <div className="relative">
             {previewImg && <img src={previewImg} alt={t('common.preview')} className="max-w-[320px] max-h-[320px] rounded-xl shadow-xl" />}
             <button
-              className="absolute -top-3 -right-3 w-8 h-8 rounded-full glass-card flex items-center justify-center shadow-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full surface-card flex items-center justify-center shadow-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30"
               onClick={() => setPreviewImg(null)}
               aria-label={t('about.closePreview')}
             >

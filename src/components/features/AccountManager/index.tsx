@@ -565,7 +565,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
   }, [accounts, selectedIds, localToken, removeAccountsLocally, showConfirm, t])
 
   return (
-    <div className={cn('h-full flex flex-col', "glass-main")}>
+    <div className={cn('h-full flex flex-col', "surface-main")}>
       <div className="flex-1 flex flex-col min-h-0">
       <AccountHeader
         searchTerm={searchTerm}

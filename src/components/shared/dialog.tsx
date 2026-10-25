@@ -80,7 +80,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(({
             "rounded-2xl border shadow-2xl",
             "duration-300 ease-out",
             "data-[closed]:opacity-0 data-[closed]:scale-95",
-            "glass-card",
+            "surface-card",
             "border-border",
             className
           )}

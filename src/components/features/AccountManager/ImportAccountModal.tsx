@@ -653,7 +653,7 @@ return (
                 <button
                   onClick={() => setActiveTab('json')}
                   className={`py-2 px-3 text-sm rounded-lg transition-all duration-200 font-medium cursor-pointer ${activeTab === 'json'
-                    ? `glass-card shadow-sm ring-1 ${colors.ringColor} text-foreground`
+                    ? `surface-card shadow-sm ring-1 ${colors.ringColor} text-foreground`
                     : `hover:bg-muted/50 text-muted-foreground`
                   }`}
                 >
@@ -665,7 +665,7 @@ return (
                 <button
                   onClick={() => setActiveTab('kiro')}
                   className={`py-2 px-3 text-sm rounded-lg transition-all duration-200 font-medium cursor-pointer ${activeTab === 'kiro'
-                    ? `glass-card shadow-sm ring-1 ${colors.ringColor} text-foreground`
+                    ? `surface-card shadow-sm ring-1 ${colors.ringColor} text-foreground`
                     : `hover:bg-muted/50 text-muted-foreground`
                   }`}
                 >
@@ -677,7 +677,7 @@ return (
                 <button
                   onClick={() => setActiveTab('kiro-cli')}
                   className={`py-2 px-3 text-sm rounded-lg transition-all duration-200 font-medium cursor-pointer ${activeTab === 'kiro-cli'
-                    ? `glass-card shadow-sm ring-1 ${colors.ringColor} text-foreground`
+                    ? `surface-card shadow-sm ring-1 ${colors.ringColor} text-foreground`
                     : `hover:bg-muted/50 text-muted-foreground`
                   }`}
                 >
@@ -806,7 +806,7 @@ return (
                     <div className={`p-4 rounded-xl bg-muted/30 border border-border max-h-[240px] overflow-y-auto`}>
                       <Stack gap="sm">
                         {kiroAccounts.map((account, index) => (
-                          <div key={index} className={`p-3 rounded-lg glass-card border border-border`}>
+                          <div key={index} className={`p-3 rounded-lg surface-card border border-border`}>
                             <div className="flex items-center justify-between">
                               <div>
                                 <div className={`text-sm font-medium text-foreground`}>

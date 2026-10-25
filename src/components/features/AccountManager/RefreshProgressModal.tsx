@@ -12,7 +12,7 @@ function RefreshProgressModal({ refreshProgress }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div 
-        className={`glass-card rounded-2xl w-[400px] shadow-2xl overflow-hidden`}
+        className={`surface-card rounded-2xl w-[400px] shadow-2xl overflow-hidden`}
         style={{ animation: 'modalBounceIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
       >
         <div className={`px-5 py-4 border-b border-border bg-muted/30 flex items-center gap-2`}>

@@ -119,7 +119,7 @@ function SearchableTagSelect({
       {open && (
         <div
           ref={panelRef}
-          className={`absolute left-0 right-0 top-full mt-2 glass-card border border-border rounded-xl shadow-xl z-50 overflow-hidden`}
+          className={`absolute left-0 right-0 top-full mt-2 surface-card border border-border rounded-xl shadow-xl z-50 overflow-hidden`}
         >
             <div className="max-h-56 overflow-y-auto">
             {/* 全部选项 */}

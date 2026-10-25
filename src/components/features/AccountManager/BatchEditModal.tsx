@@ -340,7 +340,7 @@ function BatchEditModal({ accountIds, accounts = [], onClose, onSuccess }: Batch
                 />
                 {/* 搜索建议下拉 */}
                 {showTagDropdown && availableTags.length > 0 && (
-                  <div className={`absolute top-full left-0 right-0 mt-1 glass-card border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto`}>
+                  <div className={`absolute top-full left-0 right-0 mt-1 surface-card border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto`}>
                     {filteredTags.map(tag => (
                       <button key={tag.id} onClick={() => { setSelectedTagIds([...selectedTagIds, tag.id]); setNewTagName(''); setShowTagDropdown(false) }}
                         className={`w-full px-3 py-2 text-left text-sm text-foreground hover:opacity-80 flex items-center gap-2 transition-colors hover:bg-muted/50 rounded-lg cursor-pointer`}

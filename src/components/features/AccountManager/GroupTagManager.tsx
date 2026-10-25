@@ -116,7 +116,7 @@ export function TagSelector({ selectedTagIds, onChange, allTags = null }) {
           />
           {/* 搜索建议下拉 - 聚焦就显示 */}
           {showDropdown && unselectedTags.length > 0 && (
-            <div className={`absolute top-full left-0 right-0 mt-1 glass-card border border-border rounded-lg shadow-lg z-10 max-h-32 overflow-y-auto`}>
+            <div className={`absolute top-full left-0 right-0 mt-1 surface-card border border-border rounded-lg shadow-lg z-10 max-h-32 overflow-y-auto`}>
               {filteredTags.map(tag => (
                 <button
                   key={tag.id}
@@ -261,7 +261,7 @@ function GroupTagManager({ onClose, onSuccess, defaultTab = 'tags' }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
       <div
-        className={`glass-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[80vh] overflow-hidden flex flex-col`}
+        className={`surface-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[80vh] overflow-hidden flex flex-col`}
         onClick={e => e.stopPropagation()}
         style={{ animation: 'modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
       >

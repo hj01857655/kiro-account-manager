@@ -7,7 +7,7 @@ interface GatewaySurfaceCardProps extends React.HTMLAttributes<HTMLDivElement> {
 export function GatewaySurfaceCard({ className = '', children, ...props }: GatewaySurfaceCardProps) {
   return (
     <Card
-      className={`glass-card border-border border rounded-md ${className}`.trim()}
+      className={`surface-card border-border border rounded-md ${className}`.trim()}
       {...props}
     >
       <CardContent className="p-3">

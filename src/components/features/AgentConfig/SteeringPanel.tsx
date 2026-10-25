@@ -97,7 +97,7 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
       setFiles(data)
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Steering 文件失败', e, { userMessage: '加载 Steering 文件失败' })
+      handleUiError(t('steering.loadFailedInternal'), e, { userMessage: t('steering.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -144,10 +144,10 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
       if (Array.isArray(issues) && issues.length > 0) {
         // 保存成功但内容会被 IDE 降级/跳过，必须明确提示
         const detail = issues.map(i => `• ${i}`).join('\n')
-        showConfirm('Steering 已保存，但存在合规问题', `Kiro 1.1.70 将降级或跳过该文件：\n\n${detail}\n\n是否继续编辑修复？`)
+        showConfirm(t('steering.savedWithIssuesTitle'), t('steering.savedWithIssuesDesc', { detail }))
       }
     } catch (e) {
-      handleUiError('保存 Steering 文件失败', e, { userMessage: t('steering.saveFailed') || '保存失败' })
+      handleUiError(t('steering.saveFailedInternal'), e, { userMessage: t('steering.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -167,14 +167,14 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
         setHasChanges(false)
       }
     } catch (e) {
-      handleUiError('删除 Steering 文件失败', e, { userMessage: '删除失败' })
+      handleUiError(t('steering.deleteFailedInternal'), e, { userMessage: t('steering.deleteFailed') })
     }
   }
 
   const handleCreate = async (fileName: string, inclusion: string, filePattern: string, scope: string, name: string, description: string) => {
     if (readOnly) return
     const fName = fileName.endsWith('.md') ? fileName : `${fileName}.md`
-    const content = buildContent(inclusion, filePattern, '\n<!-- 在此添加你的 steering 规则 -->\n', name, description)
+    const content = buildContent(inclusion, filePattern, `\n<!-- ${t('steering.bodyPlaceholder')} -->\n`, name, description)
     try {
       const newFile = await createSteeringFile<any>(fName, content, scope, projectDir || null)
       const newFiles = [...files, newFile]
@@ -183,7 +183,7 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
       setShowCreateModal(false)
       handleSelect(newFile)
     } catch (e) {
-      handleUiError('创建 Steering 文件失败', e, { userMessage: t('steering.createFailed') || '创建失败' })
+      handleUiError(t('steering.createFailedInternal'), e, { userMessage: t('steering.createFailed') })
     }
   }
 
@@ -218,7 +218,7 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
       upsertFile(created)
       showSuccess(t('steering.defaultCreated'), created.fileName)
     } catch (e) {
-      handleUiError('创建默认 Steering 模板失败', e, { userMessage: t('steering.createDefaultFailed') || '创建失败' })
+      handleUiError(t('steering.createDefaultFailedInternal'), e, { userMessage: t('steering.createDefaultFailed') })
     } finally {
       setCreatingDefault(false)
     }
@@ -246,7 +246,7 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
       }
       showSuccess(t('steering.initialCreated'), projectDir)
     } catch (e) {
-      handleUiError('初始化项目 Steering 失败', e, { userMessage: t('steering.initializeFailed') || '初始化失败' })
+      handleUiError(t('steering.initializeFailedInternal'), e, { userMessage: t('steering.initializeFailed') })
     } finally {
       setInitializingProject(false)
     }
@@ -260,7 +260,7 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
       upsertFile(refined)
       showSuccess(t('steering.refineSuccess'), refined.fileName)
     } catch (e) {
-      handleUiError('整理 Steering 文件失败', e, { userMessage: t('steering.refineFailed') || '整理失败' })
+      handleUiError(t('steering.refineFailedInternal'), e, { userMessage: t('steering.refineFailed') })
     } finally {
       setRefining(false)
     }
@@ -303,7 +303,7 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
       />
 
       {/* 右侧编辑器 */}
-      <div className={`flex-1 flex flex-col glass-card border border-border rounded-xl overflow-hidden`}>
+      <div className={`flex-1 flex flex-col surface-card border border-border rounded-xl overflow-hidden`}>
         {selectedFile ? (
           <Editor
             file={selectedFile}
@@ -351,15 +351,16 @@ function SteeringPanel({ onCountChange, projectDir, readOnly }: any) {
 }
 
 // inclusion 模式配色映射
-const getInclusionStyles = (accent: any): any => ({
-  always:    { color: 'text-green-500',  bg: 'bg-green-500/15', border: 'border-green-500/30', dot: 'bg-green-500', label: '始终' },
-  auto:      { color: accent.text, bg: accent.bgSoft, border: accent.borderSoft, dot: accent.solidBg, label: '自动' },
-  fileMatch: { color: accent.text, bg: accent.bgSoft, border: accent.borderSoft, dot: accent.solidBg, label: '匹配' },
-  manual:    { color: 'text-orange-500', bg: 'bg-orange-500/15', border: 'border-orange-500/30', dot: 'bg-orange-500', label: '手动' }})
+const getInclusionStyles = (accent: any, t: (k: string) => string): any => ({
+  always:    { color: 'text-green-500',  bg: 'bg-green-500/15', border: 'border-green-500/30', dot: 'bg-green-500', label: t('steering.inclusionAlways') },
+  auto:      { color: accent.text, bg: accent.bgSoft, border: accent.borderSoft, dot: accent.solidBg, label: t('steering.inclusionAuto') },
+  fileMatch: { color: accent.text, bg: accent.bgSoft, border: accent.borderSoft, dot: accent.solidBg, label: t('steering.inclusionFileMatch') },
+  manual:    { color: 'text-orange-500', bg: 'bg-orange-500/15', border: 'border-orange-500/30', dot: 'bg-orange-500', label: t('steering.inclusionManual') }})
 
 // inclusion 徽章
 const InclusionBadge = ({ inclusion, accent }: any) => {
-  const styles = getInclusionStyles(accent)
+  const { t } = useApp()
+  const styles = getInclusionStyles(accent, t)
   const s = styles[inclusion] || styles.always
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${s.bg} ${s.color} border ${s.border}`}>
@@ -372,20 +373,20 @@ const InclusionBadge = ({ inclusion, accent }: any) => {
 // 文件列表组件
 function FileList({ files, selectedFile, onSelect, onDelete, onRefresh, onCreate, onCreateDefault, onCreateInitial, creatingDefault, initializingProject, hasProjectDir, accent, colors, t, readOnly }: any) {
   const accentSolidButtonClass = getSolidAccentButton(accent)
-  const inclusionStyles = getInclusionStyles(accent)
+  const inclusionStyles = getInclusionStyles(accent, t)
   // 按 inclusion 分组（保持顺序）
   const groups = [
-    { key: 'always',    label: '始终包含' },
-    { key: 'auto',      label: '自动激活' },
-    { key: 'fileMatch', label: '文件匹配' },
-    { key: 'manual',    label: '手动引用' },
+    { key: 'always',    label: t('steering.groupAlways') },
+    { key: 'auto',      label: t('steering.groupAuto') },
+    { key: 'fileMatch', label: t('steering.groupFileMatch') },
+    { key: 'manual',    label: t('steering.groupManual') },
   ].map(g => ({
     ...g,
     files: files.filter((f: any) => parseFrontMatter(f.content).inclusion === g.key),
     style: inclusionStyles[g.key]})).filter(g => g.files.length > 0)
 
   return (
-    <div className={`w-72 flex flex-col glass-card border border-border rounded-xl overflow-hidden`}>
+    <div className={`w-72 flex flex-col surface-card border border-border rounded-xl overflow-hidden`}>
       <div className={`p-3 border-b border-border flex items-center justify-between`}>
         <div className="flex items-center gap-2">
           <FileText size={18} className={accent.text} />
@@ -465,7 +466,7 @@ function FileList({ files, selectedFile, onSelect, onDelete, onRefresh, onCreate
                         className={`p-3 rounded-xl cursor-pointer group transition-all duration-200 ${
                           isSelected
                             ? `${accent.bg} ring-2 ${accent.ring} shadow-lg border ${accent.border}`
-                            : `glass-card border border-border hover:bg-muted/50 hover:shadow-md`
+                            : `surface-card border border-border hover:bg-muted/50 hover:shadow-md`
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -563,9 +564,9 @@ function Editor({ file, editState, hasChanges, saving, refining, inclusionOption
             <span className={`text-xs text-muted-foreground`}>{t('steering.inclusionMode')}:</span>
             <Select value={editState.inclusion} onValueChange={onInclusionChange}>
               <SelectTrigger className={`text-foreground bg-background border-input ${colors.inputFocus}`} style={{ minWidth: '120px', borderRadius: '0.5rem', height: '1.5rem', padding: '0 0.5rem', fontSize: '0.75rem' }}>
-                <SelectValue placeholder="选择模式..." />
+                <SelectValue placeholder={t('steering.selectMode')} />
               </SelectTrigger>
-              <SelectContent className={`glass-card border border-border`}>
+              <SelectContent className={`surface-card border border-border`}>
                 {inclusionOptions.map((opt: any) => (
                   <SelectItem key={opt.value} value={opt.value} className={"text-foreground"}>
                     {opt.label}
@@ -641,7 +642,7 @@ function CreateModal({ inclusionOptions, onCreate, onClose, accent, colors, t, h
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className={`glass-card rounded-2xl w-full max-w-[380px] shadow-2xl border border-border overflow-hidden`}
+        className={`surface-card rounded-2xl w-full max-w-[380px] shadow-2xl border border-border overflow-hidden`}
         onClick={e => e.stopPropagation()}
         style={{ animation: 'dialogIn 0.2s ease-out' }}
       >
@@ -699,7 +700,7 @@ function CreateModal({ inclusionOptions, onCreate, onClose, accent, colors, t, h
                 <SelectTrigger className={`text-foreground bg-background border-input ${colors.inputFocus}`} style={{ borderRadius: '0.5rem' }}>
                   <SelectValue placeholder={t('agentConfig.scopeUser')} />
                 </SelectTrigger>
-                <SelectContent className={`glass-card border border-border`}>
+                <SelectContent className={`surface-card border border-border`}>
                   <SelectItem value="user" className={"text-foreground"}>{t('agentConfig.scopeUser')}</SelectItem>
                   <SelectItem value="project" className={"text-foreground"}>{t('agentConfig.scopeProject')}</SelectItem>
                 </SelectContent>
@@ -711,9 +712,9 @@ function CreateModal({ inclusionOptions, onCreate, onClose, accent, colors, t, h
             <label className={`block text-xs font-medium text-muted-foreground mb-1.5`}>{t('steering.inclusionMode')}</label>
             <Select value={inclusion} onValueChange={setInclusion}>
               <SelectTrigger className={`text-foreground bg-background border-input ${colors.inputFocus}`} style={{ borderRadius: '0.5rem' }}>
-                <SelectValue placeholder="选择模式" />
+                <SelectValue placeholder={t('steering.selectMode')} />
               </SelectTrigger>
-              <SelectContent className={`glass-card border border-border`}>
+              <SelectContent className={`surface-card border border-border`}>
                 {inclusionOptions.map((opt: any) => (
                   <SelectItem key={opt.value} value={opt.value} className={"text-foreground"}>
                     {opt.label} - {opt.desc}

@@ -429,7 +429,7 @@ function Settings() {
     }
 
     return (
-        <div className="h-full glass-main p-6 flex flex-col min-h-0">
+        <div className="h-full surface-main p-6 flex flex-col min-h-0">
             <div className="w-full relative flex-1 flex flex-col min-h-0">
                 {/* Header（紧凑 + 装饰 ring）*/}
                 <div className="mb-4 flex items-center gap-3 animate-slide-in-left shrink-0">
@@ -443,7 +443,7 @@ function Settings() {
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-                    <TabsList className="glass-card mb-4 flex h-10 w-full justify-start overflow-x-auto rounded-lg border-none p-0.5 no-scrollbar lg:w-fit shrink-0">
+                    <TabsList className="surface-card mb-4 flex h-10 w-full justify-start overflow-x-auto rounded-lg border-none p-0.5 no-scrollbar lg:w-fit shrink-0">
                         <TabsTrigger value="ide" className="gap-1.5 px-3 h-9 shrink-0 text-sm font-medium data-[state=active]:shadow-sm">
                             <Cpu size={14} />
                             {t('settings.kiro')}

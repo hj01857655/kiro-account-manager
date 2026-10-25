@@ -173,7 +173,7 @@ function Home({ onNavigate }: HomeProps) {
   }
 
   return (
-    <div className="h-full overflow-auto glass-main p-6">
+    <div className="h-full overflow-auto surface-main p-6">
       <div className="w-full">
         {/* Header（紧凑）*/}
         <div className="mb-4 flex items-center gap-2.5 animate-slide-in-left">

@@ -95,7 +95,7 @@ export default function AnnouncementModal() {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
-      <div className={`relative w-[480px] max-w-[90vw] rounded-lg shadow-2xl border glass-card border-border overflow-hidden animate-fade-in-up`}>
+      <div className={`relative w-[480px] max-w-[90vw] rounded-lg shadow-2xl border surface-card border-border overflow-hidden animate-fade-in-up`}>
         {/* 顶部警告条 */}
         <div className="bg-gradient-to-r from-red-500 to-orange-500 px-6 py-4 flex items-center gap-3">
           <AlertTriangle size={24} className="text-white" />

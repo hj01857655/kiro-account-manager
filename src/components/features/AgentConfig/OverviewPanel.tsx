@@ -69,7 +69,7 @@ function StatCard({
   return (
     <button
       onClick={onClick}
-      className={`glass-card border border-border rounded-xl p-4 flex items-center gap-3 text-left cursor-pointer hover:bg-muted/50 transition-colors focus:outline-none focus:ring-2 ${accent.ring}`}
+      className={`surface-card border border-border rounded-xl p-4 flex items-center gap-3 text-left cursor-pointer hover:bg-muted/50 transition-colors focus:outline-none focus:ring-2 ${accent.ring}`}
     >
       <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shrink-0`}>
         <Icon size={16} className="text-primary-foreground" />

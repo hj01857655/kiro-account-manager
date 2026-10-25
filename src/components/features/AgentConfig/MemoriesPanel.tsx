@@ -172,7 +172,7 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
   return (
     <div className="space-y-3">
       {/* 模式开关 */}
-      <div className="glass-card border border-border rounded-xl p-4">
+      <div className="surface-card border border-border rounded-xl p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <div className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -202,7 +202,7 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
 
       {/* 注入预览：模拟 Kiro buildMemoryBlock 的分层与预算（§7.1.11） */}
       {preview && (
-        <div className="glass-card border border-border rounded-xl p-4 space-y-2.5">
+        <div className="surface-card border border-border rounded-xl p-4 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-foreground">{t('agentConfig.memoryPreviewTitle')}</h3>
             {preview.enabled ? (
@@ -288,7 +288,7 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
 
       {/* 新建/编辑表单 */}
       {draft && (
-        <div className="glass-card border border-primary/40 rounded-xl p-4 space-y-2.5">
+        <div className="surface-card border border-primary/40 rounded-xl p-4 space-y-2.5">
           <div className="text-sm font-medium text-foreground">
             {draft.id ? t('agentConfig.memoryEdit') : t('agentConfig.memoryCreate')}
           </div>
@@ -384,7 +384,7 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
       {loading ? (
         <div className="text-center py-10 text-muted-foreground text-sm">{t('common.loading')}</div>
       ) : memories.length === 0 ? (
-        <div className="text-center py-10 glass-card border border-border rounded-xl">
+        <div className="text-center py-10 surface-card border border-border rounded-xl">
           <Brain size={36} className="mx-auto mb-3 text-muted-foreground opacity-40" />
           <p className="text-sm text-muted-foreground">
             {dbMissing ? t('agentConfig.memoriesDbMissing') : t('agentConfig.memoriesEmpty')}
@@ -402,7 +402,7 @@ export default function MemoriesPanel({ t }: { t: (key: string) => string }) {
           {memories.map(m => {
             const isOpen = expanded.has(m.id)
             return (
-            <div key={m.id} className="glass-card border border-border rounded-xl p-3.5">
+            <div key={m.id} className="surface-card border border-border rounded-xl p-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

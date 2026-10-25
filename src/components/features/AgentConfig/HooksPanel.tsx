@@ -72,7 +72,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
       setHooks(data)
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Hooks 失败', e, { userMessage: t('hooks.loadFailed') || '加载 Hooks 失败' })
+      handleUiError(t('hooks.loadFailedInternal'), e, { userMessage: t('hooks.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -107,7 +107,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
       setSelectedHook({ ...selectedHook, content: editContent })
       setHasChanges(false)
     } catch (e) {
-      handleUiError('保存 Hook 失败', e, { userMessage: t('hooks.saveFailed') || '保存失败' })
+      handleUiError(t('hooks.saveFailedInternal'), e, { userMessage: t('hooks.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -129,7 +129,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
         setHasChanges(false)
       }
     } catch (e) {
-      handleUiError('删除 Hook 失败', e, { userMessage: t('hooks.deleteFailed') || '删除失败' })
+      handleUiError(t('hooks.deleteFailedInternal'), e, { userMessage: t('hooks.deleteFailed') })
     }
   }
 
@@ -174,7 +174,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
   },
   "then": {
     "type": "askAgent",
-    "prompt": "请在这里填写执行说明"
+    "prompt": "${t('hooks.promptPlaceholder')}"
   },
   "workspaceFolderName": "",
   "shortName": "${baseName}",
@@ -190,7 +190,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
       "trigger": "PostFileSave",
       "action": {
         "type": "command",
-        "command": "echo TODO: 替换为实际命令"
+        "command": "echo TODO: ${t('hooks.commandPlaceholder')}"
       },
       "enabled": true
     }
@@ -206,7 +206,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
       handleSelect(newHook)
       return true
     } catch (e) {
-      handleUiError('创建 Hook 失败', e, { userMessage: t('hooks.createFailed') || '创建失败' })
+      handleUiError(t('hooks.createFailedInternal'), e, { userMessage: t('hooks.createFailed') })
       return false
     }
   }
@@ -217,7 +217,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
 
   return (
     <div className="flex h-full min-h-0 gap-3 p-4 overflow-hidden">
-      <div className={`w-72 min-h-0 flex flex-col glass-card border border-border rounded-xl overflow-hidden max-w-full`}>
+      <div className={`w-72 min-h-0 flex flex-col surface-card border border-border rounded-xl overflow-hidden max-w-full`}>
         <div className={`p-4 border-b border-border`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -265,7 +265,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
                     className={`p-4 rounded-xl cursor-pointer group transition-all duration-200 ${
                       isSelected
                         ? `${accent.bg} ring-2 ${accent.ring} shadow-xl border-2 ${accent.border}`
-                        : `glass-card border border-border hover:bg-muted/50 hover:shadow-lg`
+                        : `surface-card border border-border hover:bg-muted/50 hover:shadow-lg`
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3 mb-2.5">
@@ -296,7 +296,7 @@ function HooksPanel({ onCountChange, projectDir, readOnly }: any) {
         </div>
       </div>
 
-      <div className={`flex-1 min-h-0 flex flex-col glass-card border border-border rounded-xl overflow-hidden`}>
+      <div className={`flex-1 min-h-0 flex flex-col surface-card border border-border rounded-xl overflow-hidden`}>
         {selectedHook ? (
           <>
             <div className={`p-3 border-b border-border flex items-center justify-between`}>
@@ -383,7 +383,7 @@ function CreateHookModal({ onCreate, onClose, colors, t, accent, accentGradientB
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className={`glass-card rounded-2xl w-full max-w-[420px] shadow-2xl border border-border overflow-hidden`} onClick={(e) => e.stopPropagation()}>
+      <div className={`surface-card rounded-2xl w-full max-w-[420px] shadow-2xl border border-border overflow-hidden`} onClick={(e) => e.stopPropagation()}>
         <div className={`flex items-center justify-between px-5 py-4 ${colors.dialogHeader}`}>
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl ${colors.info} flex items-center justify-center`}>

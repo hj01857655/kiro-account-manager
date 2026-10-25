@@ -151,7 +151,7 @@ const AVAILABLE_TOOL_TAGS = [
 
 // Kiro 可用的 Agent 模型
 const AVAILABLE_MODELS = [
-  { value: 'default', label: '默认（跟随主对话）' },
+  { value: 'default', label: '' },
   { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
   { value: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
   { value: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
@@ -217,7 +217,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
       setAgents(data)
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Custom Agents 失败', e, { userMessage: t('agents.loadFailed') || '加载 Custom Agents 失败' })
+      handleUiError(t('agents.loadFailedInternal'), e, { userMessage: t('agents.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -263,7 +263,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
       setSelectedAgent({ ...selectedAgent, content: fullContent })
       setHasChanges(false)
     } catch (e) {
-      handleUiError('保存 Custom Agent 失败', e, { userMessage: t('agents.saveFailed') || '保存失败' })
+      handleUiError(t('agents.saveFailedInternal'), e, { userMessage: t('agents.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -283,7 +283,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
         setHasChanges(false)
       }
     } catch (e) {
-      handleUiError('删除 Custom Agent 失败', e, { userMessage: t('agents.deleteFailed') || '删除失败' })
+      handleUiError(t('agents.deleteFailedInternal'), e, { userMessage: t('agents.deleteFailed') })
     }
   }
 
@@ -294,7 +294,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
     const isLegacy = lower.endsWith('.md')
     const fileName = isLegacy || lower.endsWith('.json') ? agentName : `${agentName}.json`
     const baseName = isLegacy ? agentName.replace(/\.md$/i, '') : agentName.replace(/\.json$/i, '')
-    const body = isLegacy ? '\n<!-- 在此编写 Agent 的系统提示词 -->\n' : '在此编写 Agent 的系统提示词'
+    const body = isLegacy ? `\n<!-- ${t('agents.bodyPlaceholder')} -->\n` : t('agents.bodyPlaceholder')
     const content = buildAgentContent(
       { name: baseName, description, tools, model, includeMcpJson: false, includePowers: false, isJson: !isLegacy, raw: null },
       body,
@@ -307,7 +307,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
       setShowCreateModal(false)
       handleSelect(newAgent)
     } catch (e) {
-      handleUiError('创建 Custom Agent 失败', e, { userMessage: t('agents.createFailed') || '创建失败' })
+      handleUiError(t('agents.createFailedInternal'), e, { userMessage: t('agents.createFailed') })
     }
   }
 
@@ -322,7 +322,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
   return (
     <div className="h-full flex gap-3 p-4 max-w-full overflow-x-hidden">
       {/* 左侧列表 */}
-      <div className={`w-72 flex flex-col glass-card border border-border rounded-xl overflow-hidden`}>
+      <div className={`w-72 flex flex-col surface-card border border-border rounded-xl overflow-hidden`}>
         <div className={`p-3 border-b border-border flex items-center justify-between`}>
           <div className="flex items-center gap-2">
             <Bot size={18} className={accent.text} />
@@ -373,7 +373,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
                     className={`p-4 rounded-xl cursor-pointer group transition-all duration-200 ${
                       isSelected
                         ? `${accent.bg} ring-2 ${accent.ring} shadow-xl border-2 ${accent.border} scale-[1.02]`
-                        : `glass-card border border-border hover:bg-muted/50 hover:shadow-lg hover:scale-[1.01]`
+                        : `surface-card border border-border hover:bg-muted/50 hover:shadow-lg hover:scale-[1.01]`
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3 mb-2.5">
@@ -434,7 +434,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
       </div>
 
       {/* 右侧编辑器 */}
-      <div className={`flex-1 flex flex-col glass-card border border-border rounded-xl overflow-hidden`}>
+      <div className={`flex-1 flex flex-col surface-card border border-border rounded-xl overflow-hidden`}>
         {selectedAgent ? (
           <>
             <div className={`p-3 border-b border-border flex items-center justify-between`}>
@@ -487,7 +487,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
                   <MultiSelect
                     value={editState.tools}
                     onChange={(v) => updateEditState('tools', v)}
-                    options={AVAILABLE_TOOL_TAGS.map(tag => ({ value: tag, label: tag === '*' ? '* (全部工具)' : tag }))}
+                    options={AVAILABLE_TOOL_TAGS.map(tag => ({ value: tag, label: tag === '*' ? t('agents.allTools') : tag }))}
                     placeholder={t('agents.selectTools')}
                     searchable
                     clearable
@@ -508,7 +508,7 @@ function AgentsPanel({ onCountChange, projectDir, readOnly }: any) {
                     </SelectTrigger>
                     <SelectContent className="">
                       {AVAILABLE_MODELS.map(m => (
-                        <SelectItem key={m.value} value={m.value} className="">{m.label}</SelectItem>
+                        <SelectItem key={m.value} value={m.value} className="">{m.label || t('agents.modelDefault')}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -586,7 +586,7 @@ function CreateAgentModal({ onCreate, onClose, accent, surface, accentGradientBu
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className={`glass-card rounded-2xl w-full max-w-[460px] shadow-2xl border border-border overflow-hidden`}
+        className={`surface-card rounded-2xl w-full max-w-[460px] shadow-2xl border border-border overflow-hidden`}
         onClick={e => e.stopPropagation()}
         style={{ animation: 'dialogIn 0.2s ease-out' }}
       >
@@ -631,7 +631,7 @@ function CreateAgentModal({ onCreate, onClose, accent, surface, accentGradientBu
             <MultiSelect
               value={tools}
               onChange={handleToolsChange}
-              options={AVAILABLE_TOOL_TAGS.map(tag => ({ value: tag, label: tag === '*' ? '* (全部工具)' : tag }))}
+              options={AVAILABLE_TOOL_TAGS.map(tag => ({ value: tag, label: tag === '*' ? t('agents.allTools') : tag }))}
               placeholder={t('agents.selectTools')}
               searchable clearable
               className={`text-foreground bg-background border-input ${colors.inputFocus}`}
@@ -649,7 +649,7 @@ function CreateAgentModal({ onCreate, onClose, accent, surface, accentGradientBu
               </SelectTrigger>
               <SelectContent className="">
                 {AVAILABLE_MODELS.map(m => (
-                  <SelectItem key={m.value} value={m.value} className="">{m.label}</SelectItem>
+                  <SelectItem key={m.value} value={m.value} className="">{m.label || t('agents.modelDefault')}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

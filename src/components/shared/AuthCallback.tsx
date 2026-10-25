@@ -95,8 +95,8 @@ export default function AuthCallback() {
   }
 
   return (
-    <div className={`min-h-screen flex items-center justify-center p-4 glass-main`}>
-      <div className={`glass-card rounded-2xl shadow-xl p-8 max-w-md w-full border border-border`}>
+    <div className={`min-h-screen flex items-center justify-center p-4 surface-main`}>
+      <div className={`surface-card rounded-2xl shadow-xl p-8 max-w-md w-full border border-border`}>
         {getStatusIcon()}
         
         <h1 className={`text-2xl font-bold text-center mb-4 ${getStatusColor()}`}>

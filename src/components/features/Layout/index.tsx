@@ -91,7 +91,7 @@ function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
 
   return (
     <div
-      className={cn("flex flex-col relative transition-[width] duration-200 ease-in-out glass-sidebar z-10 overflow-hidden sidebar-top-inset")}
+      className={cn("flex flex-col relative transition-[width] duration-200 ease-in-out surface-sidebar z-10 overflow-hidden sidebar-top-inset")}
       style={{ width: collapsed ? 64 : 192 }}
     >
       <TooltipProvider>

@@ -66,7 +66,7 @@ const ContextMenu = memo(function ContextMenu({ x, y, onClose, items }: ContextM
   return createPortal(
     <div
       ref={menuRef}
-      className={`fixed z-[9999] min-w-[160px] py-1 rounded-lg shadow-2xl border glass-card border-border`}
+      className={`fixed z-[9999] min-w-[160px] py-1 rounded-lg shadow-2xl border surface-card border-border`}
       style={{ 
         left: position.x, 
         top: position.y,

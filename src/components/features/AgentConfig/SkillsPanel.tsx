@@ -87,7 +87,7 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
       setSkills(data)
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Skills 失败', e, { userMessage: t('skills.loadFailed') || '加载 Skills 失败' })
+      handleUiError(t('skills.loadFailedInternal'), e, { userMessage: t('skills.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -128,10 +128,10 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
       setHasChanges(false)
       if (Array.isArray(issues) && issues.length > 0) {
         // 保存成功但内容不合规：Kiro IDE 会静默跳过该 skill，必须明确提示
-        showConfirm('Skill 已保存，但存在合规问题', `Kiro 1.1.70 将静默跳过不合规的 skill：\n\n• ${issues.join('\n• ')}\n\n是否继续编辑修复？`)
+        showConfirm(t('skills.savedWithIssuesTitle'), t('skills.savedWithIssuesDesc', { issues: issues.join('\n• ') }))
       }
     } catch (e) {
-      handleUiError('保存 Skill 失败', e, { userMessage: t('skills.saveFailed') || '保存失败' })
+      handleUiError(t('skills.saveFailedInternal'), e, { userMessage: t('skills.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -151,13 +151,13 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
         setHasChanges(false)
       }
     } catch (e) {
-      handleUiError('删除 Skill 失败', e, { userMessage: t('skills.deleteFailed') || '删除失败' })
+      handleUiError(t('skills.deleteFailedInternal'), e, { userMessage: t('skills.deleteFailed') })
     }
   }
 
   const handleCreate = async (skillName: string, description: string, scope: string) => {
     if (readOnly) return
-    const body = '\n<!-- 在此编写 Skill 指令 -->\n'
+    const body = `\n<!-- ${t('skills.bodyPlaceholder')} -->\n`
     const content = buildSkillContent(skillName, description, body)
     try {
       const newSkill = await createSkill(skillName, content, scope, projectDir || null)
@@ -167,7 +167,7 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
       setShowCreateModal(false)
       handleSelect(newSkill)
     } catch (e) {
-      handleUiError('创建 Skill 失败', e, { userMessage: t('skills.createFailed') || '创建失败' })
+      handleUiError(t('skills.createFailedInternal'), e, { userMessage: t('skills.createFailed') })
     }
   }
 
@@ -207,7 +207,7 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
       upsertImportedSkill(imported)
       showSuccess(t('skills.importSuccess'), `${imported.name}`)
     } catch (e) {
-      handleUiError('导入本地 Skill 失败', e, { userMessage: t('skills.importFailed') || '导入失败' })
+      handleUiError(t('skills.importFailedInternal'), e, { userMessage: t('skills.importFailed') })
     }
   }
 
@@ -227,7 +227,7 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
       setShowGithubImportModal(false)
       showSuccess(t('skills.importSuccess'), `${imported.name}`)
     } catch (e) {
-      handleUiError('从 GitHub 导入 Skill 失败', e, { userMessage: t('skills.importGithubFailed') || '导入失败' })
+      handleUiError(t('skills.importGithubFailedInternal'), e, { userMessage: t('skills.importGithubFailed') })
     }
   }
 
@@ -242,7 +242,7 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
   return (
     <div className="h-full flex gap-3 p-4 max-w-full overflow-x-hidden">
       {/* 左侧列表 */}
-      <div className={`w-72 flex flex-col glass-card border border-border rounded-xl overflow-hidden`}>
+      <div className={`w-72 flex flex-col surface-card border border-border rounded-xl overflow-hidden`}>
         <div className={`p-3 border-b border-border flex items-center justify-between`}>
           <div className="flex items-center gap-2">
             <Puzzle size={18} className={accent.text} />
@@ -309,7 +309,7 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
                     className={`p-4 rounded-xl cursor-pointer group transition-all duration-200 ${
                       isSelected
                         ? `${accent.bg} ring-2 ${accent.ring} shadow-xl border-2 ${accent.border} scale-[1.02]`
-                        : `glass-card border border-border hover:bg-muted/50 hover:shadow-lg hover:scale-[1.01]`
+                        : `surface-card border border-border hover:bg-muted/50 hover:shadow-lg hover:scale-[1.01]`
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3 mb-2.5">
@@ -379,7 +379,7 @@ function SkillsPanel({ onCountChange, projectDir, readOnly }: any) {
       </div>
 
       {/* 右侧编辑器 */}
-      <div className={`flex-1 flex flex-col glass-card border border-border rounded-xl overflow-hidden`}>
+      <div className={`flex-1 flex flex-col surface-card border border-border rounded-xl overflow-hidden`}>
         {selectedSkill ? (
           <>
             <div className={`p-3 border-b border-border flex items-center justify-between`}>
@@ -506,7 +506,7 @@ function CreateSkillModal({ onCreate, onClose, accent, accentGradientButtonClass
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className={`glass-card rounded-2xl w-full max-w-[420px] shadow-2xl border border-border overflow-hidden`}
+        className={`surface-card rounded-2xl w-full max-w-[420px] shadow-2xl border border-border overflow-hidden`}
         onClick={e => e.stopPropagation()}
         style={{ animation: 'dialogIn 0.2s ease-out' }}
       >
@@ -554,7 +554,7 @@ function CreateSkillModal({ onCreate, onClose, accent, accentGradientButtonClass
                 <SelectTrigger className={`text-foreground bg-background border-input ${colors.inputFocus}`} style={{ borderRadius: '0.5rem' }}>
                   <SelectValue placeholder={t('agentConfig.scopeUser')} />
                 </SelectTrigger>
-                <SelectContent className={`glass-card border border-border`}>
+                <SelectContent className={`surface-card border border-border`}>
                   <SelectItem value="user" className={"text-foreground"}>{t('agentConfig.scopeUser')}</SelectItem>
                   <SelectItem value="project" className={"text-foreground"}>{t('agentConfig.scopeProject')}</SelectItem>
                 </SelectContent>
@@ -586,7 +586,7 @@ function ImportGithubSkillModal({ onImport, onClose, accent, accentGradientButto
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className={`glass-card rounded-2xl w-full max-w-[460px] shadow-2xl border border-border overflow-hidden`}
+        className={`surface-card rounded-2xl w-full max-w-[460px] shadow-2xl border border-border overflow-hidden`}
         onClick={e => e.stopPropagation()}
         style={{ animation: 'dialogIn 0.2s ease-out' }}
       >

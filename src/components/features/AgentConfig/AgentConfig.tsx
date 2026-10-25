@@ -107,7 +107,7 @@ function AgentConfig() {
   }
 
   return (
-    <div className="h-full flex flex-col max-w-full overflow-x-hidden glass-main">
+    <div className="h-full flex flex-col max-w-full overflow-x-hidden surface-main">
       {/* Header（紧凑）*/}
       <div className="px-5 py-3 border-b border-border flex items-center gap-3">
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-md ring-1 ring-primary/20 flex-shrink-0`}>
@@ -134,7 +134,7 @@ function AgentConfig() {
       {/* Tabs + Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <div className="px-5 pt-3 pb-2">
-          <TabsList className="glass-card flex h-10 w-full justify-start overflow-x-auto rounded-lg border-none p-0.5 no-scrollbar lg:w-fit">
+          <TabsList className="surface-card flex h-10 w-full justify-start overflow-x-auto rounded-lg border-none p-0.5 no-scrollbar lg:w-fit">
             {TABS.map((tab, i) => {
               const Icon = tab.icon
               const prev = i > 0 ? TABS[i - 1] : null

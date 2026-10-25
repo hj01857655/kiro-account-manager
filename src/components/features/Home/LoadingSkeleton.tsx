@@ -4,7 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 /** 首页骨架屏：与实际 Home 布局结构对齐，避免内容到位时的视觉跳动。 */
 function LoadingSkeleton() {
   return (
-    <div className="h-full overflow-auto glass-main">
+    <div className="h-full overflow-auto surface-main">
       <div className="w-full p-5">
         {/* Header */}
         <div className="flex items-center gap-2.5 mb-4">

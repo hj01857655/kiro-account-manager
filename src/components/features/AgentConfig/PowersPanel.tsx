@@ -59,7 +59,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
       setUserAdded(added || [])
       onCountChange?.(data?.length || 0)
     } catch (e) {
-      handleUiError('加载 Powers 失败', e, { userMessage: t('powers.loadFailed') || '加载 Powers 失败' })
+      handleUiError(t('powers.loadFailedInternal'), e, { userMessage: t('powers.loadFailed') })
     } finally {
       setLoading(false)
     }
@@ -81,7 +81,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
       await loadPowers()
       showSuccess(t('powers.installSuccess'), t('powers.installSuccessFromFolder', { name: installedName }))
     } catch (e) {
-      handleUiError('从文件夹导入 Power 失败', e, { userMessage: t('powers.importFolderFailed') || '导入失败' })
+      handleUiError(t('powers.importFolderFailedInternal'), e, { userMessage: t('powers.importFolderFailed') })
     } finally {
       setImporting(false)
     }
@@ -100,7 +100,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
       await loadPowers()
       showSuccess(t('powers.installSuccess'), t('powers.installSuccessFromUrl', { name: installedName }))
     } catch (e) {
-      handleUiError('从 URL 导入 Power 失败', e, { userMessage: t('powers.importUrlFailed') || '导入失败' })
+      handleUiError(t('powers.importUrlFailedInternal'), e, { userMessage: t('powers.importUrlFailed') })
     } finally {
       setImporting(false)
     }
@@ -119,7 +119,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
       const data = await getRecommendedPowers()
       setRecommended(data)
     } catch (e) {
-      handleUiError('加载推荐 Powers 失败', e, { userMessage: t('powers.loadRecommendedFailed') || '加载推荐 Powers 失败' })
+      handleUiError(t('powers.loadRecommendedFailedInternal'), e, { userMessage: t('powers.loadRecommendedFailed') })
     } finally {
       setRecLoading(false)
     }
@@ -140,7 +140,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
       // 更新推荐列表中的安装状态
       setRecommended(prev => prev.map(r => r.name === power.name ? { ...r, installed: false } : r))
     } catch (e) {
-      handleUiError('卸载 Power 失败', e, { userMessage: t('powers.uninstallFailed') || '卸载失败' })
+      handleUiError(t('powers.uninstallFailedInternal'), e, { userMessage: t('powers.uninstallFailed') })
     }
   }
 
@@ -163,7 +163,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
       onCountChange?.(data?.length || 0)
       showSuccess(t('powers.installSuccess'), rec.displayName || rec.name)
     } catch (e) {
-      handleUiError('安装 Power 失败', e, { userMessage: t('powers.installFailed') || '安装失败' })
+      handleUiError(t('powers.installFailedInternal'), e, { userMessage: t('powers.installFailed') })
     } finally {
       setInstalling(null)
     }
@@ -184,7 +184,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
   return (
     <div className="h-full flex gap-3 p-4 max-w-full overflow-x-hidden">
       {/* 左侧列表 */}
-    <div className={`w-72 flex flex-col glass-card border border-border rounded-xl overflow-hidden max-w-full`}>
+    <div className={`w-72 flex flex-col surface-card border border-border rounded-xl overflow-hidden max-w-full`}>
 
         <div className={`p-3 border-b border-border`}>
           <div className={`flex items-center gap-1 p-1 rounded-xl bg-muted/30`}>
@@ -280,7 +280,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
                       className={`p-3 rounded-xl cursor-pointer group transition-all duration-200 ${
                         isSelected
                           ? `${accent.bg} ring-2 ${accent.ring} shadow-lg border ${accent.border}`
-                          : `glass-card border border-border hover:bg-muted/50 hover:shadow-md`
+                          : `surface-card border border-border hover:bg-muted/50 hover:shadow-md`
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -362,7 +362,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
                       className={`p-3 rounded-xl cursor-pointer group transition-all duration-200 ${
                         isSelected
                           ? `${accent.bg} ring-2 ${accent.ring} shadow-lg border ${accent.border}`
-                          : `glass-card border border-border hover:bg-muted/50 hover:shadow-md`
+                          : `surface-card border border-border hover:bg-muted/50 hover:shadow-md`
                       }`}
                     >
                       <div className="flex items-start gap-2.5">
@@ -404,7 +404,7 @@ function PowersPanel({ onCountChange, readOnly }: any) {
       </div>
 
       {/* 右侧详情 */}
-      <div className={`flex-1 flex flex-col glass-card border border-border rounded-xl overflow-hidden`}>
+      <div className={`flex-1 flex flex-col surface-card border border-border rounded-xl overflow-hidden`}>
         {selectedPower ? (
           /* 已安装 Power 详情 */
           <>

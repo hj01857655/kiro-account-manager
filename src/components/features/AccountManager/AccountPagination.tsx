@@ -13,13 +13,13 @@ function AccountPagination({
   if (totalCount === 0) return null
 
   return (
-    <div className={`glass-card border-t border-border px-6 py-3 flex items-center justify-between animate-fade-in delay-300`}>
+    <div className={`surface-card border-t border-border px-6 py-3 flex items-center justify-between animate-fade-in delay-300`}>
       <div className={`flex items-center gap-2 text-sm text-muted-foreground`}>
         <span>{t('pagination.perPage')}</span>
         <select
           value={pageSize}
           onChange={(e) => onPageSizeChange(Number(e.target.value))}
-          className={`px-2 py-1 border rounded-lg glass-card border-border text-sm text-foreground`}
+          className={`px-2 py-1 border rounded-lg surface-card border-border text-sm text-foreground`}
         >
           <option value={10}>10</option>
           <option value={20}>20</option>

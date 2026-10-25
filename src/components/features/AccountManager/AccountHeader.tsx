@@ -37,7 +37,7 @@ interface AccountHeaderProps {
 
 /**
  * 紧凑工具按钮：32x32，统一图标按钮样式。
- * 选中态用 accent 实色渐变，普通态用 glass-card border。
+ * 选中态用 accent 实色渐变，普通态用 surface-card border。
  */
 interface IconButtonProps {
   onClick: () => void;
@@ -55,7 +55,7 @@ function IconButton({ onClick, active, disabled, title, ariaLabel, accent, badge
   const base = 'relative h-8 w-8 rounded-md flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer focus:outline-none focus:ring-2'
   const variant = active
     ? `${accent.solidBg} text-white shadow-sm`
-    : 'glass-card border border-border hover:bg-muted/50 text-muted-foreground'
+    : 'surface-card border border-border hover:bg-muted/50 text-muted-foreground'
   return (
     <button
       onClick={onClick}
