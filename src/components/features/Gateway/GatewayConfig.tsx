@@ -1,6 +1,6 @@
 import type React from 'react'
 import { useState, useMemo, useEffect } from 'react'
-import { RotateCw, TrendingUp, Shuffle, Users, CheckCircle2, Search, AlertCircle } from 'lucide-react'
+import { RotateCw, TrendingUp, Shuffle, Users, CheckCircle2, Search, AlertCircle, ShieldAlert } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +56,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { GatewaySurfaceCard } from './GatewayShared'
 import { ALLOWED_REGIONS } from './gatewayPageUtils'
 import PromptFilterRulesDialog from './PromptFilterRulesDialog'
+import { MaskRulesDialog } from './MaskRulesDialog'
 import {
   DialogRoot,
   DialogContent,
@@ -92,6 +93,7 @@ function GatewayConfig({
 }: GatewayConfigProps) {
   const { t } = useApp()
   const [showPromptFilterRulesDialog, setShowPromptFilterRulesDialog] = useState(false)
+  const [showMaskRules, setShowMaskRules] = useState(false)
   const [showAccountPoolDialog, setShowAccountPoolDialog] = useState(false)
   const [poolSearchQuery, setPoolSearchQuery] = useState('')
   const [poolStatusFilter, setPoolStatusFilter] = useState<string>('all')
@@ -387,7 +389,18 @@ function GatewayConfig({
                 </div>
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
                   <Label className="text-sm" title={t('gateway.privacyMaskHint')}>{t('gateway.privacyMaskToggle')}</Label>
-                  <Switch checked={!!config.privacyMaskEnabled} onCheckedChange={(checked: boolean) => setField('privacyMaskEnabled', checked)} />
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground"
+                      onClick={() => setShowMaskRules(true)}
+                    >
+                      <ShieldAlert size={11} />
+                      {t('gatewayMaskRules.manage')}
+                    </Button>
+                    <Switch checked={!!config.privacyMaskEnabled} onCheckedChange={(checked: boolean) => setField('privacyMaskEnabled', checked)} />
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs text-muted-foreground">{t('gateway.cacheTTLSeconds')}</Label>
@@ -643,6 +656,19 @@ function GatewayConfig({
         promptFilterRules={config.promptFilterRules}
         setField={setField}
         onSave={handleSaveConfig}
+      />
+
+      {/* MaskRulesDialog：遮蔽规则编辑器（类别覆盖/自定义规则/白名单） */}
+      <MaskRulesDialog
+        open={showMaskRules}
+        onOpenChange={setShowMaskRules}
+        kindOverrides={config.maskKindOverrides ?? []}
+        customRules={config.maskCustomRules ?? []}
+        neverMask={config.maskNeverMask ?? []}
+        onChange={(next) => {
+          setConfig((prev: any) => ({ ...prev, ...next }))
+          handleSaveConfig()
+        }}
       />
     </div>
   )

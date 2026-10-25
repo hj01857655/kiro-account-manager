@@ -39,6 +39,12 @@ export interface GatewayConfig {
   sessionAffinity: boolean;
   logStreamEvents: boolean;
   privacyMaskEnabled: boolean;
+  /** 遮蔽规则的用户覆盖：按类别改动作/停用 */
+  maskKindOverrides: MaskKindOverride[];
+  /** 用户自定义遮蔽规则（自己的正则） */
+  maskCustomRules: MaskCustomRule[];
+  /** 永不遮蔽的值清单（精确匹配优先于一切规则） */
+  maskNeverMask: MaskNeverMask[];
   upstreamProxy: string;
   maxToolDescriptionLength: number;
 }
@@ -51,6 +57,39 @@ export interface PromptFilterRule {
   matchPattern: string;
   replace: string;
 }
+
+/** 用户对某一类敏感值的处置覆盖（遮蔽规则编辑器） */
+export interface MaskKindOverride {
+  /** 类别键：api_key / private_key / token / email / credit_card / id_card */
+  kind: string;
+  enabled: boolean;
+  action: 'mask' | 'warn' | 'block';
+}
+
+/** 用户自定义遮蔽规则 */
+export interface MaskCustomRule {
+  id: string;
+  name: string;
+  pattern: string;
+  action: 'mask' | 'warn' | 'block';
+  enabled: boolean;
+}
+
+/** 永不遮蔽的值（精确匹配优先于一切规则） */
+export interface MaskNeverMask {
+  value: string;
+  note: string;
+}
+
+/** 遮蔽类别的展示名（内置七类的固定清单，与后端 SecretKind 对齐） */
+export const MASK_KIND_LABELS: Array<{ kind: string; labelKey: string }> = [
+  { kind: 'api_key', labelKey: 'gatewayMaskRules.kindApiKey' },
+  { kind: 'private_key', labelKey: 'gatewayMaskRules.kindPrivateKey' },
+  { kind: 'token', labelKey: 'gatewayMaskRules.kindToken' },
+  { kind: 'email', labelKey: 'gatewayMaskRules.kindEmail' },
+  { kind: 'credit_card', labelKey: 'gatewayMaskRules.kindCreditCard' },
+  { kind: 'id_card', labelKey: 'gatewayMaskRules.kindIdCard' },
+]
 
 export interface GatewayStatus {
   running: boolean;
@@ -101,6 +140,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   sessionAffinity: false,
   logStreamEvents: false,
   privacyMaskEnabled: false,
+  maskKindOverrides: [],
+  maskCustomRules: [],
+  maskNeverMask: [],
   upstreamProxy: '',
   maxToolDescriptionLength: 10237
 }
@@ -187,6 +229,9 @@ export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
   sessionAffinity: gatewayConfig?.sessionAffinity ?? false,
   logStreamEvents: gatewayConfig?.logStreamEvents ?? false,
   privacyMaskEnabled: gatewayConfig?.privacyMaskEnabled ?? false,
+  maskKindOverrides: Array.isArray(gatewayConfig?.maskKindOverrides) ? gatewayConfig.maskKindOverrides : [],
+  maskCustomRules: Array.isArray(gatewayConfig?.maskCustomRules) ? gatewayConfig.maskCustomRules : [],
+  maskNeverMask: Array.isArray(gatewayConfig?.maskNeverMask) ? gatewayConfig.maskNeverMask : [],
   upstreamProxy: typeof gatewayConfig?.upstreamProxy === 'string' ? gatewayConfig.upstreamProxy : '',
   maxToolDescriptionLength: gatewayConfig?.maxToolDescriptionLength ?? 10237
 })

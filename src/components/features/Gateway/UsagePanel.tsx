@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { getGatewayRequestLogs } from '../../../api/gatewayApi'
+import { getGatewayRequestLogHistory } from '../../../api/gatewayApi'
 import { shortClientLabel } from './gatewayPageUtils'
 
 interface UsageLogRow {
@@ -118,7 +118,9 @@ export function UsagePanel() {
   const fetch = useCallback(async () => {
     setLoading(true)
     try {
-      setRows(await getGatewayRequestLogs<UsageLogRow[]>(500))
+      // 读落盘全量历史而非内存视图：内存 LogStore 重启即丢且上限 10000，
+      // 7 天趋势要的是跨会话的完整时间轴
+      setRows(await getGatewayRequestLogHistory<UsageLogRow[]>(20000))
     } catch {
       setRows([])
     } finally {

@@ -227,6 +227,7 @@ export function MaskingPanel() {
             <div className="mb-1.5 flex items-center gap-2">
               <BarChart3 size={12} className="text-blue-500" />
               <span className="text-[11px] font-medium">{t('gatewayMasking.trendTitle')}</span>
+              <span className="text-[10px] text-muted-foreground">{t('gatewayMasking.trendSessionHint')}</span>
             </div>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={maskTrend} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
@@ -398,6 +399,12 @@ export function MaskingPanel() {
         <EyeOff size={12} className="mt-0.5 shrink-0 text-amber-500" />
         <p className="text-[10px] leading-relaxed text-muted-foreground">
           {t('gatewayMasking.notice')}
+        </p>
+      </div>
+      <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+        <BarChart3 size={12} className="mt-0.5 shrink-0 text-muted-foreground" />
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          {t('gatewayMasking.sessionScopeNotice')}
         </p>
       </div>
     </div>
