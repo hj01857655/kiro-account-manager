@@ -21,9 +21,11 @@ export interface RecentRequestLog {
   clientUserAgent?: string
   inputTokens?: number
   outputTokens?: number
-  /** Prompt Caching：缓存读取（节省成本）/ 缓存写入（首次 +25% 成本） */
+  /** Prompt Caching：缓存读取（节省成本）/ 缓存写入（首次 +25% 成本），概览合并一列显示 */
   cacheReadInputTokens?: number
   cacheCreationInputTokens?: number
+  /** 上游 meteringEvent 的真实计费消耗；非流式请求为 undefined */
+  credits?: number
   /** 原始请求体 / 响应体（后端已截断到 64KB），供行内展开查看 */
   requestBody?: string
   responseBody?: string
@@ -238,8 +240,8 @@ export function GatewayOverview({
                   <th className="py-1 pr-2 font-medium">{t('gateway.model')}</th>
                   <th className="py-1 pr-2 font-medium">{t('gateway.status')}</th>
                   <th className="py-1 pr-2 text-right font-medium">{t('gateway.tokens')}</th>
-                  <th className="py-1 pr-2 text-right font-medium">{t('gateway.cacheRead')}</th>
-                  <th className="py-1 pr-2 text-right font-medium">{t('gateway.cacheWrite')}</th>
+                  <th className="py-1 pr-2 text-right font-medium" title={t('gateway.cacheReadWriteTitle')}>{t('gateway.cacheReadWrite')}</th>
+                  <th className="py-1 pr-2 text-right font-medium" title={t('gateway.creditsTitle')}>{t('gateway.credits')}</th>
                   <th className="py-1 pr-2 text-right font-medium">{t('gateway.duration')}</th>
                 </tr>
               </thead>
@@ -277,11 +279,13 @@ export function GatewayOverview({
                             ? `${log.inputTokens ?? 0}/${log.outputTokens ?? 0}`
                             : '-'}
                         </td>
-                        <td className="py-1 pr-2 text-right text-emerald-600 dark:text-emerald-400">
-                          {log.cacheReadInputTokens ? log.cacheReadInputTokens.toLocaleString() : '-'}
+                        <td className="py-1 pr-2 text-right font-mono text-emerald-600 dark:text-emerald-400" title={t('gateway.cacheReadWriteTitle')}>
+                          {log.cacheReadInputTokens || log.cacheCreationInputTokens
+                            ? `${log.cacheReadInputTokens ?? 0}/${log.cacheCreationInputTokens ?? 0}`
+                            : '-'}
                         </td>
-                        <td className="py-1 pr-2 text-right text-amber-600 dark:text-amber-400">
-                          {log.cacheCreationInputTokens ? log.cacheCreationInputTokens.toLocaleString() : '-'}
+                        <td className="py-1 pr-2 text-right font-mono text-foreground" title={t('gateway.creditsTitle')}>
+                          {log.credits != null ? log.credits.toFixed(4) : '-'}
                         </td>
                         <td className="py-1 pr-2 text-right text-muted-foreground">{formatGatewayRequestDuration(log.durationMs)}</td>
                       </tr>

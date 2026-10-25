@@ -1913,6 +1913,10 @@
   "sessions.copy": "Копировать",
   "sessions.copied": "Скопировано",
   "welcome.freeNotice": "О бесплатности",
-  "gateway.cacheRead": "Кэш-чтение",
-  "gateway.cacheWrite": "Запись кэша"
+  "gateway.credits": "Расход",
+  "gatewayLogs.colCredits": "Расход",
+  "gatewayLogs.colCreditsTitle": "Реальный расход из meteringEvent вышестоящего сервера; отсутствует для нестриминговых запросов",
+  "gateway.cacheReadWrite": "Кэш Ч/З",
+  "gateway.cacheReadWriteTitle": "Токены чтения кэша (попадание, экономия) / записи кэша (первый раз, +25% стоимости)",
+  "gateway.creditsTitle": "Реальный расход из meteringEvent вышестоящего сервера; отсутствует для нестриминговых запросов"
 }

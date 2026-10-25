@@ -1913,6 +1913,10 @@
   "sessions.copy": "复制",
   "sessions.copied": "已复制",
   "welcome.freeNotice": "免费声明",
-  "gateway.cacheRead": "缓存读",
-  "gateway.cacheWrite": "缓存写"
+  "gateway.credits": "计费",
+  "gatewayLogs.colCredits": "计费",
+  "gatewayLogs.colCreditsTitle": "上游 meteringEvent 给出的本次请求真实计费消耗；非流式请求无此值",
+  "gateway.cacheReadWrite": "缓存读/写",
+  "gateway.cacheReadWriteTitle": "缓存读取 tokens（命中，节省成本）/ 缓存写入 tokens（首次，+25% 成本）",
+  "gateway.creditsTitle": "上游 meteringEvent 给出的本次请求真实计费消耗；非流式请求无此值"
 }

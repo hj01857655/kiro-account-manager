@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   clearAllCache,
   clearGatewayRequestLogs,
@@ -61,6 +61,8 @@ interface ProcessedRequestLog {
   outputTokens?: number
   cacheReadTokens?: number
   cacheCreationTokens?: number
+  /** 上游 meteringEvent 的真实计费消耗；非流式请求为 undefined */
+  credits?: number
   upstream?: string
   errorType?: string
   outcome?: string
@@ -269,7 +271,13 @@ export function RequestLogsDialog({
       || String(log.status).includes(lower)
   })
 
+  // 拉取代次：清空时把在途请求全部作废。否则清空前发出的拉取会带着旧数据
+  // 晚于清空落地，把刚置空的列表重新填上——表现为「清空后日志又回来了」。
+  const fetchGenerationRef = useRef(0)
+  const clearedGenerationRef = useRef(0)
+
   const fetchRequestLogs = useCallback(async (limit?: number) => {
+    const generation = ++fetchGenerationRef.current
     setIsRefreshing(true)
     try {
       const [logs, stats, cache] = await Promise.all([
@@ -277,6 +285,10 @@ export function RequestLogsDialog({
         getGatewayRequestStats<GatewayRequestStats>(),
         getCacheStats<CacheStats>().catch(() => null)
       ])
+
+      // 清空后落在路上的旧响应整批丢弃：数据是清空前的快照，
+      // 统计/维度/健康度同理，不能用旧值覆盖已清空的状态
+      if (generation <= clearedGenerationRef.current) return
 
       // 维度统计与健康度并行拉取；两者的失败都不应拖垮日志主流程
       const [models, endpoints, clients] = await Promise.all([
@@ -311,6 +323,7 @@ export function RequestLogsDialog({
         outputTokens: log.outputTokens,
         cacheReadTokens: log.cacheReadInputTokens,
         cacheCreationTokens: log.cacheCreationInputTokens,
+        credits: log.credits,
         upstream: log.upstreamSource,
         errorType: log.errorType,
         outcome: log.outcome,
@@ -398,6 +411,8 @@ export function RequestLogsDialog({
     }
     try {
       await clearGatewayRequestLogs()
+      // 作废所有在途拉取：它们的响应晚于清空落地就会把旧日志带回来
+      clearedGenerationRef.current = fetchGenerationRef.current
       setRequestLogs([])
       setRequestStats(null)
       setClearConfirm(false)
@@ -834,6 +849,7 @@ export function RequestLogsDialog({
                 <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colOutput')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colCacheReadTitle')}>{t('gatewayLogs.colCacheRead')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans" title={t('gatewayLogs.colCacheWriteTitle')}>{t('gatewayLogs.colCacheWrite')}</th>
+                <th className="px-2 py-2 text-center w-[70px] font-sans" title={t('gatewayLogs.colCreditsTitle')}>{t('gatewayLogs.colCredits')}</th>
                 <th className="px-2 py-2 text-center w-[50px] font-sans">{t('gatewayLogs.colDuration')}</th>
               </tr>
             </thead>
@@ -888,6 +904,7 @@ export function RequestLogsDialog({
                         <td className="px-2 py-2 text-right text-muted-foreground">{log.outputTokens?.toLocaleString() || '-'}</td>
                         <td className="px-2 py-2 text-right text-blue-500 font-medium" title={t('gatewayLogs.colCacheReadTitle')}>{log.cacheReadTokens?.toLocaleString() || '-'}</td>
                         <td className="px-2 py-2 text-right text-purple-500 font-medium" title={t('gatewayLogs.colCacheWriteTitle')}>{log.cacheCreationTokens?.toLocaleString() || '-'}</td>
+                        <td className="px-2 py-2 text-right font-mono text-emerald-600 dark:text-emerald-400" title={t('gatewayLogs.colCreditsTitle')}>{log.credits != null ? log.credits.toFixed(4) : '-'}</td>
                         <td className="px-2 py-2 text-right">
                           <span className={log.duration > 5000 ? 'text-orange-500 font-bold' : log.duration > 2000 ? 'text-yellow-600 font-medium' : 'text-muted-foreground'}>
                             {log.duration}ms

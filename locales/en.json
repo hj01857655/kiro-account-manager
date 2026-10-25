@@ -1913,6 +1913,10 @@
   "sessions.copy": "Copy",
   "sessions.copied": "Copied",
   "welcome.freeNotice": "Free Notice",
-  "gateway.cacheRead": "Cache",
-  "gateway.cacheWrite": "Cache W"
+  "gateway.credits": "Credits",
+  "gatewayLogs.colCredits": "Credits",
+  "gatewayLogs.colCreditsTitle": "Real billing cost from the upstream meteringEvent; absent for non-streaming requests",
+  "gateway.cacheReadWrite": "Cache R/W",
+  "gateway.cacheReadWriteTitle": "Cache-read tokens (hit, saves cost) / cache-write tokens (first time, +25% cost)",
+  "gateway.creditsTitle": "Real billing cost from the upstream meteringEvent; absent for non-streaming requests"
 }
