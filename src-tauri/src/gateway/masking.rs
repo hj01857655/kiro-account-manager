@@ -266,6 +266,103 @@ impl PlaceholderMap {
     }
 }
 
+/// 流式回替器：跨 SSE delta 的占位符回替。
+///
+/// 模型 tokenizer 会把占位符切碎（`{{API` + `_KEY_53` + `5b79b1}}`），
+/// 逐事件回替对不完整片段无效（真实流量实测泄漏）。维护 hold-back 缓冲：
+/// 每次喂入后只下发「不可能成为占位符前缀」的安全前缀，把可能是半个
+/// 占位符的尾巴扣留到下一 delta；流结束时冲刷（完整占位符照常回替，
+/// 残缺片段按字面下发——流已结束，它不可能再补全）。
+pub struct StreamingUnmasker {
+    maps: PlaceholderMap,
+    buffer: String,
+}
+
+impl StreamingUnmasker {
+    pub fn new(maps: PlaceholderMap) -> Self {
+        Self {
+            maps,
+            buffer: String::new(),
+        }
+    }
+
+    /// 喂入一个上游文本 delta，返回可立即下发的安全前缀（可能为空——全部被扣留）。
+    pub fn feed(&mut self, text: &str) -> String {
+        // 映射表为空说明本请求没有遮蔽过任何值，响应不可能含占位符，
+        // 直接透传，零缓冲零延迟
+        if self.maps.is_empty() {
+            return text.to_string();
+        }
+        self.buffer.push_str(text);
+        self.drain(false)
+    }
+
+    /// 流结束冲刷。
+    pub fn flush(&mut self) -> String {
+        self.drain(true)
+    }
+
+    fn drain(&mut self, final_flush: bool) -> String {
+        let mut out = std::mem::take(&mut self.buffer);
+        out = self.maps.unmask(&out);
+        if final_flush {
+            return out;
+        }
+        // hold-back：从最后一个「占位符模式的真实前缀」处扣留尾巴。
+        // 有界（≤20 字符）且只在尾巴真的像半个占位符时才扣——
+        // 模型合法输出的 {{...}}（非 hex 内容）不会被无限扣留。
+        if let Some(i) = hold_back_start(&out) {
+            self.buffer = out.split_off(i);
+        }
+        out
+    }
+}
+
+/// 占位符完整形态：`{{API_KEY_` + 8 hex + `}}`（共 20 字符）。
+const PLACEHOLDER_HEAD: &str = "{{API_KEY_";
+
+/// 找 buffer 尾部应扣留的起点：最后一个「是占位符前缀」的位置。
+fn hold_back_start(out: &str) -> Option<usize> {
+    let mut search = 0usize;
+    let mut last = None;
+    while let Some(pos) = out[search..].find("{{") {
+        let abs = search + pos;
+        if is_placeholder_prefix(&out[abs..]) {
+            last = Some(abs);
+        }
+        search = abs + 2;
+    }
+    if last.is_none() && out.ends_with('{') {
+        // 单个尾部 '{' 可能被下一 delta 补成 "{{"
+        last = Some(out.len() - 1);
+    }
+    last
+}
+
+/// 判断 s 是否为占位符模式的严格前缀（完整形态不算——那已被 unmask 消化）。
+fn is_placeholder_prefix(s: &str) -> bool {
+    if s.len() < PLACEHOLDER_HEAD.len() {
+        return PLACEHOLDER_HEAD.starts_with(s);
+    }
+    if !s.starts_with(PLACEHOLDER_HEAD) {
+        return false;
+    }
+    let rest = &s[PLACEHOLDER_HEAD.len()..];
+    if rest.len() >= 10 {
+        return false; // 8 hex + 2 括号已是完整形态
+    }
+    // 前缀必须是 hex（≤8 位），随后允许 0-2 个 '}'（正在闭合）
+    let mut brace_started = false;
+    for c in rest.chars() {
+        if c == '}' {
+            brace_started = true;
+        } else if brace_started || !c.is_ascii_hexdigit() {
+            return false;
+        }
+    }
+    true
+}
+
 /// 遮蔽引擎：持有规则表与共享映射表。
 #[derive(Debug)]
 pub struct MaskEngine {
@@ -902,5 +999,104 @@ mod tests {
         let out = engine.mask_text(&format!("why is {fake_key} refused"));
         assert_eq!(out.text, format!("why is {fake_key} refused"), "白名单值必须原样通过");
         assert!(out.items.is_empty(), "白名单命中连 Warn 都不记");
+    }
+}
+
+#[cfg(test)]
+mod probe_tests {
+    use super::*;
+
+    /// 端到端发现的真实流量疑点：字面量 sk-abc123DEF456ghi789JKL012mno345PQR 被遮蔽成了
+    /// {{API_KEY_d663cf6a}}，但它不含 sk-/AKIA/ghp_/xox 任何前缀。
+    /// 本测试用与线上一致的输入直接过引擎，找出肇事规则。
+    #[test]
+    fn probe_which_rule_matches_placeholder_shaped_literal() {
+        // 用 chr 拼接构造，杜绝任何 shell/转义层面的字符偷换
+        let literal: String = "{{API_KEY_"
+            .chars()
+            .chain("nfsnytbn".chars())
+            .chain("}}".chars())
+            .collect();
+        assert_eq!(literal.len(), 20, "字面量应为 20 字符");
+        assert!(!literal.contains("sk-"), "前置确认：字面量不含 sk-");
+
+        let mut engine = MaskEngine::new();
+        let outcome = engine.mask_text(&format!("My key is {literal}."));
+        println!("probe: masked = {}", outcome.text);
+        println!("probe: items = {:?}", outcome.items);
+        for item in &outcome.items {
+            println!("probe: 命中规则 = {} | kind = {:?} | action = {:?}", item.rule, item.kind, item.action);
+        }
+        // 无论命中与否，把事实打出来；断言放到下一个测试
+    }
+}
+
+#[cfg(test)]
+mod streaming_unmasker_tests {
+    use super::*;
+
+    /// 复现真实流量抓到的分片形态：tokenizer 把占位符切成
+    /// `{{API` + `_KEY_53` + `5b79b1}}` 三段。逐事件回替会漏，
+    /// hold-back 回替器必须拼回完整占位符再换真值。
+    #[test]
+    fn feed_handles_placeholder_split_across_deltas() {
+        let mut engine = MaskEngine::new();
+        let fake_key = ["sk-", "e2eSTREAM1234567890abcdefghij"].concat();
+        let masked = engine.mask_text(&fake_key);
+        assert!(masked.text.starts_with("{{API_KEY_"), "前置：应产生占位符");
+        let placeholder = masked.text; // {{API_KEY_xxxxxxxx}} 共 20 字符
+        assert_eq!(placeholder.len(), 20);
+
+        let mut unmasker = StreamingUnmasker::new(engine.maps().snapshot());
+
+        // 按真实抓到的分片边界喂入（0..5 / 5..12 / 12..20）
+        let (a, b, c) = (&placeholder[0..5], &placeholder[5..12], &placeholder[12..]);
+        let mut out = String::new();
+        out.push_str(&unmasker.feed(a));
+        out.push_str(&unmasker.feed(b));
+        out.push_str(&unmasker.feed(c));
+        out.push_str(&unmasker.flush());
+        assert_eq!(out, fake_key, "分片到达时 hold-back 必须拼回后回替为真值");
+    }
+
+    /// 单 delta 完整占位符：照常回替，不因 hold-back 引入额外延迟。
+    #[test]
+    fn feed_handles_complete_placeholder_in_one_delta() {
+        let mut engine = MaskEngine::new();
+        let fake_key = ["sk-", "e2eSTREAM1234567890abcdefghij"].concat();
+        let placeholder = engine.mask_text(&fake_key).text;
+        let mut unmasker = StreamingUnmasker::new(engine.maps().snapshot());
+
+        let out = unmasker.feed(&format!("before {} after", placeholder));
+        assert_eq!(out, format!("before {} after", fake_key), "完整占位符应立即回替");
+        assert_eq!(unmasker.flush(), "", "不应有残留缓冲");
+    }
+
+    /// hold-back 不得吞正常文本：合法 `{{name}}`（非 hex 内容）立即透传；
+    /// 尾部孤立 `{` 最多扣一个 delta，flush 兜底下发。
+    #[test]
+    fn feed_passes_through_non_placeholder_braces() {
+        let mut engine = MaskEngine::new();
+        // 必须用真实命中规则的值造映射条目——"seed" 这类不匹配任何规则的
+        // 字符串不会建条目，映射表为空时 feed 走零缓冲透传早退，
+        // hold-back 逻辑根本不会启用（本测试首次运行就栽在这里）
+        let seed_key = ["sk-", "e2eSEED1234567890abcdefghij"].concat();
+        engine.mask_text(&seed_key);
+        assert!(!engine.maps().is_empty(), "前置：种子必须建出映射条目");
+        let mut unmasker = StreamingUnmasker::new(engine.maps().snapshot());
+
+        let out1 = unmasker.feed("模板变量 {{name}} 与 JSON {{ok:1}} 正常");
+        assert_eq!(out1, "模板变量 {{name}} 与 JSON {{ok:1}} 正常", "非占位符花括号内容不得扣留");
+        let out2 = unmasker.feed("结尾一个孤立 {{");
+        assert_eq!(out2, "结尾一个孤立 ", "孤立 {{ 应被扣留一个 delta");
+        assert_eq!(unmasker.flush(), "{{", "flush 兜底下发扣留的孤立花括号");
+    }
+
+    /// 空映射表零缓冲透传：遮蔽从未发生时 hold-back 不引入任何延迟。
+    #[test]
+    fn feed_with_empty_map_is_zero_buffer_passthrough() {
+        let mut unmasker = StreamingUnmasker::new(PlaceholderMap::new());
+        assert_eq!(unmasker.feed("{{ anything }} {{x"), "{{ anything }} {{x");
+        assert_eq!(unmasker.flush(), "");
     }
 }

@@ -64,6 +64,10 @@ struct StreamState {
     event_log_budget: HashMap<String, u32>,
     /// 已提示过“超过落盘上限”的事件类型，避免重复 warn
     event_log_budget_noted: std::collections::HashSet<String>,
+    /// 隐私遮蔽的流式回替器（`privacy_mask_enabled` 开启时 Some）。
+    /// 跨 delta hold-back：模型 tokenizer 会把占位符切碎，逐事件回替
+    /// 对不完整片段无效（真实流量实测泄漏），必须跨事件缓冲。
+    stream_unmasker: Option<crate::gateway::masking::StreamingUnmasker>,
 }
 
 /// 单请求内每类上游事件最多写多少条到 `kiro-response-eventstream.log`。
@@ -179,6 +183,13 @@ async fn stream_proxy_response_inner(
         let mut aggregated = stream::AggregatedKiroResponse::default();
         let mut st = StreamState::default();
         st.stop_matcher = StopSequenceMatcher::new(stop_sequences.as_deref().unwrap_or(&[]));
+        // 遮蔽开启时挂跨 delta 回替器：本任务运行在 SSE_MASK_MAP scope 内，
+        // 直接从 task-local 取快照（遮蔽关闭时为 None 走透传）
+        st.stream_unmasker = SSE_MASK_MAP
+            .try_with(|m| m.clone())
+            .ok()
+            .flatten()
+            .map(crate::gateway::masking::StreamingUnmasker::new);
         let mut input_tokens = 0i32;
         let mut output_tokens = 0i32;
         let anthropic_id = format!("msg_{}", short_uuid());
@@ -603,28 +614,37 @@ function_call: None,
                                                 }
                                             }
                                             if let Some(emittable) = emittable_text {
-                                                aggregated.text.push_str(&emittable);
-                                                for segment in parser.push_and_parse(&emittable) {
-                                                handle_stream_text(
-                                                    &tx,
-                                                    format,
-                                                    &model,
-                                                    &anthropic_id,
-                                                    &response_id,
-                                                    &completion_id,
-                                                    created_at,
-                                                    &segment.content,
-                                                    segment.segment_type == SegmentType::Thinking,
-                                                    &mut st.message_started,
-                                                    &mut st.next_block_index,
-                                                    &mut st.text_block_index,
-                                                    &mut st.thinking_block_index,
-                                                    input_tokens,
-                                                    output_tokens,
-                                                    aggregated.cache_read_input_tokens,
-                                                    aggregated.cache_creation_input_tokens,
-                                                )
-                                                .await;
+                                                // 隐私遮蔽回替：跨 delta hold-back——
+                                                // tokenizer 会把占位符切碎，逐事件回替对
+                                                // 半个占位符无效，须缓冲拼回后再下发
+                                                let emittable = match st.stream_unmasker.as_mut() {
+                                                    Some(u) => u.feed(&emittable),
+                                                    None => emittable,
+                                                };
+                                                if !emittable.is_empty() {
+                                                    aggregated.text.push_str(&emittable);
+                                                    for segment in parser.push_and_parse(&emittable) {
+                                                        handle_stream_text(
+                                                            &tx,
+                                                            format,
+                                                            &model,
+                                                            &anthropic_id,
+                                                            &response_id,
+                                                            &completion_id,
+                                                            created_at,
+                                                            &segment.content,
+                                                            segment.segment_type == SegmentType::Thinking,
+                                                            &mut st.message_started,
+                                                            &mut st.next_block_index,
+                                                            &mut st.text_block_index,
+                                                            &mut st.thinking_block_index,
+                                                            input_tokens,
+                                                            output_tokens,
+                                                            aggregated.cache_read_input_tokens,
+                                                            aggregated.cache_creation_input_tokens,
+                                                        )
+                                                        .await;
+                                                    }
                                                 }
                                             }
                                         }
@@ -1189,28 +1209,39 @@ function_call: None,
         // 保留的尾部（可能是 stop 前缀但最终没构成 stop）必须下发。
         if let Some(tail) = st.stop_matcher.flush() {
             if !tail.is_empty() {
-                aggregated.text.push_str(&tail);
-                for segment in parser.push_and_parse(&tail) {
-                    handle_stream_text(
-                        &tx,
-                        format,
-                        &model,
-                        &anthropic_id,
-                        &response_id,
-                        &completion_id,
-                        created_at,
-                        &segment.content,
-                        segment.segment_type == SegmentType::Thinking,
-                        &mut st.message_started,
-                        &mut st.next_block_index,
-                        &mut st.text_block_index,
-                        &mut st.thinking_block_index,
-                        input_tokens,
-                        output_tokens,
-                        aggregated.cache_read_input_tokens,
-                        aggregated.cache_creation_input_tokens,
-                    )
-                    .await;
+                // 尾巴同样过回替器：它可能扣着半个占位符（feed 后立即
+                // flush，流已结束没有下一 delta 可等）
+                let tail = match st.stream_unmasker.as_mut() {
+                    Some(u) => {
+                        u.feed(&tail);
+                        u.flush()
+                    }
+                    None => tail,
+                };
+                if !tail.is_empty() {
+                    aggregated.text.push_str(&tail);
+                    for segment in parser.push_and_parse(&tail) {
+                        handle_stream_text(
+                            &tx,
+                            format,
+                            &model,
+                            &anthropic_id,
+                            &response_id,
+                            &completion_id,
+                            created_at,
+                            &segment.content,
+                            segment.segment_type == SegmentType::Thinking,
+                            &mut st.message_started,
+                            &mut st.next_block_index,
+                            &mut st.text_block_index,
+                            &mut st.thinking_block_index,
+                            input_tokens,
+                            output_tokens,
+                            aggregated.cache_read_input_tokens,
+                            aggregated.cache_creation_input_tokens,
+                        )
+                        .await;
+                    }
                 }
             }
         }
