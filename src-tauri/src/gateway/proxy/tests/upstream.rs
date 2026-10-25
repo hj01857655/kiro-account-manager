@@ -326,3 +326,72 @@ fn add_kiro_upstream_headers_does_not_add_redirect_for_enterprise_or_builderid()
         );
     }
 }
+
+/// 遮蔽→回替 round-trip：请求侧遮蔽后响应里的占位符必须能换回真值。
+///
+/// 覆盖非流式出口的 `unmask_response_value`（流式路径走 send_event 的
+/// task-local 回替，映射表同源）。嵌套数组/对象/纯文本三种形态都要回替。
+#[tokio::test]
+async fn unmask_response_value_round_trips_masked_payload() {
+    use crate::gateway::masking::{MaskEngine, MaskNeverMask};
+
+    let mut engine = MaskEngine::new();
+    // 格式合法的假 key（sk- 前缀 + 32 位），请求侧先遮蔽
+    let fake_key = ["sk-", "abc123DEF456ghi789JKL012mno345PQR"].concat();
+    let request_text = format!("my key is {fake_key}");
+    let masked_request = engine.mask_text(&request_text);
+    assert!(masked_request.text.contains("{{API_KEY_"), "请求侧应产生占位符");
+    assert!(!masked_request.text.contains(&fake_key), "真值不应出现在遮蔽后请求里");
+
+    // 模拟上游把占位符原样带回响应（模型引用了用户消息里的 key）
+    let upstream_response = serde_json::json!({
+        "content": [
+            {"type": "text", "text": format!("You mentioned {}", masked_request.text)}
+        ],
+        "nested": {
+            "tool_input": {"note": masked_request.text.clone()},
+            "list": [masked_request.text.clone(), "plain text"]
+        }
+    });
+
+    // 把引擎（含映射表）挂进 AsyncMutex——与 RouterState.mask_engine 同构
+    let mask_engine = std::sync::Arc::new(tokio::sync::Mutex::new(engine));
+    let unmasked = unmask_response_value(upstream_response, &mask_engine).await;
+
+    // 客户端必须拿到真值，且嵌套各层都回替了
+    let serialized = unmasked.to_string();
+    assert!(serialized.contains(&fake_key), "回替后应包含真值: {serialized}");
+    assert!(!serialized.contains("{{API_KEY_"), "回替后不应残留占位符");
+    assert_eq!(
+        unmasked["nested"]["tool_input"]["note"],
+        serde_json::json!(request_text),
+        "嵌套对象里的值应完整还原"
+    );
+    assert_eq!(unmasked["nested"]["list"][1], serde_json::json!("plain text"), "无关文本不动");
+}
+
+/// 白名单值不产生占位符，回替自然也碰不到它——白名单与回替互不干扰。
+#[tokio::test]
+async fn unmask_never_mask_values_pass_through_untouched() {
+    use crate::gateway::masking::{MaskEngine, MaskNeverMask};
+
+    let fake_key = ["sk-", "abc123DEF456ghi789JKL012mno345PQR"].concat();
+    let engine = MaskEngine::with_overrides(
+        &[],
+        &[],
+        &[MaskNeverMask {
+            value: fake_key.clone(),
+            note: "排查此 key".to_string(),
+        }],
+    )
+    .expect("装配应成功");
+    // 白名单值请求侧就没被遮蔽，响应里也不会有占位符
+    let mask_engine = std::sync::Arc::new(tokio::sync::Mutex::new(engine));
+    let response = serde_json::json!({"text": format!("the key {fake_key} is fine")});
+    let unmasked = unmask_response_value(response, &mask_engine).await;
+    assert_eq!(
+        unmasked["text"],
+        serde_json::json!(format!("the key {fake_key} is fine")),
+        "白名单值应原样通过"
+    );
+}

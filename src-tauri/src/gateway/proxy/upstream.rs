@@ -1752,7 +1752,51 @@ pub async fn proxy_handler(
         aggregated.context_usage_percentage,
         &state,
     );
+    // 遮蔽开启时对非流式响应做回替：请求侧把真值换成了占位符，
+    // 上游响应里的占位符必须换回真值再交给客户端（流式路径在
+    // send_event 里做，非流式没有那条通道，在这里补齐）。
+    // 放在缓存写入之后：磁盘缓存保持占位符版（真值不落盘），
+    // 回替只发生在最后交给客户端的这一份。
+    let response = if state.config.privacy_mask_enabled {
+        unmask_response_value(response, &state.mask_engine).await
+    } else {
+        response
+    };
     Json(response).into_response()
+}
+
+/// 递归回替 JSON 响应里的占位符为真值（非流式出口用）。
+///
+/// 与流式的 `SSE_MASK_MAP` 回替同一张映射表；`mask_engine` 锁拿不到时
+/// 原样返回（极端竞争下宁可让客户端看到占位符，也不值得为此排队——
+/// 占位符本身不含敏感信息，客户端重试即可拿到正确回替）。
+pub(crate) async fn unmask_response_value(
+    value: Value,
+    mask_engine: &std::sync::Arc<tokio::sync::Mutex<crate::gateway::masking::MaskEngine>>,
+) -> Value {
+    // 先在锁内拿映射表快照（Arc 克隆，无深拷贝），锁外做替换
+    let maps = match mask_engine.try_lock() {
+        Ok(engine) => engine.maps().snapshot(),
+        Err(_) => return value,
+    };
+    unmask_value_recursive(value, &maps)
+}
+
+fn unmask_value_recursive(value: Value, maps: &crate::gateway::masking::PlaceholderMap) -> Value {
+    match value {
+        Value::String(s) => Value::String(maps.unmask(&s)),
+        Value::Array(arr) => {
+            Value::Array(arr.into_iter().map(|v| unmask_value_recursive(v, maps)).collect())
+        }
+        Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, v) in map {
+                out.insert(k, unmask_value_recursive(v, maps));
+            }
+            Value::Object(out)
+        }
+        other => other,
+    }
 }
 
 /// 从聚合响应中找出待代答的 tool_search 调用，并生成回灌用的两条消息。
