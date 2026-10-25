@@ -176,3 +176,12 @@ export function getMaskAuditEntries<T = MaskAuditEntry[]>(limit = 100) {
 export function previewMasking(text: string) {
   return invoke<{ text: string; items: unknown[]; blocked: boolean }>('preview_masking', { text })
 }
+
+/**
+ * 读落盘的全量请求日志（跨会话历史，无条件走文件）。
+ * Usage / 遮蔽审计页的 7 天趋势用这个——内存 LogStore 重启即丢且上限 10000，
+ * 而时间轴聚合要的是文件里的完整历史。
+ */
+export function getGatewayRequestLogHistory<T = any[]>(limit = 20000) {
+  return invoke<T>('get_gateway_request_log_history', { limit })
+}

@@ -9,6 +9,7 @@ use crate::gateway::{
     get_gateway_endpoint_stats as get_gateway_endpoint_stats_inner,
     get_gateway_log_dir as get_gateway_log_dir_inner,
     get_gateway_model_stats as get_gateway_model_stats_inner,
+    get_gateway_request_log_history as get_gateway_request_log_history_inner,
     get_gateway_request_logs as get_gateway_request_logs_inner,
     get_gateway_request_stats as get_gateway_request_stats_inner,
     get_gateway_status as get_gateway_status_inner, load_balancer, log_store,
@@ -70,6 +71,15 @@ pub async fn get_gateway_request_logs(
     session_only: Option<bool>,
 ) -> Result<Vec<GatewayRequestLogEntry>, String> {
     get_gateway_request_logs_inner(&state, limit, session_only.unwrap_or(false)).await
+}
+
+/// 读落盘的全量请求日志（跨会话历史，无条件走文件）。
+/// Usage / 遮蔽审计页的 7 天趋势用它——内存 LogStore 重启即丢且上限 10000。
+#[tauri::command]
+pub async fn get_gateway_request_log_history(
+    limit: Option<usize>,
+) -> Result<Vec<GatewayRequestLogEntry>, String> {
+    get_gateway_request_log_history_inner(limit).await
 }
 
 #[tauri::command]

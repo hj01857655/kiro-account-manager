@@ -59,6 +59,20 @@ impl SecretKind {
             _ => MaskAction::Mask,
         }
     }
+
+    /// 配置与前端用的类别键，必须与 serde `rename_all = "snake_case"` 一致
+    /// （`api_key` 而非 Debug 派生出的 `apikey`）。
+    pub fn as_key(&self) -> &'static str {
+        match self {
+            SecretKind::ApiKey => "api_key",
+            SecretKind::PrivateKey => "private_key",
+            SecretKind::Token => "token",
+            SecretKind::Email => "email",
+            SecretKind::CreditCard => "credit_card",
+            SecretKind::IdCard => "id_card",
+            SecretKind::Custom => "custom",
+        }
+    }
 }
 
 /// 一条遮蔽规则。内置规则由 `builtin_rules()` 给出；用户可加自定义正则。
@@ -253,10 +267,13 @@ impl PlaceholderMap {
 }
 
 /// 遮蔽引擎：持有规则表与共享映射表。
+#[derive(Debug)]
 pub struct MaskEngine {
     rules: Vec<MaskRule>,
     /// 真实值 ↔ 占位符（进程内共享，流式出口经 task-local 回执）。
     maps: PlaceholderMap,
+    /// 永不遮蔽的值清单（精确匹配优先于一切规则）。
+    never_mask: Vec<String>,
 }
 
 /// 审计记录里的一条：只留元数据，不留真值。
@@ -275,11 +292,127 @@ pub struct MaskRecordItem {
     pub rule: String,
 }
 
+/// 用户对某一类敏感值的处置覆盖（设置页「遮蔽规则」编辑器保存的形状）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaskKindOverride {
+    /// 类别键：`api_key` / `private_key` / `token` / `email` /
+    /// `credit_card` / `id_card`（与 `SecretKind` 的 snake_case 一致）。
+    /// 注：`aws_secret` 是 api_key 类的第二条规则，按 kind 覆盖时
+    /// 与 api_key 同进退（kind 粒度而非规则名粒度）。
+    pub kind: String,
+    /// 该类是否参与遮蔽（关掉后整类移除）
+    #[serde(default = "default_true_val")]
+    pub enabled: bool,
+    /// 命中后的动作
+    pub action: MaskAction,
+}
+
+/// 用户自定义遮蔽规则：自己的正则 + 名字 + 动作。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaskCustomRule {
+    pub id: String,
+    pub name: String,
+    /// regex 语法；编译失败跳过该规则
+    pub pattern: String,
+    pub action: MaskAction,
+    #[serde(default = "default_true_val")]
+    pub enabled: bool,
+}
+
+/// 永不遮蔽的值清单（白名单）。
+///
+/// 语义：**精确匹配优先于一切规则**——值在白名单里就不遮蔽、不警告、
+/// 不拦截。用于「模型需要理解这个 token 本身」的任务（排查某密钥为何
+/// 被拒）等误伤场景。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaskNeverMask {
+    /// 白名单条目本身（真值；存在配置文件中，用户自知风险）
+    pub value: String,
+    /// 备注（这串值是什么，便于日后清理）
+    #[serde(default)]
+    pub note: String,
+}
+
+fn default_true_val() -> bool {
+    true
+}
+
 impl MaskEngine {
     pub fn new() -> Self {
         Self {
             rules: builtin_rules(),
             maps: PlaceholderMap::new(),
+            never_mask: Vec::new(),
+        }
+    }
+
+    /// 用用户配置重建规则集。
+    ///
+    /// 覆盖语义：**按 kind 覆盖**——用户在设置里对某类选了动作，
+    /// 该类内置规则的 action 被替换；`enabled=false` 的类整类移除。
+    /// 自定义规则（Custom kind）追加在内置规则之后。
+    /// 用户没配的类保持内置默认（`kind_overrides` 里没有该类）。
+    pub fn with_overrides(
+        kind_overrides: &[MaskKindOverride],
+        custom_rules: &[MaskCustomRule],
+        never_mask: &[MaskNeverMask],
+    ) -> Result<Self, String> {
+        let mut engine = Self::new();
+        engine.never_mask = never_mask
+            .iter()
+            .map(|n| n.value.clone())
+            .filter(|v| !v.is_empty())
+            .collect();
+        let mut rules = Vec::new();
+
+        // 按 kind 收集用户的覆盖意图（配置里重复的 kind 取最后一条）
+        let mut overrides: std::collections::HashMap<String, &MaskKindOverride> =
+            std::collections::HashMap::new();
+        for o in kind_overrides {
+            overrides.insert(o.kind.clone(), o);
+        }
+
+        for rule in builtin_rules() {
+            // 类别键走 as_key()（与 serde snake_case 一致），不能用 Debug 派生——
+            // `format!("{:?}")` 对 ApiKey 给出 "ApiKey"→"apikey"，与配置里的
+            // "api_key" 对不上，覆盖会静默失效
+            let kind_key = rule.kind.as_key();
+            match overrides.get(kind_key) {
+                Some(o) if !o.enabled => continue, // 用户关掉这一类
+                Some(o) => rules.push(MaskRule {
+                    action: o.action,
+                    ..rule
+                }),
+                None => rules.push(rule), // 未配置：内置默认
+            }
+        }
+
+        // 自定义规则：用户正则编译失败不能让网关启动失败——
+        // 跳过坏规则并在 Err 里报告，调用方决定是否提示
+        let mut skipped = Vec::new();
+        for custom in custom_rules {
+            if !custom.enabled {
+                continue;
+            }
+            match Regex::new(&custom.pattern) {
+                Ok(re) => rules.push(MaskRule {
+                    kind: SecretKind::Custom,
+                    name: custom.name.clone(),
+                    pattern: re,
+                    action: custom.action,
+                }),
+                Err(e) => skipped.push(format!("{}: {}", custom.name, e)),
+            }
+        }
+        engine.rules = rules;
+
+        if skipped.is_empty() {
+            Ok(engine)
+        } else {
+            Err(format!("跳过无效自定义规则: {}", skipped.join("; ")))
         }
     }
 
@@ -316,6 +449,10 @@ impl MaskEngine {
 
             for (matched, _) in matches {
                 if matched.is_empty() {
+                    continue;
+                }
+                // 白名单优先于一切规则：精确匹配的值不遮蔽、不警告、不拦截
+                if self.never_mask.iter().any(|v| v == &matched) {
                     continue;
                 }
                 match rule.action {
@@ -669,5 +806,101 @@ mod tests {
         let other = ["sk-", "ZZZ999YYY888XXX777WWW666VVV"].concat();
         engine.mask_text(&other);
         assert_eq!(snap.unmask(&masked.text), fake_key);
+    }
+
+    // ===== 用户规则覆盖（with_overrides）=====
+
+    #[test]
+    fn kind_override_switches_action() {
+        // 邮箱内置默认 Warn；用户覆盖成 Block 后必须真的拦
+        let engine = MaskEngine::with_overrides(
+            &[MaskKindOverride {
+                kind: "email".to_string(),
+                enabled: true,
+                action: MaskAction::Block,
+            }],
+            &[],
+            &[],
+        )
+        .expect("装配应成功");
+        let mut engine = engine;
+        let out = engine.mask_text("write to alice@example.com");
+        assert!(out.blocked, "覆盖成 Block 后邮箱必须触发拦截");
+        assert_eq!(out.items.len(), 1);
+        assert_eq!(out.items[0].action, MaskAction::Block);
+    }
+
+    #[test]
+    fn kind_override_disables_kind() {
+        let engine = MaskEngine::with_overrides(
+            &[MaskKindOverride {
+                kind: "api_key".to_string(),
+                enabled: false,
+                action: MaskAction::Mask,
+            }],
+            &[],
+            &[],
+        )
+        .expect("装配应成功");
+        let mut engine = engine;
+        let fake_key = ["sk-", "abc123DEF456ghi789JKL012mno345PQR"].concat();
+        let out = engine.mask_text(&fake_key);
+        assert!(!out.text.contains("{{API_KEY_"), "停用 api_key 类后 key 不应被遮蔽");
+    }
+
+    #[test]
+    fn custom_rule_masks_own_pattern() {
+        let engine = MaskEngine::with_overrides(
+            &[],
+            &[MaskCustomRule {
+                id: "r1".to_string(),
+                name: "internal-token".to_string(),
+                // 公司内部 token 格式：ACME- 后跟 12 位大写字母数字
+                pattern: r"\bACME-[A-Z0-9]{12}\b".to_string(),
+                action: MaskAction::Mask,
+                enabled: true,
+            }],
+            &[],
+        )
+        .expect("装配应成功");
+        let mut engine = engine;
+        let out = engine.mask_text("token ACME-AB12CD34EF56 here");
+        assert!(!out.text.contains("ACME-AB12CD34EF56"), "自定义规则必须命中");
+        assert!(out.text.contains("{{CUSTOM_"));
+    }
+
+    #[test]
+    fn invalid_custom_regex_is_reported_not_fatal() {
+        let result = MaskEngine::with_overrides(
+            &[],
+            &[MaskCustomRule {
+                id: "bad".to_string(),
+                name: "broken".to_string(),
+                pattern: "([unclosed".to_string(), // 坏正则
+                action: MaskAction::Mask,
+                enabled: true,
+            }],
+            &[],
+        );
+        let err = result.expect_err("坏正则应报错");
+        assert!(err.contains("broken"), "错误信息应指出哪条规则坏了: {err}");
+    }
+
+    #[test]
+    fn never_mask_beats_every_rule() {
+        let fake_key = ["sk-", "abc123DEF456ghi789JKL012mno345PQR"].concat();
+        let engine = MaskEngine::with_overrides(
+            &[],
+            &[],
+            &[MaskNeverMask {
+                value: fake_key.clone(),
+                note: "排查此 key 为何被拒".to_string(),
+            }],
+        )
+        .expect("装配应成功");
+        let mut engine = engine;
+        let out = engine.mask_text(&format!("why is {fake_key} refused"));
+        assert_eq!(out.text, format!("why is {fake_key} refused"), "白名单值必须原样通过");
+        assert!(out.items.is_empty(), "白名单命中连 Warn 都不记");
     }
 }

@@ -172,6 +172,15 @@ pub struct GatewayConfig {
     /// 真实值只在内存，不落盘；遮蔽失败时 fail-closed 拒绝请求。
     #[serde(default)]
     pub privacy_mask_enabled: bool,
+    /// 遮蔽规则的用户覆盖：按类别改动作/停用。空 = 全部内置默认。
+    #[serde(default)]
+    pub mask_kind_overrides: Vec<masking::MaskKindOverride>,
+    /// 用户自定义遮蔽规则（自己的正则）。编译失败的规则在启动时跳过。
+    #[serde(default)]
+    pub mask_custom_rules: Vec<masking::MaskCustomRule>,
+    /// 永不遮蔽的值清单（精确匹配优先于一切规则）。
+    #[serde(default)]
+    pub mask_never_mask: Vec<masking::MaskNeverMask>,
 }
 
 fn default_cache_ttl() -> u64 {
@@ -480,6 +489,9 @@ impl Default for GatewayConfig {
             session_affinity: false,
             log_stream_events: false,
             privacy_mask_enabled: false,
+            mask_kind_overrides: Vec::new(),
+            mask_custom_rules: Vec::new(),
+            mask_never_mask: Vec::new(),
         }
     }
 }
@@ -723,7 +735,10 @@ fn get_gateway_request_logs_from_path(
 
     let file = fs::File::open(path).map_err(|e| format!("读取请求日志失败: {e}"))?;
     let reader = BufReader::new(file);
-    let max_items = limit.unwrap_or(100).clamp(1, 500);
+    // limit 上限 20000：内存 LogStore 容量就是 10000，文件路径允许更大是给
+    // 「7 天趋势」这类跨会话聚合用的（Usage/遮蔽页拉全量历史算时间轴）。
+    // clamp 到 1 防 0 条的空洞语义。
+    let max_items = limit.unwrap_or(100).clamp(1, 20_000);
     let mut entries = Vec::new();
 
     for line in reader.lines() {
@@ -888,6 +903,19 @@ pub async fn get_gateway_request_logs(
     }
 
     // 如果 gateway 未运行，从文件读取
+    let path = request_log_path()?;
+    get_gateway_request_logs_from_path(&path, limit)
+}
+
+/// 读落盘的全量请求日志（跨会话历史，与内存视图分离）。
+///
+/// 与 `get_gateway_request_logs` 的区别：**无条件走文件**——网关运行中也一样。
+/// 内存 LogStore 上限 10000 条且重启即丢，而「7 天趋势」这类跨会话聚合
+/// 需要文件里的完整历史（Usage / 遮蔽审计页的时间轴）。
+/// 文件不存在（从未产生过请求）时返回空 Vec。
+pub async fn get_gateway_request_log_history(
+    limit: Option<usize>,
+) -> Result<Vec<GatewayRequestLogEntry>, String> {
     let path = request_log_path()?;
     get_gateway_request_logs_from_path(&path, limit)
 }
@@ -1300,7 +1328,18 @@ async fn spawn_runtime(
 
     // 隐私遮蔽：引擎（映射表跨请求保留）+ 审计记录（内存环形缓冲）。
     // 两者在 runtime 生命周期内存活，停止即释放——审计元数据刻意不落盘。
-    let mask_engine = Arc::new(AsyncMutex::new(masking::MaskEngine::new()));
+    // 用户规则覆盖/自定义规则/白名单从配置装配；坏自定义正则不阻断启动。
+    let mask_engine = Arc::new(AsyncMutex::new(
+        masking::MaskEngine::with_overrides(
+            &config.mask_kind_overrides,
+            &config.mask_custom_rules,
+            &config.mask_never_mask,
+        )
+        .unwrap_or_else(|e| {
+            log::warn!("[遮蔽] 自定义规则装配有问题（已跳过坏规则）: {e}");
+            masking::MaskEngine::new()
+        }),
+    ));
     let mask_audit = Arc::new(masking::MaskAuditLog::new(500));
 
     // 从文件加载历史日志到内存（启动时恢复，容量对齐内存上限 10000，
