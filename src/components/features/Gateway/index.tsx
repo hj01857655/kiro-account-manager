@@ -15,7 +15,7 @@ import {
 import GatewayConfigComponent from './GatewayConfig'
 import { GatewayStatusBar } from './GatewayStatusBar'
 import { GatewayOverview } from './GatewayOverview'
-import { MaskingPanel } from './MaskingPanel'
+import { UsagePanel } from './UsagePanel'
 import { RequestLogsDialog } from './RequestLogsDialog'
 import { ProtocolTestDialog } from './ProtocolTestDialog'
 import { GatewayConfig, GatewayStatus, type GatewayOverviewStats } from './gatewayPageState'
@@ -428,8 +428,8 @@ function GatewayPage() {
             <TabsTrigger value="logs" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
               {t('gateway.tabRequestLogs')}
             </TabsTrigger>
-            <TabsTrigger value="masking" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
-              {t('gatewayMasking.tabMasking')}
+            <TabsTrigger value="usage" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
+              {t('gatewayUsage.tabUsage')}
             </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
               {t('gateway.tabSettings')}
@@ -467,10 +467,10 @@ function GatewayPage() {
             />
           </TabsContent>
 
-          <TabsContent value="masking" className="m-0">
-            <MaskingPanel />
-          </TabsContent>
 
+          <TabsContent value="usage" className="m-0">
+            <UsagePanel />
+          </TabsContent>
 
           <TabsContent value="settings" className="m-0">
             <GatewayConfigComponent
