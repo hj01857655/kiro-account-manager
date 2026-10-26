@@ -2038,5 +2038,8 @@
   "gatewayQuota.loadFailed": "加载失败: {error}",
   "gatewayQuota.empty": "网关作用域内没有账号",
   "gatewayQuota.hint": "上游配额与账号管理页同源（不刷新 token，失效即报错）；本地消耗为落盘日志按账号聚合。",
-  "gatewayUsage.cacheRead": "缓存读"
+  "gatewayUsage.cacheRead": "缓存读",
+  "gatewayQuota.overage": "超额额度",
+  "gatewayQuota.overageCapable": "支持超额",
+  "gatewayQuota.overageIncapable": "不支持超额"
 }

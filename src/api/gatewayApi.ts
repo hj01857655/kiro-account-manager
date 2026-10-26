@@ -41,6 +41,10 @@ export interface GatewayConfigPayload {
   upstreamProxy: string | null
   /** 工具描述最大长度；0 = 不截断 */
   maxToolDescriptionLength: number
+  /** OTLP 导出 endpoint（OTLP/HTTP JSON）；空 = 关闭。缺省可省，保存时不会冲掉已配置值 */
+  otlpEndpoint?: string | null
+  /** OTLP 请求附加头，JSON 对象序列化字符串 */
+  otlpHeaders?: string | null
 }
 
 export function getGatewayConfig<T = any>() {

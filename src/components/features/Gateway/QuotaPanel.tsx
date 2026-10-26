@@ -20,19 +20,42 @@ function fmtInt(n: number): string {
   return n.toLocaleString()
 }
 
-/** 从 usage JSON 里尽力提取一行人类可读的额度摘要（各渠道结构不同，宽松处理） */
-function summarizeUsage(usage: unknown): string {
+/** 按真实 getUsageLimits 结构解析额度：usageBreakdownList[0] 的用量/上限，
+ *  subscriptionInfo.overageCapability 标注超额能力。与 core/usage.rs 同源。
+ *  解析失败回退 JSON 截断，保证总能看到点什么。 */
+function summarizeUsage(usage: unknown, t: (k: string) => string): string {
   if (!usage || typeof usage !== 'object') return '-'
   const u = usage as Record<string, unknown>
-  const parts: string[] = []
-  // Kiro usageLimits: subscription / usageLimit / overagePageSize 等结构随渠道变化
-  const sub = u.subscription as Record<string, unknown> | undefined
-  if (sub) {
-    const util = (sub.usagePercentage ?? sub.usageUtilizationPercentage) as number | undefined
-    if (typeof util === 'number') parts.push(`${Math.round(util)}%`)
-    const renewal = (sub.renewalDate ?? sub.nextDate) as string | undefined
-    if (renewal) parts.push(String(renewal))
+  const readAmount = (item: Record<string, unknown>, base: string): number | undefined => {
+    const withPrecision = item[`${base}WithPrecision`]
+    if (typeof withPrecision === 'number') return withPrecision
+    const plain = item[base]
+    if (typeof plain === 'number') return plain
+    return undefined
   }
+  const parts: string[] = []
+  const breakdown = (u.usageBreakdownList as Array<Record<string, unknown>> | undefined)?.[0]
+  if (breakdown) {
+    const current = readAmount(breakdown, 'currentUsage')
+    const limit = readAmount(breakdown, 'usageLimit')
+    if (typeof current === 'number' && typeof limit === 'number' && limit > 0) {
+      parts.push(
+        `${current.toLocaleString(undefined, { maximumFractionDigits: 2 })} / ${limit.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+        `${Math.round((current / limit) * 100)}%`,
+      )
+    } else if (typeof current === 'number') {
+      parts.push(current.toLocaleString(undefined, { maximumFractionDigits: 2 }))
+    }
+    const overageCap = readAmount(breakdown, 'overageCap')
+    if (typeof overageCap === 'number' && overageCap > 0) {
+      parts.push(
+        `${t('gatewayQuota.overage')} ${overageCap.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      )
+    }
+  }
+  const overage = (u.subscriptionInfo as Record<string, unknown> | undefined)?.overageCapability
+  if (overage === 'OVERAGE_CAPABLE') parts.push(t('gatewayQuota.overageCapable'))
+  if (overage === 'OVERAGE_INCAPABLE') parts.push(t('gatewayQuota.overageIncapable'))
   if (parts.length === 0) {
     const s = JSON.stringify(usage)
     return s.length > 120 ? s.slice(0, 120) + '…' : s
@@ -109,8 +132,8 @@ export function QuotaPanel() {
                       {e.provider ?? '-'} · {e.region ?? '-'}
                     </div>
                   </td>
-                  <td className="px-3 py-2 max-w-[260px] truncate text-xs" title={summarizeUsage(e.usage)}>
-                    {e.error ? '-' : summarizeUsage(e.usage)}
+                  <td className="px-3 py-2 max-w-[260px] truncate text-xs" title={summarizeUsage(e.usage, t)}>
+                    {e.error ? '-' : summarizeUsage(e.usage, t)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{e.creditsConsumed.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtInt(e.totalRequests)}</td>

@@ -2038,5 +2038,8 @@
   "gatewayQuota.loadFailed": "Ошибка загрузки: {error}",
   "gatewayQuota.empty": "В области шлюза нет аккаунтов",
   "gatewayQuota.hint": "Квота провайдера берётся из того же источника, что и на странице аккаунтов (без обновления токена; ошибки сообщаются). Локальное расходование агрегировано из журналов по аккаунтам.",
-  "gatewayUsage.cacheRead": "Чтения кэша"
+  "gatewayUsage.cacheRead": "Чтения кэша",
+  "gatewayQuota.overage": "Сверхлимит",
+  "gatewayQuota.overageCapable": "Превышение доступно",
+  "gatewayQuota.overageIncapable": "Без превышения"
 }

@@ -47,6 +47,10 @@ export interface GatewayConfig {
   maskNeverMask: MaskNeverMask[];
   upstreamProxy: string;
   maxToolDescriptionLength: number;
+  /** OTLP 导出 endpoint；空 = 关闭。仅落盘配置承载，设置页暂无编辑入口 */
+  otlpEndpoint: string;
+  /** OTLP 附加头（JSON 对象序列化字符串） */
+  otlpHeaders: string;
 }
 
 export interface PromptFilterRule {
@@ -144,7 +148,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   maskCustomRules: [],
   maskNeverMask: [],
   upstreamProxy: '',
-  maxToolDescriptionLength: 10237
+  maxToolDescriptionLength: 10237,
+  otlpEndpoint: '',
+  otlpHeaders: ''
 }
 
 export const DEFAULT_GATEWAY_STATUS: GatewayStatus = {
@@ -175,7 +181,9 @@ export const buildGatewayConfigSnapshot = (config: GatewayConfig) => JSON.string
   filterEnvNoise: !!config.filterEnvNoise,
   promptFilterRules: config.promptFilterRules || [],
   upstreamProxy: config.upstreamProxy || '',
-  maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0
+  maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0,
+  otlpEndpoint: config.otlpEndpoint || '',
+  otlpHeaders: config.otlpHeaders || ''
 })
 
 export const buildGatewayRuntimeSnapshot = (config: GatewayConfig) => JSON.stringify({
@@ -233,7 +241,9 @@ export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
   maskCustomRules: Array.isArray(gatewayConfig?.maskCustomRules) ? gatewayConfig.maskCustomRules : [],
   maskNeverMask: Array.isArray(gatewayConfig?.maskNeverMask) ? gatewayConfig.maskNeverMask : [],
   upstreamProxy: typeof gatewayConfig?.upstreamProxy === 'string' ? gatewayConfig.upstreamProxy : '',
-  maxToolDescriptionLength: gatewayConfig?.maxToolDescriptionLength ?? 10237
+  maxToolDescriptionLength: gatewayConfig?.maxToolDescriptionLength ?? 10237,
+  otlpEndpoint: typeof gatewayConfig?.otlpEndpoint === 'string' ? gatewayConfig.otlpEndpoint : '',
+  otlpHeaders: typeof gatewayConfig?.otlpHeaders === 'string' ? gatewayConfig.otlpHeaders : ''
 })
 
 export const buildGatewayStatusState = (gatewayStatus: any, gatewayConfig: any, fallbackConfig: GatewayConfig = DEFAULT_GATEWAY_CONFIG): GatewayStatus => ({
@@ -272,7 +282,10 @@ export const buildGatewayPayload = (config: GatewayConfig) => ({
   logStreamEvents: config.logStreamEvents === true,
   // 空串归一为 null：后端将空串视为非法（upstreamProxy 必须是有效 URL 或缺失）
   upstreamProxy: config.upstreamProxy?.trim() ? config.upstreamProxy.trim() : null,
-  maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0
+  maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0,
+  // OTLP：空串归一为 null（关闭），保存时随载荷回写，不再被默认值冲掉
+  otlpEndpoint: config.otlpEndpoint?.trim() ? config.otlpEndpoint.trim() : null,
+  otlpHeaders: config.otlpHeaders?.trim() ? config.otlpHeaders.trim() : null
 })
 
 export const loadGatewayPageData = async () => {

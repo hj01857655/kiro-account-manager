@@ -2038,5 +2038,8 @@
   "gatewayQuota.loadFailed": "Load failed: {error}",
   "gatewayQuota.empty": "No accounts in the gateway scope",
   "gatewayQuota.hint": "Upstream quota shares the same source as the accounts page (no token refresh; failures are reported). Local usage is aggregated from on-disk logs per account.",
-  "gatewayUsage.cacheRead": "Cache reads"
+  "gatewayUsage.cacheRead": "Cache reads",
+  "gatewayQuota.overage": "Overage",
+  "gatewayQuota.overageCapable": "Overage capable",
+  "gatewayQuota.overageIncapable": "No overage"
 }
