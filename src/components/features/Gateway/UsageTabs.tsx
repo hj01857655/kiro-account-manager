@@ -3,11 +3,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useApp } from '../../../hooks/useApp'
 import { QuotaPanel } from './QuotaPanel'
 import { BillsPanel } from './BillsPanel'
-import { RequestsPanel } from './RequestsPanel'
 import { SessionsPanel } from './SessionsPanel'
 import { ContextPanel } from './ContextPanel'
 
-/** 用量页容器：一页四个子标签（额度概览/请求/会话/上下文），对齐 magpie 的用量结构。 */
+/** 用量页容器：一页三个子标签（额度概览/会话/上下文）。
+ *  magpie 的「请求」标签不搬——我们的顶层「请求日志」页功能是其超集，重复展示没有意义。 */
 export function UsageTabs() {
   const { t } = useApp()
   const [sub, setSub] = useState('overview')
@@ -18,9 +18,6 @@ export function UsageTabs() {
         <TabsList className="surface-card flex h-9 w-full justify-start rounded-lg border-none p-0.5 lg:w-fit">
           <TabsTrigger value="overview" className="gap-1.5 px-3.5 h-8 text-sm font-medium data-[active]:shadow-sm">
             {t('gatewayUsage.subOverview')}
-          </TabsTrigger>
-          <TabsTrigger value="requests" className="gap-1.5 px-3.5 h-8 text-sm font-medium data-[active]:shadow-sm">
-            {t('gatewayUsage.subRequests')}
           </TabsTrigger>
           <TabsTrigger value="sessions" className="gap-1.5 px-3.5 h-8 text-sm font-medium data-[active]:shadow-sm">
             {t('gatewayUsage.subSessions')}
@@ -41,10 +38,6 @@ export function UsageTabs() {
             <BillsPanel />
           </div>
         </div>
-      </TabsContent>
-
-      <TabsContent value="requests" className="m-0 flex-1 min-h-0">
-        <RequestsPanel />
       </TabsContent>
 
       <TabsContent value="sessions" className="m-0 flex-1 min-h-0">
