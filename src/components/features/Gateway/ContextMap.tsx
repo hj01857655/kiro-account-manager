@@ -11,10 +11,8 @@ export interface ContextMapProps {
   parts: ContextPart[]
   /** 该请求的 prompt 总 tokens */
   tokens: number
-  /** 上下文窗口大小（tokens）；用于算出空闲区 */
-  window: number
-  /** 窗口未知时不给空闲区，只画已用部分 */
-  showFree?: boolean
+  /** 上下文窗口大小（tokens）；未知时为 null——不画空闲区，也不猜 */
+  window: number | null
   className?: string
 }
 
@@ -142,8 +140,9 @@ export function ContextMap({ parts, tokens, window, className = '' }: ContextMap
   const view = useMemo(() => {
     const used = parts.filter((p) => p.tokens > 0).map((p) => ({ v: p.tokens, kind: p.kind }))
     const totalUsed = used.reduce((s, p) => s + p.v, 0)
-    const scale = Math.max(window, totalUsed, 1)
-    const free = Math.max(0, scale - totalUsed)
+    // 窗口未知：不知道还剩多少，就不画空闲区（也不猜一个窗口）
+    const scale = window != null && window > 0 ? Math.max(window, totalUsed) : totalUsed
+    const free = window != null ? Math.max(0, scale - totalUsed) : 0
 
     if (totalUsed <= 0) return null
 
@@ -151,7 +150,7 @@ export function ContextMap({ parts, tokens, window, className = '' }: ContextMap
     // 缓动的理由（share^0.35）：窗口只用了 8% 时仍给已用部分约四成画面，
     // 小块才看得清；反过来，窗口快满时（如 90%）空闲区会只剩一条窄缝，
     // 「还剩多少」反而看不清——所以空闲区的宽度也按同样曲线保底。
-    const usedRatio = Math.min(1, totalUsed / scale)
+    const usedRatio = scale > 0 ? Math.min(1, totalUsed / scale) : 0
     const usedLen = usedRatio >= 1 ? 100 : Math.max(30, 100 * Math.pow(usedRatio, 0.35))
 
     // 极小的块保底面积，否则只剩一条线，看不出是什么

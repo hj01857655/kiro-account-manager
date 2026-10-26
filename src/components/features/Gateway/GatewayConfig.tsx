@@ -388,6 +388,10 @@ function GatewayConfig({
                   <Switch checked={!!config.logStreamEvents} onCheckedChange={(checked: boolean) => setField('logStreamEvents', checked)} />
                 </div>
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                  <Label className="text-sm" title={t('gateway.conversationsHint')}>{t('gateway.conversationsToggle')}</Label>
+                  <Switch checked={!!config.gatewayConversations} onCheckedChange={(checked: boolean) => setField('gatewayConversations', checked)} />
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
                   <Label className="text-sm" title={t('gateway.privacyMaskHint')}>{t('gateway.privacyMaskToggle')}</Label>
                   <div className="flex items-center gap-1.5">
                     <Button

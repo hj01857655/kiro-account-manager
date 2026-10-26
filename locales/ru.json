@@ -2060,7 +2060,7 @@
   "gatewayContext.tags": "Метки",
   "gatewayContext.empty": "Данных о составе prompt пока нет (накапливаются с новыми журналами)",
   "gatewayContext.hintSessions": "Сессий с инструментами: {{count}}; сжатий всего: {{compacts}}.",
-  "gatewayContext.hintFull": "Учитываются только сессии с определениями инструментов (шум вроде генерации заголовков исключён); доля кэша — только по запросам, где провайдер вернул usage; база = медиана system+tools+memory, рост = медиана положительных приращений.",
+  "gatewayContext.hintFull": "Учитываются только сессии с определениями инструментов (шум вроде генерации заголовков исключён); доля кэша — только по запросам, где провайдер вернул usage; база = медиана system+tools+memory, рост = медиана положительных приращений. Окно определяется по имени модели; если это не удалось, оценка и метки, зависящие от окна, не выставляются.",
   "gatewayContext.mapTitle": "Состав контекста",
   "gatewayContext.mapFree": "Свободно",
   "gatewayContext.mapEmpty": "Для этой сессии пока нет данных о составе prompt",
@@ -2070,5 +2070,13 @@
   "gatewayContext.part.memory": "Память/инструкции",
   "gatewayContext.part.files": "Файлы",
   "gatewayContext.part.results": "Результаты инструментов",
-  "gatewayContext.part.chat": "Переписка"
+  "gatewayContext.part.chat": "Переписка",
+  "gateway.conversationsToggle": "Запись диалогов",
+  "gateway.conversationsHint": "Сохранять части ввода/вывода каждого хода для воспроизведения на странице использования; тексты сначала проходят маскирование, хранение 7 дней, лимит 256МБ",
+  "gatewayReplay.title": "Воспроизведение диалогов",
+  "gatewayReplay.clear": "Очистить записи",
+  "gatewayReplay.turns": "ходов",
+  "gatewayReplay.loading": "Загрузка…",
+  "gatewayReplay.empty": "Нет ходов для воспроизведения",
+  "gatewayReplay.truncated": "усечено"
 }

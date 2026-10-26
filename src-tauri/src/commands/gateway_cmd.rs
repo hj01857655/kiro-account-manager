@@ -4,6 +4,9 @@ use tauri::{AppHandle, State};
 use crate::core::account::Account;
 use crate::gateway::{
     clear_gateway_request_logs as clear_gateway_request_logs_inner,
+    clear_gateway_conversations as clear_gateway_conversations_inner,
+    get_gateway_conversation_sessions as get_gateway_conversation_sessions_inner,
+    get_gateway_conversation_turns as get_gateway_conversation_turns_inner,
     get_gateway_config as get_gateway_config_inner,
     get_gateway_client_stats as get_gateway_client_stats_inner,
     get_gateway_endpoint_stats as get_gateway_endpoint_stats_inner,
@@ -86,6 +89,24 @@ pub async fn get_gateway_request_log_history(
 #[tauri::command]
 pub async fn get_gateway_quota(state: State<'_, AppState>) -> Result<Vec<crate::gateway::GatewayQuotaEntry>, String> {
     get_gateway_quota_inner(&state).await
+}
+
+#[tauri::command]
+pub async fn get_gateway_conversation_sessions(
+) -> Result<Vec<crate::gateway::conversations::ConvSessionSummary>, String> {
+    get_gateway_conversation_sessions_inner().await
+}
+
+#[tauri::command]
+pub async fn get_gateway_conversation_turns(
+    dir: String,
+) -> Result<Vec<crate::gateway::conversations::ConversationTurn>, String> {
+    get_gateway_conversation_turns_inner(dir).await
+}
+
+#[tauri::command]
+pub async fn clear_gateway_conversations(state: State<'_, AppState>) -> Result<(), String> {
+    clear_gateway_conversations_inner(&state).await
 }
 
 #[tauri::command]

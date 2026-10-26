@@ -1,8 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { MessagesSquare, RefreshCw, Coins, Zap } from 'lucide-react'
+import { MessagesSquare, RefreshCw, Coins, Zap, History, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useApp } from '../../../hooks/useApp'
-import { getGatewayRequestLogHistory } from '../../../api/gatewayApi'
+import {
+  getGatewayRequestLogHistory,
+  getGatewayConversationSessions,
+  getGatewayConversationTurns,
+  clearGatewayConversations,
+  type ConvSessionSummary,
+  type ConvTurn,
+} from '../../../api/gatewayApi'
 
 interface SessionLogRow {
   occurredAt: string
@@ -96,6 +103,56 @@ export function SessionsPanel() {
     return Array.from(map.values()).sort((a, b) => b.credits - a.credits || b.requests - a.requests)
   }, [rows])
 
+  // ===== 对话回放（捕获开关开启后才有数据）=====
+  const [captures, setCaptures] = useState<ConvSessionSummary[]>([])
+  const [expandedDir, setExpandedDir] = useState<string | null>(null)
+  const [turns, setTurns] = useState<ConvTurn[]>([])
+  const [loadingTurns, setLoadingTurns] = useState(false)
+
+  const loadCaptures = useCallback(async () => {
+    try {
+      setCaptures(await getGatewayConversationSessions<ConvSessionSummary[]>())
+    } catch {
+      // 捕获未开启/无数据时静默为空
+      setCaptures([])
+    }
+  }, [])
+
+  useEffect(() => {
+    loadCaptures()
+  }, [loadCaptures])
+
+  const toggleTurns = useCallback(async (dir: string) => {
+    if (expandedDir === dir) {
+      setExpandedDir(null)
+      return
+    }
+    setExpandedDir(dir)
+    setLoadingTurns(true)
+    try {
+      setTurns(await getGatewayConversationTurns<ConvTurn[]>(dir))
+    } catch {
+      setTurns([])
+    } finally {
+      setLoadingTurns(false)
+    }
+  }, [expandedDir])
+
+  const handleClear = useCallback(async () => {
+    await clearGatewayConversations()
+    setCaptures([])
+    setExpandedDir(null)
+    setTurns([])
+  }, [])
+
+  const partStyle = (role: string, kind: string): string => {
+    if (role === 'system') return 'border-l-2 border-amber-500/60 bg-amber-500/5'
+    if (kind === 'tool_use') return 'border-l-2 border-blue-500/60 bg-blue-500/5'
+    if (kind === 'tool_result') return 'border-l-2 border-purple-500/60 bg-purple-500/5'
+    if (role === 'assistant') return 'border-l-2 border-green-500/60 bg-green-500/5'
+    return 'border-l-2 border-border bg-muted/30'
+  }
+
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-auto">
       <div className="flex items-center justify-between">
@@ -164,6 +221,78 @@ export function SessionsPanel() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {captures.length > 0 && (
+        <div className="border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <History className="h-4 w-4 text-muted-foreground" />
+              {t('gatewayReplay.title')}
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleClear} className="h-7 text-xs text-muted-foreground">
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              {t('gatewayReplay.clear')}
+            </Button>
+          </div>
+          <div className="divide-y">
+            {captures.map((c) => (
+              <div key={c.dir}>
+                <button
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/40 text-left"
+                  onClick={() => toggleTurns(c.dir)}
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    {expandedDir === c.dir ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="font-mono text-xs truncate">{c.dir}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 ml-3 tabular-nums">
+                    {c.turns} {t('gatewayReplay.turns')} · {c.last}
+                  </span>
+                </button>
+                {expandedDir === c.dir && (
+                  <div className="px-3 pb-3 flex flex-col gap-3 max-h-[420px] overflow-auto">
+                    {loadingTurns && (
+                      <div className="text-xs text-muted-foreground py-2">{t('gatewayReplay.loading')}</div>
+                    )}
+                    {!loadingTurns && turns.length === 0 && (
+                      <div className="text-xs text-muted-foreground py-2">{t('gatewayReplay.empty')}</div>
+                    )}
+                    {turns.map((turn, ti) => (
+                      <div key={turn.requestId} className="border rounded-md p-2.5">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <span className="font-medium text-foreground">#{ti + 1}</span>
+                          <span>{turn.occurredAt}</span>
+                          {turn.model && <span>{turn.model}</span>}
+                          <span className={turn.statusCode >= 400 ? 'text-red-500' : ''}>{turn.statusCode}</span>
+                          {turn.cut && <span className="text-amber-500">{t('gatewayReplay.truncated')}</span>}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          {[...turn.input, ...turn.output].map((p, pi) => (
+                            <div key={pi} className={`rounded px-2 py-1.5 text-xs whitespace-pre-wrap break-all ${partStyle(p.role, p.kind)}`}>
+                              <span className="font-mono text-[10px] text-muted-foreground mr-1.5">
+                                {p.role}/{p.kind}
+                                {p.name ? `:${p.name}` : ''}
+                              </span>
+                              {p.text}
+                              {p.cut > 0 && (
+                                <span className="text-muted-foreground ml-1">…(+{p.cut})</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -53,6 +53,8 @@ export interface GatewayConfig {
   otlpEndpoint: string;
   /** OTLP 附加头（JSON 对象序列化字符串） */
   otlpHeaders: string;
+  /** 对话捕获（opt-in）：每轮对话分片落盘供会话页回放 */
+  gatewayConversations: boolean;
 }
 
 export interface PromptFilterRule {
@@ -153,7 +155,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   upstreamProxy: '',
   maxToolDescriptionLength: 10237,
   otlpEndpoint: '',
-  otlpHeaders: ''
+  otlpHeaders: '',
+  gatewayConversations: false
 }
 
 export const DEFAULT_GATEWAY_STATUS: GatewayStatus = {
@@ -187,6 +190,7 @@ export const buildGatewayConfigSnapshot = (config: GatewayConfig) => JSON.string
   maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0,
   otlpEndpoint: config.otlpEndpoint || '',
   otlpHeaders: config.otlpHeaders || '',
+  gatewayConversations: config.gatewayConversations === true,
   // 遮蔽相关字段必须进快照：快照是「未保存变更」的判定依据
   //（configSnapshot !== savedConfigSnapshot），漏掉它们会让这些开关
   // 改了却永远触发不了自动保存。
@@ -255,7 +259,8 @@ export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
   upstreamProxy: typeof gatewayConfig?.upstreamProxy === 'string' ? gatewayConfig.upstreamProxy : '',
   maxToolDescriptionLength: gatewayConfig?.maxToolDescriptionLength ?? 10237,
   otlpEndpoint: typeof gatewayConfig?.otlpEndpoint === 'string' ? gatewayConfig.otlpEndpoint : '',
-  otlpHeaders: typeof gatewayConfig?.otlpHeaders === 'string' ? gatewayConfig.otlpHeaders : ''
+  otlpHeaders: typeof gatewayConfig?.otlpHeaders === 'string' ? gatewayConfig.otlpHeaders : '',
+  gatewayConversations: gatewayConfig?.gatewayConversations === true
 })
 
 export const buildGatewayStatusState = (gatewayStatus: any, gatewayConfig: any, fallbackConfig: GatewayConfig = DEFAULT_GATEWAY_CONFIG): GatewayStatus => ({
@@ -302,7 +307,8 @@ export const buildGatewayPayload = (config: GatewayConfig) => ({
   maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0,
   // OTLP：空串归一为 null（关闭），保存时随载荷回写，不再被默认值冲掉
   otlpEndpoint: config.otlpEndpoint?.trim() ? config.otlpEndpoint.trim() : null,
-  otlpHeaders: config.otlpHeaders?.trim() ? config.otlpHeaders.trim() : null
+  otlpHeaders: config.otlpHeaders?.trim() ? config.otlpHeaders.trim() : null,
+  gatewayConversations: config.gatewayConversations === true
 })
 
 export const loadGatewayPageData = async () => {

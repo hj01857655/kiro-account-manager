@@ -1,5 +1,6 @@
 mod compress;
 pub mod agent_detect;
+pub mod conversations;
 pub mod field_support;
 mod converter;
 mod eventstream;
@@ -169,6 +170,10 @@ pub struct GatewayConfig {
     /// 平时关闭省磁盘。关闭不影响请求日志主条目。
     #[serde(default)]
     pub log_stream_events: bool,
+    /// 对话捕获（opt-in）：把每轮对话的输入/输出分片落盘供会话页回放。
+    /// 文本先过遮蔽引擎占位符化；保留 7 天 + 全库 256MB 上限。
+    #[serde(default)]
+    pub gateway_conversations: bool,
     /// OTLP 导出：请求日志转 OpenTelemetry 指标推送到外部观测栈（OTLP/HTTP JSON）。
     /// 空 = 关闭。显式开启才外发，且只发元数据（模型/账号/会话/tokens/credits），
     /// 不含 prompt 与响应内容。
@@ -376,6 +381,8 @@ pub struct GatewayRuntime {
     pub mask_engine: Arc<AsyncMutex<masking::MaskEngine>>,
     /// 遮蔽审计记录（内存环形缓冲，只存元数据不留真值）。
     pub mask_audit: Arc<masking::MaskAuditLog>,
+    /// 对话捕获 generation：清空时自增，在途捕获写入前校验，防已删数据复活
+    pub conv_generation: Arc<AtomicU64>,
     shutdown_tx: Option<oneshot::Sender<()>>,
     server_task: Option<JoinHandle<()>>,
 }
@@ -412,6 +419,8 @@ struct RouterState {
     mask_engine: Arc<AsyncMutex<masking::MaskEngine>>,
     /// 遮蔽审计记录（内存环形缓冲，只存元数据不留真值）。
     mask_audit: Arc<masking::MaskAuditLog>,
+    /// 对话捕获 generation：清空时自增，在途捕获写入前校验（与 GatewayRuntime 共享同一 Arc）
+    conv_generation: Arc<AtomicU64>,
     /// 账号状态的唯一共享副本（= `AppState.store`）。
     ///
     /// gateway 不得自行 `AccountStore::new()`：那会得到与 Tauri 命令
@@ -520,6 +529,7 @@ impl Default for GatewayConfig {
             tool_search_enabled: true,
             session_affinity: false,
             log_stream_events: false,
+            gateway_conversations: false,
             otlp_endpoint: None,
             otlp_headers: None,
             privacy_mask_enabled: false,
@@ -953,6 +963,39 @@ pub async fn get_gateway_request_log_history(
 ) -> Result<Vec<GatewayRequestLogEntry>, String> {
     let path = request_log_path()?;
     get_gateway_request_logs_from_path(&path, limit)
+}
+
+/// 对话捕获：列出有捕获记录的会话摘要。
+pub async fn get_gateway_conversation_sessions(
+) -> Result<Vec<conversations::ConvSessionSummary>, String> {
+    conversations::list_sessions(&conversations::store_root())
+}
+
+/// 对话捕获：按会话目录名读取全部轮次（时间正序）。
+pub async fn get_gateway_conversation_turns(
+    dir: String,
+) -> Result<Vec<conversations::ConversationTurn>, String> {
+    // 目录名是 sha256 前 16 位 hex，白名单校验防路径穿越
+    if dir.len() != 16 || !dir.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("非法会话目录名".to_string());
+    }
+    conversations::load_turns_by_dir(&conversations::store_root(), &dir)
+}
+
+/// 对话捕获：清空全部记录并自增 generation（在途捕获随之作废）。
+pub async fn clear_gateway_conversations(
+    state: &tauri::State<'_, crate::state::AppState>,
+) -> Result<(), String> {
+    conversations::clear(&conversations::store_root())?;
+    let guard = state
+        .gateway
+        .lock()
+        .map_err(|_| "获取 gateway 状态失败".to_string())?;
+    if let Some(rt) = guard.as_ref() {
+        rt.conv_generation
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    Ok(())
 }
 
 /// 额度页单账号条目：上游配额快照 + 本地聚合的消耗量。
@@ -1512,6 +1555,11 @@ async fn spawn_runtime(
         cache_dir,
     )));
 
+    // 对话捕获：启动时清一次过期目录与超限体积；generation 由 RouterState
+    // 与 GatewayRuntime 共享同一 Arc，清空命令自增后两边同时失效
+    let _ = conversations::prune(&conversations::store_root());
+    let conv_generation = Arc::new(AtomicU64::new(1));
+
     let state = RouterState {
         config: config.clone(),
         request_count: request_count.clone(),
@@ -1524,6 +1572,7 @@ async fn spawn_runtime(
         response_cache: response_cache.clone(),
         mask_engine: mask_engine.clone(),
         mask_audit: mask_audit.clone(),
+        conv_generation: conv_generation.clone(),
         store,
     };
 
@@ -1557,6 +1606,9 @@ async fn spawn_runtime(
     // 会话缓存独立清理周期：不能只在插入时清，否则闲置期间内存不释放
     crate::gateway::proxy::spawn_responses_session_cleanup(session_cleanup_store);
 
+    // 对话捕获：启动时清一次过期目录与超限体积
+    let _ = conversations::prune(&conversations::store_root());
+
     Ok(GatewayRuntime {
         config,
         request_count,
@@ -1566,6 +1618,7 @@ async fn spawn_runtime(
         load_balancer,
         mask_engine,
         mask_audit,
+        conv_generation,
         shutdown_tx: Some(shutdown_tx),
         server_task: Some(server_task),
     })

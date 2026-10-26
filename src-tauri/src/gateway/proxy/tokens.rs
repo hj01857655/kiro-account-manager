@@ -358,47 +358,13 @@ pub fn estimate_generic_tokens(text: &str) -> usize {
 
 /// 获取模型的最大输入 token 数
 ///
-/// 根据模型 ID 返回对应的 maxInputTokens
-///
-/// 数据来源：
-/// - Kiro 官方文档：https://kiro.dev/docs/models/
-/// - Claude Opus 5/4.8/4.7/4.6、Sonnet 4.6/5：1M tokens
-/// - GPT-5.6 系列：1M tokens（2026-09-14 起由 272K 升级，≤272K 与 >272K 两档计费）
-/// - 其他 Claude 4.x：200k tokens
+/// 上下文窗口的唯一事实来源是 `prompt_info::context_window_for_model`
+/// （Kiro 官方文档 https://kiro.dev/docs/models/）；本函数只是它的
+/// 包装，认不出的模型回退到 200k（与旧行为一致）。
 #[allow(dead_code)]
 pub async fn get_model_max_input_tokens(model_id: &str) -> usize {
-    let model_lower = model_id.to_lowercase();
-
-    // 根据模型 ID 返回对应的 token 限制
-    if model_lower == "auto" {
-        1_000_000 // auto 模型支持 1M tokens
-    } else if model_lower.contains("opus-5") {
-        1_000_000 // Claude Opus 5: 1M tokens
-    } else if model_lower.contains("opus-4.8") || model_lower.contains("opus-4-8") {
-        1_000_000 // Claude Opus 4.8: 1M tokens
-    } else if model_lower.contains("opus-4.7") || model_lower.contains("opus-4-7") {
-        1_000_000 // Claude Opus 4.7: 1M tokens
-    } else if model_lower.contains("opus-4.6") || model_lower.contains("opus-4-6") {
-        1_000_000 // Claude Opus 4.6: 1M tokens
-    } else if model_lower.contains("sonnet-4.6") || model_lower.contains("sonnet-4-6") {
-        1_000_000 // Claude Sonnet 4.6: 1M tokens
-    } else if model_lower.contains("sonnet-5") {
-        1_000_000 // Claude Sonnet 5: 1M tokens
-    } else if model_lower.contains("gpt-5.6") || model_lower.contains("gpt-5-6") {
-        1_000_000 // GPT-5.6 Sol/Terra/Luna: 1M tokens（2026-09-14 起，原 272K）
-    } else if model_lower.contains("qwen") {
-        256_000 // Qwen3 Coder Next: 256k tokens
-    } else if model_lower.contains("llama") || model_lower.contains("deepseek") {
-        128_000 // Llama/DeepSeek: 128k tokens
-    } else {
-        // Claude 4.5/4.0、OpenAI、MiniMax、GLM 等其他模型默认 200k tokens
-        // 包括：
-        // - claude-opus-4.5, claude-sonnet-4.5/4.0, claude-haiku-4.5/4.6/4.7
-        // - gpt-4, gpt-4-turbo, o1, o3
-        // - minimax-m2.5, minimax-m2.1
-        // - glm-5
-        200_000
-    }
+    crate::gateway::prompt_info::context_window_for_model(model_id)
+        .unwrap_or(200_000) as usize
 }
 
 /// 智能裁剪 Kiro payload 历史记录

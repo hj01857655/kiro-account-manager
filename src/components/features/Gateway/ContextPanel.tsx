@@ -9,8 +9,8 @@ import { getGatewayRequestLogHistory } from '../../../api/gatewayApi'
 import { ContextMap } from './ContextMap'
 
 interface PromptPartRow { kind: string; tokens: number }
-interface PromptRow { tokens: number; counted: boolean; parts?: PromptPartRow[] }
-interface ContextLogRow {
+export interface PromptRow { tokens: number; counted: boolean; parts?: PromptPartRow[]; window?: number | null }
+export interface ContextLogRow {
   occurredAt: string
   sessionId?: string | null
   statusCode: number
@@ -36,8 +36,8 @@ interface SessionStat {
   latestParts: PromptPartRow[]
   /** 最新一次请求的 prompt 总 tokens */
   latestTokens: number
-  /** 窗口大小（tokens，中位数推断） */
-  window: number
+  /** 上下文窗口（tokens）；未知时为 null（不猜） */
+  window: number | null
 }
 
 const partSum = (row: ContextLogRow, kinds: string[]): number =>
@@ -50,36 +50,56 @@ function median(values: number[]): number {
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2)
 }
 
-/** 窗口大小推断：优先用上游 contextUsagePercentage 反推，缺省 200k。 */
-function inferWindow(row: ContextLogRow, tokens: number): number {
+/**
+ * 窗口大小推断，优先级：
+ * 1. 后端按模型名给的真实窗口（prompt.window）——最准；
+ * 2. 用上游 contextUsagePercentage 反推；
+ * 3. 都没有 → null（**不猜**）。
+ *
+ * 为什么不猜 200k：窗口猜错会让空闲区宽度与基线占比整体失真，
+ * 而「未知」是诚实的——前端据此不画空闲区，评分里与窗口相关的项
+ * 退化为不扣分。
+ */
+export function inferWindow(row: ContextLogRow, tokens: number): number | null {
+  const known = row.prompt?.window
+  if (typeof known === 'number' && known > 0) return known
   const pct = row.contextUsagePercentage
   if (pct && pct > 0 && tokens > 0) return Math.round((tokens / pct) * 100)
-  return 200_000
+  return null
 }
 
-/** 100 分制：缓存 35 / 起点 25 / 增速 20 / 可靠 20。 */
-function computeScore(cacheRate: number | null, baseline: number, growth: number, errorRate: number, window: number): number {
+/**
+ * 100 分制：缓存 35 / 起点 25 / 增速 20 / 可靠 20。
+ *
+ * 窗口未知（null）时，与窗口相关的两项（起点/增速）不计分——
+ * 宁可少给分，也不拿猜的窗口扣分。
+ */
+function computeScore(cacheRate: number | null, baseline: number, growth: number, errorRate: number, window: number | null): number {
   const cache = cacheRate == null ? 0 : Math.min(35, (cacheRate / 0.9) * 35)
+  const reliable = Math.max(0, 20 - errorRate * 100)
+  if (window == null) return Math.round(cache + reliable)
   const baseRatio = baseline / window
   const lean = Math.max(0, 25 - (baseRatio - 0.05) * (25 / 0.25))
   const growthRatio = growth / window
   const pace = Math.max(0, 20 - (growthRatio - 0.01) * (20 / 0.05))
-  const reliable = Math.max(0, 20 - errorRate * 100)
   return Math.round(cache + lean + pace + reliable)
 }
 
 function computeTags(s: {
-  cacheRate: number | null; baseline: number; growth: number; window: number
+  cacheRate: number | null; baseline: number; growth: number; window: number | null
   errorRate: number; compacts: number; peakFill: number | null
   share: Record<string, number>
 }): string[] {
   const tags: string[] = []
   if (s.cacheRate != null && s.cacheRate >= 0.8) tags.push('cache-friendly')
   if (s.cacheRate != null && s.cacheRate < 0.5) tags.push('cache-misses')
-  if (s.baseline / s.window <= 0.05) tags.push('lean')
-  if (s.baseline / s.window > 0.3) tags.push('heavy-start')
-  if (s.growth / s.window > 0.06) tags.push('fills-fast')
-  if (s.growth / s.window <= 0.01) tags.push('steady')
+  // 与窗口相关的标签只在窗口已知时下结论
+  if (s.window != null) {
+    if (s.baseline / s.window <= 0.05) tags.push('lean')
+    if (s.baseline / s.window > 0.3) tags.push('heavy-start')
+    if (s.growth / s.window > 0.06) tags.push('fills-fast')
+    if (s.growth / s.window <= 0.01) tags.push('steady')
+  }
   if (s.compacts > 0) tags.push('compacts')
   if (s.peakFill != null && s.peakFill >= 0.85) tags.push('near-full')
   if ((s.share.results ?? 0) >= 0.3) tags.push('tool-heavy')
@@ -173,7 +193,12 @@ export function ContextPanel() {
         .map((r) => (r.contextUsagePercentage ?? 0) / 100)
         .filter((v) => v > 0)
       const peakFill = fills.length > 0 ? Math.max(...fills) : null
-      const window = median(ordered.map((r) => inferWindow(r, r.prompt!.tokens)))
+      // 窗口：取已知值的中位数（同一会话可能混用不同模型，窗口不同）；
+      // 一个都不知道时为 null
+      const knownWindows = ordered
+        .map((r) => inferWindow(r, r.prompt!.tokens))
+        .filter((w): w is number => w != null)
+      const window = knownWindows.length > 0 ? median(knownWindows) : null
       const score = computeScore(cacheRate, baseline, growth, errorRate, window)
       const tags = computeTags({ cacheRate, baseline, growth, window, errorRate, compacts, peakFill, share })
       out.push({
@@ -261,7 +286,8 @@ export function ContextPanel() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">{t('gatewayContext.mapTitle')}</span>
               <span className="font-mono text-xs text-muted-foreground max-w-[50%] truncate" title={selectedSession.id}>
-                {fmtK(selectedSession.latestTokens)} / {fmtK(selectedSession.window)}
+                {fmtK(selectedSession.latestTokens)}
+                {selectedSession.window != null && ` / ${fmtK(selectedSession.window)}`}
               </span>
             </div>
             <ContextMap

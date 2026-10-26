@@ -381,6 +381,59 @@ pub fn write_request_log(
             });
         }
     }
+
+    // 对话捕获（opt-in）：输入/输出分片过遮蔽占位符化后落盘，供会话页回放
+    if state.config.gateway_conversations {
+        let request_body = context.request_body.map(str::to_string);
+        let response_body = _response_body.map(str::to_string);
+        if request_body.is_some() || response_body.is_some() {
+            let mask_engine = state.mask_engine.clone();
+            let generation = state.conv_generation.clone();
+            let turn = crate::gateway::conversations::ConversationTurn {
+                occurred_at: entry.occurred_at.clone(),
+                request_id: entry.request_id.clone(),
+                session_id: entry.session_id.clone().unwrap_or_else(|| "unknown".into()),
+                agent: entry.agent.clone(),
+                model: entry.model.clone(),
+                status_code: entry.status_code,
+                input: Vec::new(),
+                output: Vec::new(),
+                cut: false,
+            };
+            tokio::spawn(async move {
+                // 真值不入盘：先过遮蔽引擎占位符化（同一值同一占位符，回放不失真）。
+                // mask_text 需要 &mut（映射表插入），持锁时间短，与请求路径同法同步调用。
+                let mut turn = turn;
+                {
+                    let mut engine = mask_engine.lock().await;
+                    if let Some(ref body) = request_body {
+                        let masked = engine.mask_text(body).text;
+                        if let Some((mut input, mut cut)) = crate::gateway::conversations::parse_input(&masked) {
+                            turn.input = std::mem::take(&mut input);
+                            turn.cut |= cut;
+                        }
+                    }
+                    if let Some(ref body) = response_body {
+                        let masked = engine.mask_text(body).text;
+                        let (mut output, mut cut) = crate::gateway::conversations::parse_output(Some(&masked));
+                        turn.output = std::mem::take(&mut output);
+                        turn.cut |= cut;
+                    }
+                }
+                let expected = generation.load(std::sync::atomic::Ordering::SeqCst);
+                match crate::gateway::conversations::save_turn(
+                    &crate::gateway::conversations::store_root(),
+                    &turn,
+                    expected,
+                    &generation,
+                ) {
+                    Ok(true) => {}
+                    Ok(false) => log::debug!("[对话捕获] generation 已变更，本轮丢弃"),
+                    Err(e) => log::debug!("[对话捕获] 写入失败: {e}"),
+                }
+            });
+        }
+    }
 }
 
 pub fn build_gateway_error_body(

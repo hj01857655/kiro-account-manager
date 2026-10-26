@@ -110,6 +110,7 @@ fn gateway_runtime_test_state() -> RouterState {
         ))),
         mask_engine: Arc::new(AsyncMutex::new(masking::MaskEngine::new())),
         mask_audit: Arc::new(masking::MaskAuditLog::new(10)),
+        conv_generation: Arc::new(AtomicU64::new(0)),
         store: test_shared_store(),
     }
 }
@@ -146,6 +147,7 @@ fn test_router_state() -> RouterState {
         ))),
         mask_engine: Arc::new(AsyncMutex::new(masking::MaskEngine::new())),
         mask_audit: Arc::new(masking::MaskAuditLog::new(10)),
+        conv_generation: Arc::new(AtomicU64::new(0)),
         store: test_shared_store(),
     }
 }

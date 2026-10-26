@@ -333,7 +333,7 @@ fn add_kiro_upstream_headers_does_not_add_redirect_for_enterprise_or_builderid()
 /// task-local 回替，映射表同源）。嵌套数组/对象/纯文本三种形态都要回替。
 #[tokio::test]
 async fn unmask_response_value_round_trips_masked_payload() {
-    use crate::gateway::masking::{MaskEngine, MaskNeverMask};
+    use crate::gateway::masking::MaskEngine;
 
     let mut engine = MaskEngine::new();
     // 格式合法的假 key（sk- 前缀 + 32 位），请求侧先遮蔽

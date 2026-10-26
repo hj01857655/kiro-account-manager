@@ -100,12 +100,17 @@ fn regex(pattern: &str) -> Regex {
 /// （未实现，预留 Custom 规则由用户自行补充）。
 pub fn builtin_rules() -> Vec<MaskRule> {
     vec![
-        // 各类 API Key：sk-xxx（48+）、AKIA（AWS access key）、ghp_（GitHub）
+        // 各类 API Key：sk-xxx（20+）、sk_xxx（20+）、AKIA（AWS access key）、
+        // ghp_（GitHub）、xoxb-（Slack）
+        //
+        // `sk_` 与 `sk-` 两种分隔符都要收：OpenAI 等厂商两种都用过。
+        // 此前只认 `sk-`，导致 `sk_` 形式的密钥在对话回放页明文显示
+        // （实测：`sk_` + 32 位混合字符整串落盘）。
         MaskRule {
             kind: SecretKind::ApiKey,
             name: "api-key".to_string(),
             pattern: regex(
-                r"\b(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{10,})\b",
+                r"\b(sk[-_][A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{10,})\b",
             ),
             action: MaskAction::Mask,
         },
@@ -1476,8 +1481,30 @@ mod shape_tests {
         assert!(!out.items[0].shaped);
     }
 
-    /// 短密钥降级：太短、随机位不足的密钥仍走占位符。
+    /// `sk_` 与 `sk-` 两种分隔符都要遮蔽。
     ///
+    /// 实测发现 `sk_` + 32 位混合字符的密钥没被命中，在对话回放页明文显示。
+    #[test]
+    fn masks_underscore_separated_api_keys() {
+        let mut engine = MaskEngine::new();
+        let real = ["sk_", "w3axCByTQgK1PxqPhfKTrJOLBqz6sbZv"].concat();
+        let out = engine.mask_text(&format!("key is {real} end"));
+        assert!(!out.text.contains(&real), "sk_ 形式的密钥不应明文残留: {}", out.text);
+        assert!(out.text.contains("{{API_KEY_"), "应被占位符化: {}", out.text);
+    }
+
+    /// 补 `sk_` 规则后不能误伤：普通含 sk_ 的词不该被当密钥。
+    #[test]
+    fn underscore_rule_does_not_catch_ordinary_words() {
+        let mut engine = MaskEngine::new();
+        // 短于阈值：不是密钥形态
+        for text in ["sk_test", "sk_abcdef", "sk_short"] {
+            let out = engine.mask_text(text);
+            assert_eq!(out.text, text, "不该遮蔽普通词: {text}");
+        }
+    }
+
+    /// 短密钥降级：太短、随机位不足的密钥仍走占位符。
     /// 降级理由：短密钥的可造空间太小，假串极易与真值撞车；且
     /// `sk_abcdefg` 被换成假串后，人眼看不出是遮蔽过的，
     /// 反而像「设置没生效」。

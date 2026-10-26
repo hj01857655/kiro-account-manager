@@ -340,6 +340,7 @@ mod tests {
                     kind: "chat".to_string(),
                     tokens: 100,
                 }],
+                window: None,
             }),
             model: Some(model.to_string()),
             stream: false,

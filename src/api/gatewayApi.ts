@@ -41,6 +41,8 @@ export interface GatewayConfigPayload {
   upstreamProxy: string | null
   /** 工具描述最大长度；0 = 不截断 */
   maxToolDescriptionLength: number
+  /** 对话捕获（opt-in）：每轮对话分片落盘供会话页回放；文本过遮蔽占位符化 */
+  gatewayConversations: boolean
   /** OTLP 导出 endpoint（OTLP/HTTP JSON）；空 = 关闭。缺省可省，保存时不会冲掉已配置值 */
   otlpEndpoint?: string | null
   /** OTLP 请求附加头，JSON 对象序列化字符串 */
@@ -215,4 +217,45 @@ export function getGatewayRequestLogHistory<T = any[]>(limit = 20000) {
 /** 额度页：网关作用域内每个账号的上游配额 + 本地 credits 消耗聚合 */
 export function getGatewayQuota<T = unknown[]>() {
   return invoke<T>('get_gateway_quota')
+}
+
+/** 对话捕获：有捕获记录的会话摘要（目录名/轮次数/最近活动） */
+export interface ConvSessionSummary {
+  dir: string
+  turns: number
+  last: string
+}
+
+/** 对话捕获：单条分片 */
+export interface ConvTurnPart {
+  role: string
+  kind: string
+  name?: string | null
+  text: string
+  cut: number
+}
+
+/** 对话捕获：一轮对话 */
+export interface ConvTurn {
+  occurredAt: string
+  requestId: string
+  sessionId: string
+  agent?: string | null
+  model?: string | null
+  statusCode: number
+  input: ConvTurnPart[]
+  output: ConvTurnPart[]
+  cut: boolean
+}
+
+export function getGatewayConversationSessions<T = ConvSessionSummary[]>() {
+  return invoke<T>('get_gateway_conversation_sessions')
+}
+
+export function getGatewayConversationTurns<T = ConvTurn[]>(dir: string) {
+  return invoke<T>('get_gateway_conversation_turns', { dir })
+}
+
+export function clearGatewayConversations() {
+  return invoke('clear_gateway_conversations')
 }

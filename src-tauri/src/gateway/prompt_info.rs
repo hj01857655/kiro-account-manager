@@ -9,6 +9,9 @@
 //! - files：图片块（内容不计，按固定值）
 //! - results：tool_result 块
 //! - chat：其余文本（对话与模型输出历史）
+//!
+//! window：模型的上下文窗口（tokens）。前端据此算空闲区与基线占比，
+//! 拿不到模型名时为 None（不猜）。
 
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +32,10 @@ pub struct PromptInfo {
     /// 上游是否报了 usage（true = parts 已按计费 tokens 校准）
     pub counted: bool,
     pub parts: Vec<PromptPart>,
+    /// 模型的上下文窗口（tokens）。模型名认不出时为 None——
+    /// 前端此时不画空闲区，也不拿它算基线占比（宁缺勿猜）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<i64>,
 }
 
 /// 估算 tokens：ASCII 约 4 字符/token，CJK（>0x2E80）约 1 字符/token。
@@ -121,6 +128,48 @@ impl PromptPartsRaw {
     }
 }
 
+/// 模型上下文窗口（tokens）：按模型名推。
+///
+/// 数据来源与 `proxy::tokens::get_model_max_input_tokens` 同源
+/// （Kiro 官方文档 https://kiro.dev/docs/models/）——但**唯一事实来源
+/// 在这里**：proxy 侧改为复用本函数，避免两处维护同一张表而逐渐偏离。
+///
+/// 认不出的模型返回 None：宁可让前端知道「窗口未知」，也不要给一个
+/// 猜的数——窗口猜错会让空闲区与基线占比整体失真。
+pub fn context_window_for_model(model_id: &str) -> Option<i64> {
+    let m = model_id.trim().to_lowercase();
+    if m.is_empty() {
+        return None;
+    }
+    let window = if m == "auto" {
+        1_000_000
+    } else if m.contains("opus-5")
+        || m.contains("opus-4.8")
+        || m.contains("opus-4-8")
+        || m.contains("opus-4.7")
+        || m.contains("opus-4-7")
+        || m.contains("opus-4.6")
+        || m.contains("opus-4-6")
+        || m.contains("sonnet-4.6")
+        || m.contains("sonnet-4-6")
+        || m.contains("sonnet-5")
+        || m.contains("gpt-5.6")
+        || m.contains("gpt-5-6")
+    {
+        1_000_000
+    } else if m.contains("qwen") {
+        256_000
+    } else if m.contains("llama") || m.contains("deepseek") {
+        128_000
+    } else if m.starts_with("claude") {
+        // Claude 4.x 系列：200k
+        200_000
+    } else {
+        return None;
+    };
+    Some(window)
+}
+
 /// 从原始请求体估算 prompt 构成。body 不是合法 JSON / 结构异常时返回 None。
 pub fn estimate(body: &str) -> Option<PromptInfo> {
     let v: serde_json::Value = serde_json::from_str(body).ok()?;
@@ -159,6 +208,11 @@ pub fn estimate(body: &str) -> Option<PromptInfo> {
         tokens: raw.total(),
         counted: false,
         parts: raw.into_parts(),
+        // 窗口按请求里的模型名推；认不出就是 None，不猜
+        window: v
+            .get("model")
+            .and_then(|m| m.as_str())
+            .and_then(context_window_for_model),
     })
 }
 
@@ -249,5 +303,48 @@ mod tests {
     #[test]
     fn invalid_body_returns_none() {
         assert!(estimate("not json at all").is_none());
+    }
+
+    /// 窗口按模型名推：认得出的给真值，认不出的给 None（不猜）。
+    #[test]
+    fn window_comes_from_model_name() {
+        let body = r#"{"model": "claude-sonnet-4-5-20250929", "messages": []}"#;
+        let info = estimate(body).unwrap();
+        assert_eq!(info.window, Some(200_000), "Claude 4.x 为 200k");
+
+        let body = r#"{"model": "claude-opus-5.5-thinking", "messages": []}"#;
+        assert_eq!(estimate(body).unwrap().window, Some(1_000_000), "Opus 5 为 1M");
+
+        let body = r#"{"model": "gpt-5.6-sol", "messages": []}"#;
+        assert_eq!(estimate(body).unwrap().window, Some(1_000_000), "GPT-5.6 为 1M");
+
+        let body = r#"{"model": "qwen3-coder-next", "messages": []}"#;
+        assert_eq!(estimate(body).unwrap().window, Some(256_000), "Qwen 为 256k");
+
+        let body = r#"{"model": "deepseek-3.2", "messages": []}"#;
+        assert_eq!(estimate(body).unwrap().window, Some(128_000), "DeepSeek 为 128k");
+    }
+
+    /// 认不出的模型/没有模型：窗口为 None，不猜。
+    #[test]
+    fn unknown_model_has_no_window() {
+        let body = r#"{"model": "totally-unknown-model", "messages": []}"#;
+        assert_eq!(estimate(body).unwrap().window, None, "认不出的模型不给窗口");
+
+        let body = r#"{"messages": []}"#;
+        assert_eq!(estimate(body).unwrap().window, None, "没有模型名不给窗口");
+
+        let body = r#"{"model": "", "messages": []}"#;
+        assert_eq!(estimate(body).unwrap().window, None, "空模型名不给窗口");
+    }
+
+    /// 窗口映射自身：边界与大小写。
+    #[test]
+    fn context_window_for_model_handles_case_and_edges() {
+        assert_eq!(context_window_for_model("auto"), Some(1_000_000));
+        assert_eq!(context_window_for_model("AUTO"), Some(1_000_000));
+        assert_eq!(context_window_for_model("claude-sonnet-4.5"), Some(200_000));
+        assert_eq!(context_window_for_model("gpt-4"), None, "非 Claude 系的已知模型也不猜");
+        assert_eq!(context_window_for_model("  "), None);
     }
 }

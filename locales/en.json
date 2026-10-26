@@ -2060,7 +2060,7 @@
   "gatewayContext.tags": "Tags",
   "gatewayContext.empty": "No prompt-composition data yet (accumulates as new-version logs come in)",
   "gatewayContext.hintSessions": "{{count}} tool sessions; {{compacts}} compactions total.",
-  "gatewayContext.hintFull": "Only sessions carrying tool definitions are counted (noise like title generation is excluded); cache hit rate counts only requests the vendor reported usage for; baseline = median of system+tools+memory, growth = median of positive deltas.",
+  "gatewayContext.hintFull": "Only sessions carrying tool definitions are counted (noise like title generation is excluded); cache hit rate counts only requests the vendor reported usage for; baseline = median of system+tools+memory, growth = median of positive deltas. The window is derived from the model name; when it cannot be determined, the window-dependent score and tags are left out.",
   "gatewayContext.mapTitle": "Context composition",
   "gatewayContext.mapFree": "Free",
   "gatewayContext.mapEmpty": "No prompt-composition data for this session yet",
@@ -2070,5 +2070,13 @@
   "gatewayContext.part.memory": "Memory/instructions",
   "gatewayContext.part.files": "Files",
   "gatewayContext.part.results": "Tool results",
-  "gatewayContext.part.chat": "Conversation"
+  "gatewayContext.part.chat": "Conversation",
+  "gateway.conversationsToggle": "Conversation capture",
+  "gateway.conversationsHint": "Persist each turn's input/output parts for replay on the usage page; texts go through privacy masking placeholders first, 7-day retention, 256MB total cap",
+  "gatewayReplay.title": "Conversation replay",
+  "gatewayReplay.clear": "Clear captures",
+  "gatewayReplay.turns": "turns",
+  "gatewayReplay.loading": "Loading…",
+  "gatewayReplay.empty": "No replayable turns for this session",
+  "gatewayReplay.truncated": "truncated"
 }
