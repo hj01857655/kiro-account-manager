@@ -16,10 +16,7 @@ import GatewayConfigComponent from './GatewayConfig'
 import { GatewayStatusBar } from './GatewayStatusBar'
 import { GatewayOverview } from './GatewayOverview'
 import { MaskingPanel } from './MaskingPanel'
-import { UsagePanel } from './UsagePanel'
-import { SessionsPanel } from './SessionsPanel'
-import { BillsPanel } from './BillsPanel'
-import { QuotaPanel } from './QuotaPanel'
+import { UsageTabs } from './UsageTabs'
 import { RequestLogsDialog } from './RequestLogsDialog'
 import { ProtocolTestDialog } from './ProtocolTestDialog'
 import { GatewayConfig, GatewayStatus, type GatewayOverviewStats } from './gatewayPageState'
@@ -438,15 +435,6 @@ function GatewayPage() {
             <TabsTrigger value="usage" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
               {t('gatewayUsage.tabUsage')}
             </TabsTrigger>
-            <TabsTrigger value="quota" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
-              {t('gatewayQuota.tabQuota')}
-            </TabsTrigger>
-            <TabsTrigger value="sessions" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
-              {t('gatewaySessions.tabSessions')}
-            </TabsTrigger>
-            <TabsTrigger value="bills" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
-              {t('gatewayBills.tabBills')}
-            </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1.5 px-4 h-9 text-sm font-medium data-[active]:shadow-sm">
               {t('gateway.tabSettings')}
               {hasFieldErrors && (
@@ -487,20 +475,8 @@ function GatewayPage() {
             <MaskingPanel />
           </TabsContent>
 
-          <TabsContent value="usage" className="m-0">
-            <UsagePanel />
-          </TabsContent>
-
-          <TabsContent value="quota" className="m-0">
-            <QuotaPanel />
-          </TabsContent>
-
-          <TabsContent value="sessions" className="m-0">
-            <SessionsPanel />
-          </TabsContent>
-
-          <TabsContent value="bills" className="m-0">
-            <BillsPanel />
+          <TabsContent value="usage" className="m-0 flex-1 min-h-0">
+            <UsageTabs />
           </TabsContent>
 
           <TabsContent value="settings" className="m-0">
