@@ -2060,5 +2060,15 @@
   "gatewayContext.tags": "Tags",
   "gatewayContext.empty": "No prompt-composition data yet (accumulates as new-version logs come in)",
   "gatewayContext.hintSessions": "{{count}} tool sessions; {{compacts}} compactions total.",
-  "gatewayContext.hintFull": "Only sessions carrying tool definitions are counted (noise like title generation is excluded); cache hit rate counts only requests the vendor reported usage for; baseline = median of system+tools+memory, growth = median of positive deltas."
+  "gatewayContext.hintFull": "Only sessions carrying tool definitions are counted (noise like title generation is excluded); cache hit rate counts only requests the vendor reported usage for; baseline = median of system+tools+memory, growth = median of positive deltas.",
+  "gatewayContext.mapTitle": "Context composition",
+  "gatewayContext.mapFree": "Free",
+  "gatewayContext.mapEmpty": "No prompt-composition data for this session yet",
+  "gatewayContext.part.system": "System prompt",
+  "gatewayContext.part.tools": "Tool definitions",
+  "gatewayContext.part.skills": "Skills",
+  "gatewayContext.part.memory": "Memory/instructions",
+  "gatewayContext.part.files": "Files",
+  "gatewayContext.part.results": "Tool results",
+  "gatewayContext.part.chat": "Conversation"
 }

@@ -2060,5 +2060,15 @@
   "gatewayContext.tags": "Метки",
   "gatewayContext.empty": "Данных о составе prompt пока нет (накапливаются с новыми журналами)",
   "gatewayContext.hintSessions": "Сессий с инструментами: {{count}}; сжатий всего: {{compacts}}.",
-  "gatewayContext.hintFull": "Учитываются только сессии с определениями инструментов (шум вроде генерации заголовков исключён); доля кэша — только по запросам, где провайдер вернул usage; база = медиана system+tools+memory, рост = медиана положительных приращений."
+  "gatewayContext.hintFull": "Учитываются только сессии с определениями инструментов (шум вроде генерации заголовков исключён); доля кэша — только по запросам, где провайдер вернул usage; база = медиана system+tools+memory, рост = медиана положительных приращений.",
+  "gatewayContext.mapTitle": "Состав контекста",
+  "gatewayContext.mapFree": "Свободно",
+  "gatewayContext.mapEmpty": "Для этой сессии пока нет данных о составе prompt",
+  "gatewayContext.part.system": "Системный промпт",
+  "gatewayContext.part.tools": "Определения инструментов",
+  "gatewayContext.part.skills": "Навыки",
+  "gatewayContext.part.memory": "Память/инструкции",
+  "gatewayContext.part.files": "Файлы",
+  "gatewayContext.part.results": "Результаты инструментов",
+  "gatewayContext.part.chat": "Переписка"
 }

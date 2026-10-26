@@ -1,4 +1,5 @@
 mod compress;
+pub mod agent_detect;
 pub mod field_support;
 mod converter;
 mod eventstream;
@@ -254,6 +255,9 @@ pub struct GatewayRequestLogEntry {
     /// 客户端发来的 User-Agent
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_user_agent: Option<String>,
+    /// 来源 agent（x-agent-name 头优先，回退 UA 特征推断；识别不出为 None）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
     /// 本次请求实际使用的账号 ID（额度/账单按账号聚合的依据）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_id: Option<String>,

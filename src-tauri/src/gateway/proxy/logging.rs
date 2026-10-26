@@ -54,6 +54,8 @@ pub struct RequestLogContext<'a> {
     pub(super) request_id: String,
     /// 客户端发来的 User-Agent（区别于发给 Kiro 的上游 UA）
     pub(super) client_user_agent: Option<String>,
+    /// 来源 agent（显式头优先于 UA 推断；None 时写日志回退 UA 推断）
+    pub(super) agent: Option<String>,
     /// 会话标识：客户端 x-session-id 请求头；None 时写日志回退派生键
     pub(super) session_id: Option<String>,
     /// Prompt 构成（请求到达时按原始 body 估算；写日志时按 usage 校准）
@@ -275,6 +277,11 @@ pub fn write_request_log(
         endpoint: context.endpoint.to_string(),
         client_ip: context.client_addr.ip().to_string(),
         client_user_agent: context.client_user_agent.clone(),
+        // agent 识别：上下文已带（构建时算过）就直用，否则写日志时按 UA 兜底推断
+        agent: context
+            .agent
+            .clone()
+            .or_else(|| context.client_user_agent.as_deref().and_then(super::super::agent_detect::detect)),
         // 账号 ID 从上游凭据取（选择结果在 upstream 阶段已知）
         account_id: context.upstream.map(|u| u.account_id.clone()),
         // 会话标识：x-session-id 头优先，回退「IP|UA」派生键（同一客户端稳定分组）

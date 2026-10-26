@@ -12,6 +12,7 @@ import {
   createGatewayFieldErrors,
   formatGatewayAccountOptionLabel,
 } from './gatewayPageUtils.js'
+import { buildGatewayConfigSnapshot, DEFAULT_GATEWAY_CONFIG } from './gatewayPageState.js'
 
 /** 测试用翻译 stub：原样返回 key，插值变量以 JSON 追加，便于断言走了哪条文案。 */
 const t = (key: string, vars?: Record<string, any>) =>
@@ -140,4 +141,33 @@ test('buildGatewayBaseUrl formats plain and bracketed hosts', () => {
   assert.equal(buildGatewayConnectHost('0.0.0.0', false), 'localhost')
   assert.equal(buildGatewayBaseUrl('::1', 8765, true), 'http://[::1]:8765')
   assert.equal(buildGatewayBaseUrl('0.0.0.0', 8765, false), 'http://localhost:8765')
+})
+
+// 快照是「未保存变更」的判定依据（configSnapshot !== savedConfigSnapshot）：
+// 任何设置项若不进快照，改了它也不会触发自动保存，开关等于没接线。
+test('config snapshot tracks every masking field', () => {
+  const base = buildGatewayConfigSnapshot(DEFAULT_GATEWAY_CONFIG)
+
+  const cases: Array<[string, any, any]> = [
+    ['privacyMaskEnabled', false, true],
+    ['maskShape', false, true],
+    ['maskKindOverrides', [], [{ kind: 'email', enabled: false, action: 'block' }]],
+    ['maskCustomRules', [], [{ id: 'r1', name: 'x', pattern: 'a', action: 'mask', enabled: true }]],
+    ['maskNeverMask', [], [{ value: 'sk-x', note: 'n' }]],
+  ]
+
+  for (const [key, before, after] of cases) {
+    const changed = { ...DEFAULT_GATEWAY_CONFIG, [key]: after }
+    assert.notEqual(
+      buildGatewayConfigSnapshot(changed),
+      base,
+      '快照未跟踪 ' + key + '：改它不会触发自动保存'
+    )
+    // 改回去必须与初始一致，否则快照对同一份配置不稳定
+    assert.equal(
+      buildGatewayConfigSnapshot({ ...DEFAULT_GATEWAY_CONFIG, [key]: before }),
+      base,
+      '快照对 ' + key + ' 的取值变化不敏感'
+    )
+  }
 })

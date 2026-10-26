@@ -187,6 +187,7 @@ pub async fn proxy_handler(
                 model_hint: model_hint.clone(),
                 is_stream: None,
                 client_user_agent: None,
+                agent: crate::gateway::agent_detect::resolve(&headers, None),
                 session_id: extract_session_id(&headers),
                 prompt_parts: crate::gateway::prompt_info::estimate(&raw_request_body),
                 request_id: request_id.clone(),
@@ -251,6 +252,7 @@ pub async fn proxy_handler(
                     model_hint: model_hint.clone(),
                     is_stream: None,
                     client_user_agent: None,
+                    agent: crate::gateway::agent_detect::resolve(&headers, None),
                     session_id: extract_session_id(&headers),
                     prompt_parts: crate::gateway::prompt_info::estimate(&raw_request_body),
                     request_id: request_id.clone(),
@@ -270,6 +272,8 @@ pub async fn proxy_handler(
     };
 
     let client_user_agent = extract_client_user_agent(&headers);
+    // agent 识别要在 client_user_agent 被 move 进结构体之前算好
+    let agent = crate::gateway::agent_detect::resolve(&headers, client_user_agent.as_deref());
 
     let base_log_context = RequestLogContext {
         request_index,
@@ -285,6 +289,7 @@ pub async fn proxy_handler(
         model_hint,
         is_stream: None,
         client_user_agent,
+        agent,
         session_id: extract_session_id(&headers),
         prompt_parts: crate::gateway::prompt_info::estimate(&raw_request_body),
         request_id: request_id.clone(),
@@ -1264,6 +1269,7 @@ pub async fn proxy_handler(
             model_hint: upstream_payload_log_context.model_hint.clone(),
             is_stream: Some(true),
             client_user_agent: upstream_payload_log_context.client_user_agent.clone(),
+            agent: upstream_payload_log_context.agent.clone(),
             session_id: upstream_payload_log_context.session_id.clone(),
             prompt_parts: upstream_payload_log_context.prompt_parts.clone(),
             request_id: upstream_payload_log_context.request_id.clone(),

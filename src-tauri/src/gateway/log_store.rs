@@ -207,7 +207,8 @@ impl LogStore {
     /// 按客户端 UA 分组统计。
     ///
     /// 回答的是「谁在用这个网关」。密钥固定为 `kiro` 后 Key 不再是区分性维度，
-    /// 只按 UA 产品名分组；表里的「客户端」列即 UA。
+    /// 优先按识别出的 agent 名分组（agent_detect：显式头 > UA 特征推断），
+    /// 识别不出再退回 UA 产品名，最后归入「未知」。
     pub async fn get_client_stats(&self) -> Vec<ClientStat> {
         let inner = self.inner.read().await;
 
@@ -215,7 +216,10 @@ impl LogStore {
             std::collections::HashMap::new();
 
         for log in &inner.logs {
-            let product = log.client_user_agent.as_deref().and_then(ua_product);
+            let product = log
+                .agent
+                .clone()
+                .or_else(|| log.client_user_agent.as_deref().and_then(ua_product));
             let stat = map.entry(product.clone()).or_insert(ClientStat {
                 product,
                 count: 0,
@@ -326,6 +330,7 @@ mod tests {
             endpoint: "messages".to_string(),
             client_ip: "127.0.0.1".to_string(),
             client_user_agent: None,
+            agent: None,
             account_id: Some("test-account".to_string()),
             session_id: Some("sess-test|127.0.0.1".to_string()),
             prompt: Some(crate::gateway::prompt_info::PromptInfo {

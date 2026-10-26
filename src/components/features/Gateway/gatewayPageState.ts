@@ -186,7 +186,15 @@ export const buildGatewayConfigSnapshot = (config: GatewayConfig) => JSON.string
   upstreamProxy: config.upstreamProxy || '',
   maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0,
   otlpEndpoint: config.otlpEndpoint || '',
-  otlpHeaders: config.otlpHeaders || ''
+  otlpHeaders: config.otlpHeaders || '',
+  // 遮蔽相关字段必须进快照：快照是「未保存变更」的判定依据
+  //（configSnapshot !== savedConfigSnapshot），漏掉它们会让这些开关
+  // 改了却永远触发不了自动保存。
+  privacyMaskEnabled: !!config.privacyMaskEnabled,
+  maskKindOverrides: config.maskKindOverrides || [],
+  maskCustomRules: config.maskCustomRules || [],
+  maskNeverMask: config.maskNeverMask || [],
+  maskShape: !!config.maskShape
 })
 
 export const buildGatewayRuntimeSnapshot = (config: GatewayConfig) => JSON.stringify({

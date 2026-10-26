@@ -2060,5 +2060,15 @@
   "gatewayContext.tags": "标签",
   "gatewayContext.empty": "暂无带 prompt 构成的请求数据（新版本日志生效后逐步积累）",
   "gatewayContext.hintSessions": "{{count}} 个工具会话；累计压缩 {{compacts}} 次。",
-  "gatewayContext.hintFull": "只统计带工具定义的会话（标题生成等杂音请求已剔除）；缓存命中率仅计上游报了 usage 的请求；基线=system+tools+memory 中位数，增速=相邻请求正增量中位数。"
+  "gatewayContext.hintFull": "只统计带工具定义的会话（标题生成等杂音请求已剔除）；缓存命中率仅计上游报了 usage 的请求；基线=system+tools+memory 中位数，增速=相邻请求正增量中位数。",
+  "gatewayContext.mapTitle": "上下文构成",
+  "gatewayContext.mapFree": "空闲",
+  "gatewayContext.mapEmpty": "该会话还没有 prompt 构成数据",
+  "gatewayContext.part.system": "系统提示",
+  "gatewayContext.part.tools": "工具定义",
+  "gatewayContext.part.skills": "技能",
+  "gatewayContext.part.memory": "记忆/指令",
+  "gatewayContext.part.files": "文件",
+  "gatewayContext.part.results": "工具结果",
+  "gatewayContext.part.chat": "对话历史"
 }

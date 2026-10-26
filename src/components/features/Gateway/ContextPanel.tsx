@@ -6,6 +6,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts'
 import { getGatewayRequestLogHistory } from '../../../api/gatewayApi'
+import { ContextMap } from './ContextMap'
 
 interface PromptPartRow { kind: string; tokens: number }
 interface PromptRow { tokens: number; counted: boolean; parts?: PromptPartRow[] }
@@ -31,6 +32,12 @@ interface SessionStat {
   score: number
   tags: string[]
   points: { idx: number; tokens: number; cache: number }[]
+  /** 最新一次请求的 prompt 构成（地图用） */
+  latestParts: PromptPartRow[]
+  /** 最新一次请求的 prompt 总 tokens */
+  latestTokens: number
+  /** 窗口大小（tokens，中位数推断） */
+  window: number
 }
 
 const partSum = (row: ContextLogRow, kinds: string[]): number =>
@@ -182,6 +189,10 @@ export function ContextPanel() {
         score,
         tags,
         points: tokens.map((tk, i) => ({ idx: i + 1, tokens: tk, cache: ordered[i].cacheReadInputTokens ?? 0 })),
+        // 地图画「最新一次请求」的构成：窗口是此刻的状态，不是会话平均
+        latestParts: ordered[ordered.length - 1].prompt!.parts ?? [],
+        latestTokens: ordered[ordered.length - 1].prompt!.tokens,
+        window,
       })
     }
     return out.sort((a, b) => b.requests - a.requests)
@@ -244,30 +255,47 @@ export function ContextPanel() {
       )}
 
       {selectedSession && (
-        <div className="border rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">{t('gatewayContext.curve')}</span>
-            <span className="font-mono text-xs text-muted-foreground max-w-[60%] truncate" title={selectedSession.id}>
-              {selectedSession.id}
-            </span>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+          {/* 构成地图：窗口被谁占满了 */}
+          <div className="border rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">{t('gatewayContext.mapTitle')}</span>
+              <span className="font-mono text-xs text-muted-foreground max-w-[50%] truncate" title={selectedSession.id}>
+                {fmtK(selectedSession.latestTokens)} / {fmtK(selectedSession.window)}
+              </span>
+            </div>
+            <ContextMap
+              parts={selectedSession.latestParts}
+              tokens={selectedSession.latestTokens}
+              window={selectedSession.window}
+            />
           </div>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={selectedSession.points} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="idx" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-                <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" tickFormatter={fmtK} width={48} />
-                <Tooltip
-                  formatter={(v: number, name: string) => [fmtK(v), name === 'tokens' ? t('gatewayContext.promptTokens') : t('gatewayUsage.cacheRead')]}
-                  labelFormatter={(l) => `#${l}`}
-                />
-                <Legend
-                  formatter={(v: string) => (v === 'tokens' ? t('gatewayContext.promptTokens') : t('gatewayUsage.cacheRead'))}
-                />
-                <Line type="monotone" dataKey="tokens" stroke="var(--primary, #3b82f6)" dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="cache" stroke="#22c55e" dot={false} strokeWidth={1.5} />
-              </LineChart>
-            </ResponsiveContainer>
+
+          <div className="border rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">{t('gatewayContext.curve')}</span>
+              <span className="font-mono text-xs text-muted-foreground max-w-[60%] truncate" title={selectedSession.id}>
+                {selectedSession.id}
+              </span>
+            </div>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={selectedSession.points} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="idx" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" tickFormatter={fmtK} width={48} />
+                  <Tooltip
+                    formatter={(v: number, name: string) => [fmtK(v), name === 'tokens' ? t('gatewayContext.promptTokens') : t('gatewayUsage.cacheRead')]}
+                    labelFormatter={(l) => `#${l}`}
+                  />
+                  <Legend
+                    formatter={(v: string) => (v === 'tokens' ? t('gatewayContext.promptTokens') : t('gatewayUsage.cacheRead'))}
+                  />
+                  <Line type="monotone" dataKey="tokens" stroke="var(--primary, #3b82f6)" dot={false} strokeWidth={2} />
+                  <Line type="monotone" dataKey="cache" stroke="#22c55e" dot={false} strokeWidth={1.5} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}
