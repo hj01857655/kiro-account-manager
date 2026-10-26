@@ -6,6 +6,7 @@ pub(crate) mod load_balancer;
 pub mod log_store;
 pub mod masking;
 pub mod otlp;
+pub mod prompt_info;
 mod models;
 pub mod prompt_cache;
 pub mod prompt_filter;
@@ -190,6 +191,14 @@ pub struct GatewayConfig {
     /// 永不遮蔽的值清单（精确匹配优先于一切规则）。
     #[serde(default)]
     pub mask_never_mask: Vec<masking::MaskNeverMask>,
+    /// 遮蔽的同形替换：密钥类改送「同形假密钥」而非 `{{API_KEY_xxx}}` 占位符。
+    ///
+    /// 占位符会被 agent/工具的 key 格式校验判为非法而拒收，模型也会
+    /// 特意提一句「你的密钥格式不对」；同形假密钥（同前缀、同长度、
+    /// 同字符类别）两关都能过。短密钥与含特殊字符的值会自动降级回占位符。
+    /// 默认关：保持传统占位符行为。
+    #[serde(default)]
+    pub mask_shape: bool,
 }
 
 fn default_cache_ttl() -> u64 {
@@ -287,6 +296,10 @@ pub struct GatewayRequestLogEntry {
     /// 仅流式路径可得：上游在流末帧报告本次请求占了模型窗口多少。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_usage_percentage: Option<f32>,
+    /// Prompt 构成（system/tools/memory/files/results/chat）：
+    /// 请求到达时按 body 估算，上游 usage 回来后等比校准（counted=true）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<prompt_info::PromptInfo>,
     /// 错误类型（如 invalid_request_error, authentication_error 等）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_type: Option<String>,
@@ -509,6 +522,7 @@ impl Default for GatewayConfig {
             mask_kind_overrides: Vec::new(),
             mask_custom_rules: Vec::new(),
             mask_never_mask: Vec::new(),
+            mask_shape: false,
         }
     }
 }
@@ -1459,6 +1473,11 @@ async fn spawn_runtime(
             masking::MaskEngine::new()
         }),
     ));
+    // 同形替换：装配后开关，失败回退的引擎同样要生效
+    {
+        let mut engine = mask_engine.lock().await;
+        engine.set_shape(config.mask_shape);
+    }
     let mask_audit = Arc::new(masking::MaskAuditLog::new(500));
 
     // 从文件加载历史日志到内存（启动时恢复，容量对齐内存上限 10000，

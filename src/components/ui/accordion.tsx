@@ -60,7 +60,7 @@ function AccordionTrigger({
         )}
         {...props}>
         {/* 折叠态用朝右的箭头（▶），展开后旋转 90° 变成朝下（▼）。
-            这是折叠列表的通用约定（magpie 的 Agents 行也一样：Details ▶）。
+            这是折叠列表的通用约定。
 
             不用命名组变体（group-data-[state=open]/…）：Tailwind v4 扫不到
             它、生成的 CSS 里没有对应规则。改用纯 CSS 选择器挂在 Trigger 上，

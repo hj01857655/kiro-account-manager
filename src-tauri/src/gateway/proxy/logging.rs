@@ -56,6 +56,8 @@ pub struct RequestLogContext<'a> {
     pub(super) client_user_agent: Option<String>,
     /// 会话标识：客户端 x-session-id 请求头；None 时写日志回退派生键
     pub(super) session_id: Option<String>,
+    /// Prompt 构成（请求到达时按原始 body 估算；写日志时按 usage 校准）
+    pub(super) prompt_parts: Option<crate::gateway::prompt_info::PromptInfo>,
     /// 是否流式请求（避免 request 为 None 时丢失信息）
     pub(super) is_stream: Option<bool>,
 }
@@ -307,6 +309,29 @@ pub fn write_request_log(
         request_summary,
         response_summary,
         stream_info,
+        // Prompt 构成：估算为准；上游报了 usage（input+cacheRead+cacheWrite = prompt 侧总量）
+        // 就整体等比校准，counted 置 true。usage 缺失（非流式/错误）保留估算并标记 counted=false。
+        prompt: {
+            let mut info = context.prompt_parts.clone();
+            if let Some(ref mut i) = info {
+                let counted_total = match (input_tokens, cache_read_input_tokens, cache_creation_input_tokens) {
+                    (Some(inp), Some(cr), Some(cw)) => Some(i64::from(inp) + i64::from(cr) + i64::from(cw)),
+                    (None, Some(cr), Some(cw)) => Some(i64::from(cr) + i64::from(cw)),
+                    (Some(inp), None, Some(cw)) => Some(i64::from(inp) + i64::from(cw)),
+                    (Some(inp), Some(cr), None) => Some(i64::from(inp) + i64::from(cr)),
+                    (None, None, Some(cw)) => Some(i64::from(cw)),
+                    (None, Some(cr), None) => Some(i64::from(cr)),
+                    (Some(inp), None, None) => Some(i64::from(inp)),
+                    (None, None, None) => None,
+                };
+                if let Some(total) = counted_total {
+                    if total > 0 {
+                        crate::gateway::prompt_info::calibrate(i, total);
+                    }
+                }
+            }
+            info
+        },
     };
 
     // 如果关闭了日志记录，跳过

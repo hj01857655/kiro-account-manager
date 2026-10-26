@@ -188,6 +188,7 @@ pub async fn proxy_handler(
                 is_stream: None,
                 client_user_agent: None,
                 session_id: extract_session_id(&headers),
+                prompt_parts: crate::gateway::prompt_info::estimate(&raw_request_body),
                 request_id: request_id.clone(),
             },
             GatewayErrorDetails {
@@ -251,6 +252,7 @@ pub async fn proxy_handler(
                     is_stream: None,
                     client_user_agent: None,
                     session_id: extract_session_id(&headers),
+                    prompt_parts: crate::gateway::prompt_info::estimate(&raw_request_body),
                     request_id: request_id.clone(),
                 },
                 GatewayErrorDetails {
@@ -284,6 +286,7 @@ pub async fn proxy_handler(
         is_stream: None,
         client_user_agent,
         session_id: extract_session_id(&headers),
+        prompt_parts: crate::gateway::prompt_info::estimate(&raw_request_body),
         request_id: request_id.clone(),
     };
 
@@ -1262,6 +1265,7 @@ pub async fn proxy_handler(
             is_stream: Some(true),
             client_user_agent: upstream_payload_log_context.client_user_agent.clone(),
             session_id: upstream_payload_log_context.session_id.clone(),
+            prompt_parts: upstream_payload_log_context.prompt_parts.clone(),
             request_id: upstream_payload_log_context.request_id.clone(),
         };
 

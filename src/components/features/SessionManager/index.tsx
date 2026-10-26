@@ -414,7 +414,7 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
     }
   }
 
-  // 搜索匹配多个字段，与 magpie 的 shown() 一致：标题、路径、id、模型名。
+  // 搜索匹配多个字段：标题、路径、id、模型名。
   // 全文搜索：后端 search_sessions 遍历所有 workspace 的会话内容，
   // 前端只做 300ms 防抖，结果集直接来自后端（不再本地过滤标题）
   const [searchResults, setSearchResults] = useState<SessionSummary[]>([])
@@ -537,7 +537,7 @@ function IdeSessionManager({ onCountsChange }: { onCountsChange?: (counts: Sessi
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
-                  // Esc 清空搜索，回到工作区树（同 magpie）
+                  // Esc 清空搜索，回到工作区树
                   if (e.key === 'Escape' && searchQuery) {
                     e.stopPropagation()
                     setSearchQuery('')

@@ -45,6 +45,8 @@ export interface GatewayConfig {
   maskCustomRules: MaskCustomRule[];
   /** 永不遮蔽的值清单（精确匹配优先于一切规则） */
   maskNeverMask: MaskNeverMask[];
+  /** 遮蔽的同形替换：密钥类改送「同形假密钥」而非占位符 */
+  maskShape: boolean;
   upstreamProxy: string;
   maxToolDescriptionLength: number;
   /** OTLP 导出 endpoint；空 = 关闭。仅落盘配置承载，设置页暂无编辑入口 */
@@ -147,6 +149,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   maskKindOverrides: [],
   maskCustomRules: [],
   maskNeverMask: [],
+  maskShape: false,
   upstreamProxy: '',
   maxToolDescriptionLength: 10237,
   otlpEndpoint: '',
@@ -240,6 +243,7 @@ export const hydrateGatewayConfig = (gatewayConfig: any): GatewayConfig => ({
   maskKindOverrides: Array.isArray(gatewayConfig?.maskKindOverrides) ? gatewayConfig.maskKindOverrides : [],
   maskCustomRules: Array.isArray(gatewayConfig?.maskCustomRules) ? gatewayConfig.maskCustomRules : [],
   maskNeverMask: Array.isArray(gatewayConfig?.maskNeverMask) ? gatewayConfig.maskNeverMask : [],
+  maskShape: gatewayConfig?.maskShape ?? false,
   upstreamProxy: typeof gatewayConfig?.upstreamProxy === 'string' ? gatewayConfig.upstreamProxy : '',
   maxToolDescriptionLength: gatewayConfig?.maxToolDescriptionLength ?? 10237,
   otlpEndpoint: typeof gatewayConfig?.otlpEndpoint === 'string' ? gatewayConfig.otlpEndpoint : '',
@@ -280,6 +284,11 @@ export const buildGatewayPayload = (config: GatewayConfig) => ({
   toolSearchEnabled: config.toolSearchEnabled !== false,
   sessionAffinity: config.sessionAffinity === true,
   logStreamEvents: config.logStreamEvents === true,
+  privacyMaskEnabled: config.privacyMaskEnabled === true,
+  maskKindOverrides: config.maskKindOverrides || [],
+  maskCustomRules: config.maskCustomRules || [],
+  maskNeverMask: config.maskNeverMask || [],
+  maskShape: config.maskShape === true,
   // 空串归一为 null：后端将空串视为非法（upstreamProxy 必须是有效 URL 或缺失）
   upstreamProxy: config.upstreamProxy?.trim() ? config.upstreamProxy.trim() : null,
   maxToolDescriptionLength: Number(config.maxToolDescriptionLength) || 0,

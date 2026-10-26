@@ -140,9 +140,23 @@ pub async fn get_mask_audit_entries(
 ///
 /// 与请求路径的区别：不碰请求的映射表（避免试用污染真实请求的
 /// 占位符一致性），用一个一次性引擎现场跑。
+///
+/// 引擎按**当前落盘配置**装配（类别覆盖/自定义规则/白名单/同形开关），
+/// 否则试出来的结果与真实请求不一致——用户在设置里关了某类规则，
+/// Try it 却仍按内置默认显示，会误导判断。
 #[tauri::command]
 pub async fn preview_masking(text: String) -> Result<crate::gateway::masking::MaskOutcome, String> {
-    let mut engine = crate::gateway::masking::MaskEngine::new();
+    let config = crate::gateway::get_gateway_config().unwrap_or_default();
+    let mut engine = crate::gateway::masking::MaskEngine::with_overrides(
+        &config.mask_kind_overrides,
+        &config.mask_custom_rules,
+        &config.mask_never_mask,
+    )
+    .unwrap_or_else(|e| {
+        log::warn!("[遮蔽] 试用装配失败（已跳过坏规则）: {e}");
+        crate::gateway::masking::MaskEngine::new()
+    });
+    engine.set_shape(config.mask_shape);
     Ok(engine.mask_text(&text))
 }
 

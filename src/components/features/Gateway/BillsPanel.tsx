@@ -36,7 +36,7 @@ function fmtInt(n: number): string {
   return n.toLocaleString()
 }
 
-/** 账单页：按「账号 × 模型」二维聚合请求日志——与 magpie 的 Bills 对应。 */
+/** 账单页：按「账号 × 模型」二维聚合请求日志。 */
 export function BillsPanel() {
   const { t } = useApp()
   const [rows, setRows] = useState<BillLogRow[]>([])

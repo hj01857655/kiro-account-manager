@@ -374,6 +374,14 @@ export function MaskingPanel() {
                               {item.placeholder && (
                                 <code className="rounded bg-muted px-1 text-[10px]">{item.placeholder}</code>
                               )}
+                              {item.shaped && (
+                                <span
+                                  className="rounded bg-amber-500/15 px-1 text-[9px] text-amber-600 dark:text-amber-400"
+                                  title={t('gatewayMasking.shapedHint')}
+                                >
+                                  {t('gatewayMasking.shapedBadge')}
+                                </span>
+                              )}
                               <span className="text-muted-foreground">
                                 {item.valueHead}… ({item.valueLength})
                               </span>

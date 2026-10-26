@@ -402,6 +402,14 @@ function GatewayConfig({
                     <Switch checked={!!config.privacyMaskEnabled} onCheckedChange={(checked: boolean) => setField('privacyMaskEnabled', checked)} />
                   </div>
                 </div>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                  <Label className="text-sm" title={t('gateway.maskShapeHint')}>{t('gateway.maskShapeToggle')}</Label>
+                  <Switch
+                    checked={!!config.maskShape}
+                    disabled={!config.privacyMaskEnabled}
+                    onCheckedChange={(checked: boolean) => setField('maskShape', checked)}
+                  />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs text-muted-foreground">{t('gateway.cacheTTLSeconds')}</Label>
                   <Input

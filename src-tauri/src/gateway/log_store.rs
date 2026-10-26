@@ -328,6 +328,14 @@ mod tests {
             client_user_agent: None,
             account_id: Some("test-account".to_string()),
             session_id: Some("sess-test|127.0.0.1".to_string()),
+            prompt: Some(crate::gateway::prompt_info::PromptInfo {
+                tokens: 100,
+                counted: false,
+                parts: vec![crate::gateway::prompt_info::PromptPart {
+                    kind: "chat".to_string(),
+                    tokens: 100,
+                }],
+            }),
             model: Some(model.to_string()),
             stream: false,
             upstream_source: Some("test".to_string()),

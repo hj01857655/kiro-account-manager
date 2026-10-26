@@ -80,6 +80,9 @@ pub async fn generate_local_response(
         is_stream: None,
         client_user_agent: None,
         session_id: extract_session_id(&headers),
+        prompt_parts: request_body
+            .as_deref()
+            .and_then(crate::gateway::prompt_info::estimate),
         request_id: String::new(),
     };
 

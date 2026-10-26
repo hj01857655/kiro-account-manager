@@ -45,6 +45,26 @@ export interface GatewayConfigPayload {
   otlpEndpoint?: string | null
   /** OTLP 请求附加头，JSON 对象序列化字符串 */
   otlpHeaders?: string | null
+  /** 隐私遮蔽总开关 */
+  privacyMaskEnabled?: boolean
+  /** 遮蔽规则的用户覆盖：按类别改动作/停用 */
+  maskKindOverrides?: Array<{
+    kind: string
+    enabled: boolean
+    action: 'mask' | 'warn' | 'block'
+  }>
+  /** 用户自定义遮蔽规则 */
+  maskCustomRules?: Array<{
+    id: string
+    name: string
+    pattern: string
+    action: 'mask' | 'warn' | 'block'
+    enabled: boolean
+  }>
+  /** 永不遮蔽的值（精确匹配优先于一切规则） */
+  maskNeverMask?: Array<{ value: string; note?: string }>
+  /** 遮蔽的同形替换：密钥类改送「同形假密钥」而非占位符 */
+  maskShape?: boolean
 }
 
 export function getGatewayConfig<T = any>() {
@@ -168,6 +188,8 @@ export interface MaskAuditEntry {
     valueLength: number
     valueHead: string
     rule: string
+    /** 是否为同形假密钥（false = 传统占位符） */
+    shaped?: boolean
   }>
   maskedPreview: string
 }

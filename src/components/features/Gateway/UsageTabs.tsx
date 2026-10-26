@@ -7,7 +7,7 @@ import { SessionsPanel } from './SessionsPanel'
 import { ContextPanel } from './ContextPanel'
 
 /** 用量页容器：一页三个子标签（额度概览/会话/上下文）。
- *  magpie 的「请求」标签不搬——我们的顶层「请求日志」页功能是其超集，重复展示没有意义。 */
+ *  不设「请求」标签——顶层「请求日志」页已覆盖该能力，重复展示没有意义。 */
 export function UsageTabs() {
   const { t } = useApp()
   const [sub, setSub] = useState('overview')
