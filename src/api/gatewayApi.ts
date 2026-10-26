@@ -185,3 +185,8 @@ export function previewMasking(text: string) {
 export function getGatewayRequestLogHistory<T = any[]>(limit = 20000) {
   return invoke<T>('get_gateway_request_log_history', { limit })
 }
+
+/** 额度页：网关作用域内每个账号的上游配额 + 本地 credits 消耗聚合 */
+export function getGatewayQuota<T = unknown[]>() {
+  return invoke<T>('get_gateway_quota')
+}

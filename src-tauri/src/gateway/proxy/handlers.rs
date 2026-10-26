@@ -79,6 +79,7 @@ pub async fn generate_local_response(
         model_hint: None,
         is_stream: None,
         client_user_agent: None,
+        session_id: extract_session_id(&headers),
         request_id: String::new(),
     };
 

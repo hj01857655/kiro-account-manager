@@ -5,6 +5,7 @@ mod eventstream;
 pub(crate) mod load_balancer;
 pub mod log_store;
 pub mod masking;
+pub mod otlp;
 mod models;
 pub mod prompt_cache;
 pub mod prompt_filter;
@@ -166,6 +167,14 @@ pub struct GatewayConfig {
     /// 平时关闭省磁盘。关闭不影响请求日志主条目。
     #[serde(default)]
     pub log_stream_events: bool,
+    /// OTLP 导出：请求日志转 OpenTelemetry 指标推送到外部观测栈（OTLP/HTTP JSON）。
+    /// 空 = 关闭。显式开启才外发，且只发元数据（模型/账号/会话/tokens/credits），
+    /// 不含 prompt 与响应内容。
+    #[serde(default)]
+    pub otlp_endpoint: Option<String>,
+    /// OTLP 请求附带的鉴权头（如 Authorization: Bearer ...），JSON 对象序列化字符串
+    #[serde(default)]
+    pub otlp_headers: Option<String>,
     /// 隐私遮蔽：请求离开本机前把敏感值换成占位符，响应回来再换回真值。
     /// 默认关：开启后所有发往上游的文本（messages/system/tools/input）
     /// 都会过一遍规则引擎，极小概率误伤（见 masking.rs 的规则清单）。
@@ -236,6 +245,12 @@ pub struct GatewayRequestLogEntry {
     /// 客户端发来的 User-Agent
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_user_agent: Option<String>,
+    /// 本次请求实际使用的账号 ID（额度/账单按账号聚合的依据）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+    /// 会话标识：x-session-id 请求头，缺省时回退「客户端 IP|UA」派生键
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     pub stream: bool,
@@ -488,6 +503,8 @@ impl Default for GatewayConfig {
             tool_search_enabled: true,
             session_affinity: false,
             log_stream_events: false,
+            otlp_endpoint: None,
+            otlp_headers: None,
             privacy_mask_enabled: false,
             mask_kind_overrides: Vec::new(),
             mask_custom_rules: Vec::new(),
@@ -918,6 +935,108 @@ pub async fn get_gateway_request_log_history(
 ) -> Result<Vec<GatewayRequestLogEntry>, String> {
     let path = request_log_path()?;
     get_gateway_request_logs_from_path(&path, limit)
+}
+
+/// 额度页单账号条目：上游配额快照 + 本地聚合的消耗量。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayQuotaEntry {
+    pub account_id: String,
+    pub email: Option<String>,
+    pub provider: Option<String>,
+    pub region: Option<String>,
+    /// 上游 getUsageLimits 原始 JSON（窗口、剩余额度）
+    pub usage: serde_json::Value,
+    /// 本地历史日志按账号聚合的 credits 消耗（account_id 字段上线后的请求才计入）
+    pub credits_consumed: f64,
+    pub total_requests: u64,
+    pub total_tokens: i64,
+    /// 该账号查询失败时的错误信息（token 失效 / 封禁等），None 表示查询成功
+    pub error: Option<String>,
+}
+
+/// 额度页：网关作用域内每个账号的配额与本地消耗聚合。
+///
+/// 上游配额走 `get_usage_by_account`（与账号管理页同一实现，不刷新 token，
+/// 失效即报错不静默）；本地消耗从落盘 JSONL 按 account_id 聚合
+/// （上限 20000 条，account_id 字段上线前的历史请求无法归属，不计入）。
+pub async fn get_gateway_quota(
+    state: &tauri::State<'_, crate::state::AppState>,
+) -> Result<Vec<GatewayQuotaEntry>, String> {
+    // 网关作用域：运行中用运行配置，否则用落盘配置
+    let config = {
+        let guard = state
+            .gateway
+            .lock()
+            .map_err(|_| "获取 gateway 状态失败".to_string())?;
+        guard.as_ref().map(|rt| rt.config.clone())
+    }
+    .unwrap_or_else(|| load_gateway_config().unwrap_or_default());
+
+    // 先收集作用域内账号的 owned 副本并立即释放锁：
+    // std MutexGuard 跨 .await 会让 future 变成非 Send（Tauri 命令要求 Send）
+    let scoped: Vec<crate::core::account::Account> = {
+        let store_guard = state
+            .store
+            .lock()
+            .map_err(|_| "获取账号存储失败".to_string())?;
+        match config.account_mode.as_str() {
+            "pool" => store_guard
+                .accounts
+                .iter()
+                .filter(|a| config.pool_account_ids.contains(&a.id))
+                .cloned()
+                .collect(),
+            _ => store_guard
+                .accounts
+                .iter()
+                .filter(|a| config.account_id.as_deref() == Some(a.id.as_str()))
+                .cloned()
+                .collect(),
+        }
+    };
+
+    // 本地消耗聚合：按 account_id 累加 credits / 请求数 / tokens
+    let history = get_gateway_request_log_history(Some(20_000))
+        .await
+        .unwrap_or_default();
+    let mut agg: std::collections::HashMap<String, (f64, u64, i64)> =
+        std::collections::HashMap::new();
+    for log in &history {
+        let Some(ref id) = log.account_id else { continue };
+        let e = agg.entry(id.clone()).or_insert((0.0, 0, 0));
+        e.0 += log.credits.unwrap_or(0.0);
+        e.1 += 1;
+        e.2 += i64::from(log.input_tokens.unwrap_or(0))
+            + i64::from(log.output_tokens.unwrap_or(0));
+    }
+
+    let mut out = Vec::new();
+    for account in scoped {
+        let mut entry = GatewayQuotaEntry {
+            account_id: account.id.clone(),
+            email: account.email.clone(),
+            provider: account.provider.clone(),
+            region: account.region.clone(),
+            usage: serde_json::Value::Null,
+            credits_consumed: agg.get(&account.id).map(|e| e.0).unwrap_or(0.0),
+            total_requests: agg.get(&account.id).map(|e| e.1).unwrap_or(0),
+            total_tokens: agg.get(&account.id).map(|e| e.2).unwrap_or(0),
+            error: None,
+        };
+
+        match &account.access_token {
+            Some(token) if !token.is_empty() => {
+                match crate::commands::common::get_usage_by_account(&account, token).await {
+                    Ok(u) => entry.usage = u.usage_data,
+                    Err(e) => entry.error = Some(e),
+                }
+            }
+            _ => entry.error = Some("无 access token".to_string()),
+        }
+        out.push(entry);
+    }
+    Ok(out)
 }
 
 pub async fn get_gateway_request_stats(

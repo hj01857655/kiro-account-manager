@@ -187,6 +187,7 @@ pub async fn proxy_handler(
                 model_hint: model_hint.clone(),
                 is_stream: None,
                 client_user_agent: None,
+                session_id: extract_session_id(&headers),
                 request_id: request_id.clone(),
             },
             GatewayErrorDetails {
@@ -249,6 +250,7 @@ pub async fn proxy_handler(
                     model_hint: model_hint.clone(),
                     is_stream: None,
                     client_user_agent: None,
+                    session_id: extract_session_id(&headers),
                     request_id: request_id.clone(),
                 },
                 GatewayErrorDetails {
@@ -281,6 +283,7 @@ pub async fn proxy_handler(
         model_hint,
         is_stream: None,
         client_user_agent,
+        session_id: extract_session_id(&headers),
         request_id: request_id.clone(),
     };
 
@@ -1258,6 +1261,7 @@ pub async fn proxy_handler(
             model_hint: upstream_payload_log_context.model_hint.clone(),
             is_stream: Some(true),
             client_user_agent: upstream_payload_log_context.client_user_agent.clone(),
+            session_id: upstream_payload_log_context.session_id.clone(),
             request_id: upstream_payload_log_context.request_id.clone(),
         };
 

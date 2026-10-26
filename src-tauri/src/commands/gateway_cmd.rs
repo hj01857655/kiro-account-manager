@@ -9,6 +9,7 @@ use crate::gateway::{
     get_gateway_endpoint_stats as get_gateway_endpoint_stats_inner,
     get_gateway_log_dir as get_gateway_log_dir_inner,
     get_gateway_model_stats as get_gateway_model_stats_inner,
+    get_gateway_quota as get_gateway_quota_inner,
     get_gateway_request_log_history as get_gateway_request_log_history_inner,
     get_gateway_request_logs as get_gateway_request_logs_inner,
     get_gateway_request_stats as get_gateway_request_stats_inner,
@@ -80,6 +81,11 @@ pub async fn get_gateway_request_log_history(
     limit: Option<usize>,
 ) -> Result<Vec<GatewayRequestLogEntry>, String> {
     get_gateway_request_log_history_inner(limit).await
+}
+
+#[tauri::command]
+pub async fn get_gateway_quota(state: State<'_, AppState>) -> Result<Vec<crate::gateway::GatewayQuotaEntry>, String> {
+    get_gateway_quota_inner(&state).await
 }
 
 #[tauri::command]

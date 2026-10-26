@@ -1,0 +1,173 @@
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { MessagesSquare, RefreshCw, Coins, Zap } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useApp } from '../../../hooks/useApp'
+import { getGatewayRequestLogHistory } from '../../../api/gatewayApi'
+
+interface SessionLogRow {
+  occurredAt: string
+  sessionId?: string | null
+  model?: string | null
+  statusCode: number
+  inputTokens?: number | null
+  outputTokens?: number | null
+  cacheReadInputTokens?: number | null
+  cacheCreationInputTokens?: number | null
+  credits?: number | null
+}
+
+interface SessionAgg {
+  name: string
+  requests: number
+  errors: number
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  credits: number
+  models: Set<string>
+  firstSeen: string
+  lastSeen: string
+}
+
+function fmtInt(n: number): string {
+  return n.toLocaleString()
+}
+
+/** 会话页：按 sessionId 聚合请求日志——每个 agent 会话一行，token / credits / 请求数一目了然。 */
+export function SessionsPanel() {
+  const { t } = useApp()
+  const [rows, setRows] = useState<SessionLogRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const history = await getGatewayRequestLogHistory<SessionLogRow[]>(20000)
+      setRows(history)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const sessions = useMemo<SessionAgg[]>(() => {
+    const map = new Map<string, SessionAgg>()
+    for (const row of rows) {
+      // sessionId 由后端写入：x-session-id 头优先，回退「IP|UA」派生键；
+      // 旧历史条目（字段上线前）没有该字段，跳过不归属
+      const key = row.sessionId
+      if (!key) continue
+      let agg = map.get(key)
+      if (!agg) {
+        agg = {
+          name: key,
+          requests: 0,
+          errors: 0,
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          credits: 0,
+          models: new Set<string>(),
+          firstSeen: row.occurredAt,
+          lastSeen: row.occurredAt,
+        }
+        map.set(key, agg)
+      }
+      agg.requests += 1
+      if (row.statusCode >= 400) agg.errors += 1
+      agg.input += row.inputTokens ?? 0
+      agg.output += row.outputTokens ?? 0
+      agg.cacheRead += row.cacheReadInputTokens ?? 0
+      agg.cacheWrite += row.cacheCreationInputTokens ?? 0
+      agg.credits += row.credits ?? 0
+      if (row.model) agg.models.add(row.model)
+      if (row.occurredAt < agg.firstSeen) agg.firstSeen = row.occurredAt
+      if (row.occurredAt > agg.lastSeen) agg.lastSeen = row.occurredAt
+    }
+    return Array.from(map.values()).sort((a, b) => b.credits - a.credits || b.requests - a.requests)
+  }, [rows])
+
+  return (
+    <div className="flex flex-col gap-4 p-4 h-full overflow-auto">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MessagesSquare className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-medium">{t('gatewaySessions.title')}</h3>
+        </div>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+          {t('common.refresh')}
+        </Button>
+      </div>
+
+      {error && (
+        <div className="text-sm text-red-500">{t('gatewaySessions.loadFailed', { error })}</div>
+      )}
+
+      {sessions.length === 0 && !loading && !error && (
+        <div className="text-sm text-muted-foreground py-8 text-center">
+          {t('gatewaySessions.empty')}
+        </div>
+      )}
+
+      {sessions.length > 0 && (
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left px-3 py-2 font-medium">{t('gatewaySessions.session')}</th>
+                <th className="text-right px-3 py-2 font-medium">{t('gatewaySessions.requests')}</th>
+                <th className="text-right px-3 py-2 font-medium">{t('gatewayUsage.tokens')}</th>
+                <th className="text-right px-3 py-2 font-medium">{t('gatewayUsage.cacheRead')}</th>
+                <th className="text-right px-3 py-2 font-medium">
+                  <Coins className="h-3.5 w-3.5 inline mr-1" />
+                  {t('gatewayUsage.credits')}
+                </th>
+                <th className="text-left px-3 py-2 font-medium">{t('gatewaySessions.models')}</th>
+                <th className="text-left px-3 py-2 font-medium">{t('gatewaySessions.lastActive')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s) => (
+                <tr key={s.name} className="border-t">
+                  <td className="px-3 py-2 max-w-[220px] truncate font-mono text-xs" title={s.name}>
+                    {s.name}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {fmtInt(s.requests)}
+                    {s.errors > 0 && (
+                      <span className="text-red-500 ml-1">({fmtInt(s.errors)})</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    <Zap className="h-3 w-3 inline mr-1 text-muted-foreground" />
+                    {fmtInt(s.input + s.output)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                    {fmtInt(s.cacheRead)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{s.credits.toFixed(2)}</td>
+                  <td className="px-3 py-2 max-w-[180px] truncate text-xs text-muted-foreground">
+                    {Array.from(s.models).join(', ') || '-'}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">{s.lastSeen}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">{t('gatewaySessions.hint')}</p>
+    </div>
+  )
+}

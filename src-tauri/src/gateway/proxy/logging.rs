@@ -54,6 +54,8 @@ pub struct RequestLogContext<'a> {
     pub(super) request_id: String,
     /// 客户端发来的 User-Agent（区别于发给 Kiro 的上游 UA）
     pub(super) client_user_agent: Option<String>,
+    /// 会话标识：客户端 x-session-id 请求头；None 时写日志回退派生键
+    pub(super) session_id: Option<String>,
     /// 是否流式请求（避免 request 为 None 时丢失信息）
     pub(super) is_stream: Option<bool>,
 }
@@ -128,6 +130,15 @@ pub fn extract_model_from_payload(payload_str: &str) -> Option<String> {
         .get("model")?
         .as_str()
         .map(String::from)
+}
+
+/// 提取客户端会话标识：x-session-id 请求头，缺省 None（写日志时回退派生键）
+pub fn extract_session_id(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string)
+        .filter(|s| !s.trim().is_empty())
 }
 
 /// 落盘的请求体 / 响应体体积上限。
@@ -262,6 +273,13 @@ pub fn write_request_log(
         endpoint: context.endpoint.to_string(),
         client_ip: context.client_addr.ip().to_string(),
         client_user_agent: context.client_user_agent.clone(),
+        // 账号 ID 从上游凭据取（选择结果在 upstream 阶段已知）
+        account_id: context.upstream.map(|u| u.account_id.clone()),
+        // 会话标识：x-session-id 头优先，回退「IP|UA」派生键（同一客户端稳定分组）
+        session_id: context.session_id.clone().or_else(|| {
+            let ua = context.client_user_agent.as_deref().unwrap_or("-");
+            Some(format!("{}|{}", context.client_addr.ip(), ua))
+        }),
         model: context
             .request
             .map(|item| item.model.clone())
@@ -305,6 +323,32 @@ pub fn write_request_log(
     tokio::spawn(async move {
         log_store.add(entry_clone).await;
     });
+
+    // OTLP 导出：显式配置了 endpoint 才外发；fire-and-forget，失败只记日志不阻塞请求
+    if let Some(ref endpoint) = state.config.otlp_endpoint {
+        if !endpoint.trim().is_empty() {
+            let payload = crate::gateway::otlp::entry_to_otlp_metrics(&entry);
+            let headers = crate::gateway::otlp::parse_headers(state.config.otlp_headers.as_deref());
+            let url = if endpoint.ends_with("/v1/metrics") {
+                endpoint.clone()
+            } else {
+                format!("{}/v1/metrics", endpoint.trim_end_matches('/'))
+            };
+            let http = state.http.clone();
+            tokio::spawn(async move {
+                let mut req = http
+                    .post(&url)
+                    .header("content-type", "application/json")
+                    .json(&payload);
+                for (k, v) in headers {
+                    req = req.header(k, v);
+                }
+                if let Err(e) = req.send().await {
+                    log::debug!("[OTLP] 导出失败: {e}");
+                }
+            });
+        }
+    }
 }
 
 pub fn build_gateway_error_body(

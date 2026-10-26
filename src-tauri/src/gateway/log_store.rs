@@ -326,6 +326,8 @@ mod tests {
             endpoint: "messages".to_string(),
             client_ip: "127.0.0.1".to_string(),
             client_user_agent: None,
+            account_id: Some("test-account".to_string()),
+            session_id: Some("sess-test|127.0.0.1".to_string()),
             model: Some(model.to_string()),
             stream: false,
             upstream_source: Some("test".to_string()),
