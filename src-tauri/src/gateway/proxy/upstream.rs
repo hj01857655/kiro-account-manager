@@ -183,6 +183,7 @@ pub async fn proxy_handler(
                 region_hint: None,
                 started_at,
                 request_body: Some(raw_request_body.as_str()),
+                client_request_body: Some(raw_request_body.clone()),
                 request_body_hint: None,
                 model_hint: model_hint.clone(),
                 is_stream: None,
@@ -248,6 +249,7 @@ pub async fn proxy_handler(
                     region_hint: None,
                     started_at,
                     request_body: Some(raw_request_body.as_str()),
+                    client_request_body: Some(raw_request_body.clone()),
                     request_body_hint: None,
                     model_hint: model_hint.clone(),
                     is_stream: None,
@@ -285,6 +287,7 @@ pub async fn proxy_handler(
         region_hint: None,
         started_at,
         request_body: Some(raw_request_body.as_str()),
+        client_request_body: Some(raw_request_body.clone()),
         request_body_hint: None,
         model_hint,
         is_stream: None,
@@ -1263,6 +1266,7 @@ pub async fn proxy_handler(
             region_hint: Some(successful_upstream.region.clone()),
             started_at: upstream_payload_log_context.started_at,
             request_body: None,
+            client_request_body: upstream_payload_log_context.client_request_body.clone(),
             request_body_hint: upstream_payload_log_context
                 .request_body
                 .map(str::to_string),
@@ -1710,11 +1714,14 @@ pub async fn proxy_handler(
         )
         .await;
     }
+    // 客户端格式的响应 JSON：日志与对话捕获都用它（非流式路径的
+    // 上游 SSE 拼接文本不是单个 JSON 文档，捕获按客户端协议解析不了）。
+    let response_body_for_log = serde_json::to_string(&response).unwrap_or_default();
     {
         let log_dir = crate::core::paths::app_data_dir_or_default().join("logs");
         let _ = std::fs::create_dir_all(&log_dir);
-        let response_body = serde_json::to_string(&response).unwrap_or_default();
-        let body_end = safe_truncate(&response_body, 50000);
+        let response_body = &response_body_for_log;
+        let body_end = safe_truncate(response_body, 50000);
         let entry = format!(
             "[{}] kind=client_response idx={} endpoint={} stream=false status=200 bytes={} truncated={} body={}\n",
             chrono::Local::now().format("%H:%M:%S"),
@@ -1757,7 +1764,9 @@ pub async fn proxy_handler(
         "success",
         None,
         None, // error_type
-        Some(body.as_str()),
+        // 响应体用**客户端格式**的 JSON（response），不是上游 SSE 拼接文本：
+        // 对话捕获按客户端协议解析输出分片，上游 SSE 拼起来不是单个 JSON 文档。
+        Some(&response_body_for_log),
         Some(aggregated.input_tokens),
         Some(aggregated.output_tokens),
         aggregated.cache_read_input_tokens,

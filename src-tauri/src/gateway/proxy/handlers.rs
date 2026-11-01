@@ -75,6 +75,7 @@ pub async fn generate_local_response(
         region_hint: None,
         started_at,
         request_body,
+        client_request_body: request_body.map(str::to_string),
         request_body_hint: None,
         model_hint: None,
         is_stream: None,

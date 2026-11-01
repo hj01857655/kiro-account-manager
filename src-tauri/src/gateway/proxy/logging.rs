@@ -46,6 +46,16 @@ pub struct RequestLogContext<'a> {
     pub(super) started_at: Instant,
     #[allow(dead_code)]
     pub(super) request_body: Option<&'a str>,
+    /// 客户端发来的**原始请求体**（未经转换）。
+    ///
+    /// 与 `request_body` 分开：`request_body` 在成功路径上被换成**上游
+    /// Kiro payload**（`conversationState` 结构），不是客户端协议。
+    /// 对话捕获要按客户端协议（messages/system/tools）解析分片，
+    /// 必须用这个字段——用 `request_body` 会解析不出任何东西。
+    ///
+    /// 取 owned 而非借用：它要跟着 `RequestLogContext` 走到流式结束
+    /// （那里要求 `'static`），借用会逼出 `Box::leak` 泄漏原文。
+    pub(super) client_request_body: Option<String>,
     pub(super) request_body_hint: Option<String>,
     /// 从原始请求体提取的 model（用于错误日志）
     pub(super) model_hint: Option<String>,
@@ -384,7 +394,10 @@ pub fn write_request_log(
 
     // 对话捕获（opt-in）：输入/输出分片过遮蔽占位符化后落盘，供会话页回放
     if state.config.gateway_conversations {
-        let request_body = context.request_body.map(str::to_string);
+        // 必须用 client_request_body（客户端原始协议体），不能用 request_body
+        // ——后者在成功路径上已是上游 Kiro payload（conversationState），
+        // 按客户端协议解析会得到空分片。
+        let request_body = context.client_request_body.clone();
         let response_body = _response_body.map(str::to_string);
         if request_body.is_some() || response_body.is_some() {
             let mask_engine = state.mask_engine.clone();
