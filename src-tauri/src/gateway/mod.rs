@@ -1606,6 +1606,10 @@ async fn spawn_runtime(
     // 会话缓存独立清理周期：不能只在插入时清，否则闲置期间内存不释放
     crate::gateway::proxy::spawn_responses_session_cleanup(session_cleanup_store);
 
+    // 负载均衡半开巡检：不健康账号冷却期满自动放回候选池（否则永远接不到
+    // 请求、永远没有 success、永远躺在黑名单里）。随 runtime 生命周期存活。
+    load_balancer::LoadBalancer::spawn_half_open_sweeper(&load_balancer);
+
     // 对话捕获：启动时清一次过期目录与超限体积
     let _ = conversations::prune(&conversations::store_root());
 

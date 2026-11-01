@@ -21,9 +21,8 @@ pub struct LoadBalancer {
     current_index: Arc<RwLock<usize>>,
     /// 账号健康状态
     health_map: Arc<RwLock<HashMap<String, AccountHealth>>>,
-    /// 健康检查间隔
-    #[allow(dead_code)]
-    health_check_interval: Duration,
+    /// 半开巡检间隔：不健康账号冷却该时长后自动放回候选池（半开探测）
+    pub health_check_interval: Duration,
     /// 速率限制的账号（临时屏蔽）
     rate_limited_accounts: Arc<RwLock<HashMap<String, Instant>>>,
     /// 账号状态的唯一共享副本（= `AppState.store`）。
@@ -73,8 +72,7 @@ impl LoadBalancer {
             strategy,
             current_index: Arc::new(RwLock::new(0)),
             health_map: Arc::new(RwLock::new(HashMap::new())),
-            health_check_interval: Duration::from_secs(30),
-            rate_limited_accounts: Arc::new(RwLock::new(HashMap::new())),
+            health_check_interval: Duration::from_secs(30),            rate_limited_accounts: Arc::new(RwLock::new(HashMap::new())),
             store,
         }
     }
@@ -324,6 +322,54 @@ impl LoadBalancer {
             .record_failure();
     }
 
+    /// 半开巡检：把冷却期满的不健康账号放回候选池。
+    ///
+    /// 背景：不健康的账号会被 [`Self::filter_healthy_accounts`] 排除出候选，
+    /// 接不到请求就永远没有 success，`is_healthy` 永远翻不回来——唯一的
+    /// 恢复途径 `reset_health_if_all_unhealthy` 只在全员阵亡时触发。
+    /// 这个巡检补上熔断器的 half-open 半边：不健康账号按
+    /// [`Self::health_check_interval`] 周期放回，还坏的话 3 连败
+    /// （`CONSECUTIVE_FAILURE_THRESHOLD`）自然再次熔断，代价可控。
+    ///
+    /// 恢复时清零连续失败计数（半开的语义就是给它一次干净的试探机会），
+    /// 但保留滑动窗口统计——历史成功率仍参与 health_score 权重。
+    pub async fn sweep_half_open(&self) {
+        let mut health_map = self.health_map.write().await;
+        for health in health_map.values_mut() {
+            if health.is_healthy {
+                continue;
+            }
+            if health.last_check.elapsed() >= self.health_check_interval {
+                log::info!(
+                    "[LoadBalancer] 账号 {} 冷却期满（{:.0}s 未有请求），半开放回候选池",
+                    health.account_id,
+                    health.last_check.elapsed().as_secs_f32()
+                );
+                health.is_healthy = true;
+                health.consecutive_failures = 0;
+                health.last_check = Instant::now();
+            }
+        }
+    }
+
+    /// 半开巡检后台任务：按 [`Self::health_check_interval`] 周期运行，
+    /// 随网关 runtime 生命周期存活（tokio::spawn，无独立 shutdown——
+    /// 任务体内只有锁操作，runtime 停止后随进程/线程池自然终止，
+    /// 与 spawn_responses_session_cleanup 同一模式）。
+    pub fn spawn_half_open_sweeper(lb: &Arc<Self>) {
+        let interval = lb.health_check_interval;
+        let lb = Arc::clone(lb);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            // 首个 tick 立即返回：启动时没有不健康账号，跳过避免无谓扫描
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                lb.sweep_half_open().await;
+            }
+        });
+    }
+
     /// 标记账号为速率限制（临时屏蔽 60 秒）
     pub async fn mark_rate_limited(&self, account_id: &str) {
         let mut rate_limited = self.rate_limited_accounts.write().await;
@@ -504,5 +550,74 @@ mod tests {
         let acc = account_with_usage(Some(serde_json::json!({ "remaining": 5, "total": 100 })));
         assert!((remaining_quota(&acc) - 1.0).abs() < 0.01);
         assert_eq!(remaining_quota(&account_with_usage(None)), 1.0);
+    }
+
+    /// 半开巡检闭环：3 连败熔断 → 巡检冷却期内不放回 → 冷却期满放回 →
+    /// 恢复后一次成功把计数清干净。这是 health_check_interval 烂尾补全的
+    /// 行为验收，也是「不健康号永不恢复」缺口的回归测试。
+    #[tokio::test]
+    async fn half_open_sweep_restores_cooled_down_account() {
+        let lb = LoadBalancer::new(LoadBalancerStrategy::RoundRobin);
+        // 缩短巡检间隔，测试不必等 30s
+        let lb = Arc::new(LoadBalancer {
+            health_check_interval: Duration::from_millis(50),
+            ..lb
+        });
+
+        // 3 连败触发熔断（CONSECUTIVE_FAILURE_THRESHOLD = 3）
+        lb.record_failure("acc-1").await;
+        lb.record_failure("acc-1").await;
+        lb.record_failure("acc-1").await;
+
+        // 熔断后：不健康
+        {
+            let map = lb.health_map.read().await;
+            assert!(!map.get("acc-1").unwrap().is_healthy, "3 连败后应熔断");
+        }
+
+        // 冷却期内巡检：不放回
+        lb.sweep_half_open().await;
+        {
+            let map = lb.health_map.read().await;
+            assert!(!map.get("acc-1").unwrap().is_healthy, "冷却期内不应放回");
+        }
+
+        // 等过巡检间隔（50ms），再巡检：半开放回
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        lb.sweep_half_open().await;
+        {
+            let map = lb.health_map.read().await;
+            let h = map.get("acc-1").unwrap();
+            assert!(h.is_healthy, "冷却期满应半开放回");
+            assert_eq!(h.consecutive_failures, 0, "放回时连败计数清零");
+        }
+
+        // 恢复后一次成功：窗口与连败均干净，健康态维持
+        lb.record_success("acc-1", 100).await;
+        {
+            let map = lb.health_map.read().await;
+            let h = map.get("acc-1").unwrap();
+            assert!(h.is_healthy);
+            assert_eq!(h.consecutive_failures, 0);
+            assert_eq!(h.recent_successes, 1);
+        }
+    }
+
+    /// 健康账号不受巡检影响：sweep 只碰不健康的号。
+    #[tokio::test]
+    async fn half_open_sweep_leaves_healthy_accounts_alone() {
+        let lb = Arc::new(LoadBalancer::new(LoadBalancerStrategy::RoundRobin));
+        lb.record_success("acc-ok", 50).await;
+        // 刻意把 last_check 拨老（健康号也会被扫到，但必须被 is_healthy 守卫跳过）
+        {
+            let mut map = lb.health_map.write().await;
+            map.get_mut("acc-ok").unwrap().last_check = Instant::now() - Duration::from_secs(3600);
+        }
+        lb.sweep_half_open().await;
+        let map = lb.health_map.read().await;
+        let h = map.get("acc-ok").unwrap();
+        assert!(h.is_healthy);
+        // last_check 未被 sweep 触碰（仍是拨老的值）：证明 sweep 对健康号是只读跳过
+        assert!(h.last_check.elapsed() >= Duration::from_secs(3500));
     }
 }
