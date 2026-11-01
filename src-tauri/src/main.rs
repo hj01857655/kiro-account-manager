@@ -20,7 +20,6 @@ use auth::AuthState;
 use core::account::{AccountStore, GroupTagStore};
 use services::session_storage::SessionStorage;
 use state::AppState;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Listener, Manager};
 
@@ -274,22 +273,13 @@ fn handle_deep_link_event(app_handle: &tauri::AppHandle, payload: &str) {
     auth::handle_incoming_deep_link(app_handle, &url);
 }
 
-/// 前端首屏是否已就绪（已调用 `show_main_window`）。
-///
-/// 启动兜底任务的判定依据：它要回答的是「前端是否真的起来了」，而不是
-/// 「窗口此刻有没有焦点」——用户在启动后 3 秒内把焦点切到终端/浏览器是
-/// 完全正常的，用焦点判定会在每次开发调试时抢焦点并误报 WARN。
-static FRONTEND_READY: AtomicBool = AtomicBool::new(false);
-
 /// 把主窗口带到前台并按当前屏幕可用区收一次尺寸。
 ///
-/// 窗口在 tauri.conf.json 里是 `visible: false`，唯一让它可见的入口就是这里：
-/// 前端等路由 chunk 挂载完成后调用，那一刻启动卡后面的内容已经可读。
-/// 同时做 fit + focus，避免用户看到尺寸跳变。
-/// 调用即视为前端已就绪，供启动兜底任务判断是否需要强制拉起。
+/// 窗口在 tauri.conf.json 里是 `visible: true`（立即可见），这里不再承担「点亮」
+/// 职责：前端在路由 chunk 挂载完成后调用，只做 fit + focus——把窗口收进屏幕
+/// 可用区并把焦点带过来，避免用户看到尺寸跳变或焦点落在别处。
 #[tauri::command]
 fn show_main_window(app: tauri::AppHandle) {
-    FRONTEND_READY.store(true, Ordering::Relaxed);
     if let Some(window) = app.get_webview_window("main") {
         fit_window_to_screen(&window);
         let _ = window.unminimize();
@@ -403,27 +393,24 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // 监听窗口关闭事件
     setup_window_close_handler(app)?;
 
-    // 主窗口在 tauri.conf.json 里是 visible:false。官方对「启动白屏」的推荐做法
-    // 就是这条：窗口先藏，前端加载完成后再 show（tauri#5170）。
+    // 主窗口在 tauri.conf.json 里是 visible:true（立即可见流派，参照 zcode-switch）。
     //
     // 本项目的具体契约：
-    // 1. 正常路径：路由 chunk 就绪 → App.tsx 调 show_main_window 做 fit + focus；
-    // 2. 兜底：8 秒后仍未就绪（打包损坏、JS 抛异常）则强显，配合 index.html
-    //    里 8 秒强制撤 splash，保证窗口总能操作。
+    // 1. 首帧由 index.html 的 #boot-splash 顶住（内联样式，不依赖 JS/CSS 模块加载），
+    //    WebView 未绘制时露的是 backgroundColor 深色而不是系统白底；
+    // 2. 正常路径：路由 chunk 就绪 → App.tsx 调 show_main_window 做 fit + focus；
+    // 3. 兜底：8 秒后仍未就绪（打包损坏、JS 抛异常）则前端自己的
+    //    scheduleBootSplashFallback 撤卡，窗口始终可见不会空转。
     //
-    // 窗口底色由 tauri.conf.json 的 backgroundColor 控制（与启动卡同色），
-    // WebView 未绘制时露的是深色而不是系统白底。
+    // 这里不再用 8s 定时器强显窗口——立即可见后「隐藏窗口等前端」的竞态不存在了；
+    // show_main_window 仍保留，只负责 fit + focus。
     let app_handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
-        if FRONTEND_READY.load(Ordering::Relaxed) {
-            return;
-        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        // 启动即收一次窗口尺寸：立即可见的窗口在首帧就占真实大小，
+        // 拖到 8s 后由 show_main_window 再 fit 会出现可见的尺寸跳变
         if let Some(window) = app_handle.get_webview_window("main") {
-            log::warn!("前端 8s 内未就绪，强制 fit + focus");
             fit_window_to_screen(&window);
-            let _ = window.show();
-            let _ = window.set_focus();
         }
     });
 

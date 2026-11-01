@@ -20,7 +20,7 @@
         "width": 1400,
         "minWidth": 1280,
         "minHeight": 720,
-        "visible": false,
+        "visible": true,
         "backgroundColor": "#0b1220",
         "center": true,
         "decorations": true,
