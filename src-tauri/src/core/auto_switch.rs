@@ -68,6 +68,12 @@ impl AccountSwitcher {
     }
 
     /// 检查账号是否需要切换
+    ///
+    /// 口径说明：分母只用**主配额**（不含超额封顶）。开了超额 = 用户授权
+    /// 上限封顶前的烧钱，但换号策略的意图是「主额度耗尽前主动切换、保住
+    /// 主额度」——把 10000 的 overage_cap 计入分母会把打满主额度的号判成
+    /// 9% 可用、继续被选中，接下来的请求直接产生 $0.04/Credit 真实扣费。
+    /// 要烧超额是显式动作，不该是调度静默带来的。
     pub fn should_switch(&self, account: &Account) -> bool {
         if !account.is_available() {
             return true;
@@ -75,10 +81,9 @@ impl AccountSwitcher {
 
         // 从 usage_data 中解析配额信息
         if let Some((current, limit)) = extract_usage_totals(account.usage_data.as_ref()) {
-            if limit > 0 {
+            if limit > 0.0 {
                 #[allow(clippy::cast_precision_loss)]
-                // i64 → f64 转换用于百分比计算，精度损失可接受
-                let usage_percent = (current as f64 / limit as f64) * 100.0;
+                let usage_percent = (current / limit) * 100.0;
                 return usage_percent >= f64::from(self.threshold);
             }
         }
@@ -158,19 +163,11 @@ fn is_unavailable_status(status: &str) -> bool {
     )
 }
 
-fn extract_usage_totals(usage_data: Option<&Value>) -> Option<(i64, i64)> {
-    let breakdown = usage_data?.get("usageBreakdownList")?.as_array()?.first()?;
-
-    let current = breakdown
-        .get("currentUsage")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
-    let limit = breakdown
-        .get("usageLimit")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
-
-    Some((current, limit))
+fn extract_usage_totals(usage_data: Option<&Value>) -> Option<(f64, f64)> {
+    // 复用 usage::UsageBreakdown：带 *WithPrecision 精度回退（上游给小数时
+    // 旧的 i64 直读会截断成 0/丢精度），并保证与 usage.rs 同一解析口径
+    let b = crate::core::usage::UsageBreakdown::from_usage_data(usage_data)?;
+    Some((b.current, b.limit))
 }
 
 /// 换号结果
@@ -241,6 +238,48 @@ mod tests {
         let switcher = AccountSwitcher::new(SwitchStrategy::RoundRobin, 90, None);
 
         assert!(is_usage_capped(account.usage_data.as_ref()));
+        assert!(switcher.should_switch(&account));
+    }
+
+    /// 精度回退：上游只给 *WithPrecision 小数字段时，旧 i64 直读会得 0
+    /// （永远判「不需要切换」）；复用 UsageBreakdown 后应正确解析并触发切换。
+    #[test]
+    fn precision_fields_are_read_for_switch_decision() {
+        let mut account = Account::new("precision@example.com".to_string(), "precision".to_string());
+        account.usage_data = Some(serde_json::json!({
+            "overageConfiguration": { "overageStatus": "DISABLED" },
+            "usageBreakdownList": [
+                {
+                    "currentUsageWithPrecision": 495.5,
+                    "usageLimitWithPrecision": 500.0
+                }
+            ]
+        }));
+
+        let switcher = AccountSwitcher::new(SwitchStrategy::RoundRobin, 90, None);
+        // 495.5/500 = 99.1% >= 90 → 需要切换；旧代码 current 读 0 → 0% 不切
+        assert!(switcher.should_switch(&account));
+    }
+
+    /// 超额已开的打满号：主额度口径下 100% 必须判切——分母不含 overage_cap，
+    /// 不能因为开了超额就把它当成 9% 可用继续调度（否则直接烧 $0.04/Credit）。
+    #[test]
+    fn overage_enabled_full_account_still_switches() {
+        let mut account = Account::new("overage@example.com".to_string(), "overage".to_string());
+        account.usage_data = Some(serde_json::json!({
+            "overageConfiguration": { "overageStatus": "ENABLED" },
+            "subscriptionInfo": { "overageCapability": "OVERAGE_CAPABLE" },
+            "usageBreakdownList": [
+                {
+                    "currentUsage": 1000,
+                    "usageLimit": 1000,
+                    "overageCap": 10000
+                }
+            ]
+        }));
+
+        let switcher = AccountSwitcher::new(SwitchStrategy::RoundRobin, 90, None);
+        // 主额度口径：1000/1000 = 100% >= 90 → 切
         assert!(switcher.should_switch(&account));
     }
 }
