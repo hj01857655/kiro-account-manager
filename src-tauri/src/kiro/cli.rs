@@ -6,19 +6,6 @@ use std::path::Path;
 // CLI 2.0 固定常量（基于实测数据库样本）
 // ============================================================
 
-/// CLI 2.0 OIDC 固定 scopes（不可变）
-const CLI_OIDC_SCOPES: &[&str] = &[
-    "codewhisperer:completions",
-    "codewhisperer:analysis",
-    "codewhisperer:conversations",
-];
-
-/// CLI 2.0 OIDC 固定 oauth_flow
-const CLI_OAUTH_FLOW: &str = "Pkce";
-
-/// CLI 2.0 Social 登录固定 start_url（如果源账号没有）
-const CLI_SOCIAL_START_URL: &str = "https://view.awsapps.com/start";
-
 /// CLI 2.0 默认 region
 const CLI_DEFAULT_REGION: &str = "us-east-1";
 
@@ -247,32 +234,6 @@ fn read_device_registration_by_key(
         client_secret,
         region,
     })
-}
-
-/// 规范化 Token 数据，补齐 CLI 2.0 固定字段
-/// 用于切号写入前确保字段完整性
-#[allow(dead_code)]
-fn normalize_token_for_cli(token: &mut TokenData, auth_method: &str) {
-    // IdC 账号：强制补齐 scopes 和 oauth_flow
-    if auth_method == "IdC" {
-        if token.scopes.is_none() {
-            token.scopes = Some(CLI_OIDC_SCOPES.iter().map(|s| s.to_string()).collect());
-        }
-        if token.oauth_flow.is_none() {
-            token.oauth_flow = Some(CLI_OAUTH_FLOW.to_string());
-        }
-    }
-
-    // Social 账号：补齐 start_url（如果缺失）
-    if auth_method == "social" && token.start_url.is_none() {
-        token.start_url = Some(CLI_SOCIAL_START_URL.to_string());
-    }
-
-    // 所有账号：补齐 region（如果缺失）
-    // 所有账号:补齐 region(如果缺失)
-    if token.region.is_empty() {
-        token.region = CLI_DEFAULT_REGION.to_string();
-    }
 }
 
 /// 切号写入 CLI 2.0 数据库

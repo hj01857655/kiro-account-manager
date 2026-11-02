@@ -613,21 +613,34 @@ fn build_switch_payload(
     let token_expires_at = (chrono::Utc::now() + chrono::Duration::hours(1))
         .to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
 
-    // 公共字段（IdC 与 social 的 token 都包含 oauth_flow / scopes，与实测一致）
-    let mut token_data = serde_json::json!({
-        "access_token": account.access_token,
-        "refresh_token": account.refresh_token,
-        "expires_at": token_expires_at,
-        "region": region,
-        "oauth_flow": "Pkce",
-        "scopes": [
-            "codewhisperer:completions",
-            "codewhisperer:analysis",
-            "codewhisperer:conversations"
-        ],
-    });
+    // telemetry_generation：真实 2.37.1 token 里的 64 位 hex 遥测代际标识
+    // （docs/Kiro CLI 2.37 凭据存储格式.md §2.1）。此前管理器不写该字段；
+    // 两个 uuid simple 拼接即 64 hex，与样本形态一致。
+    let telemetry_generation = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
 
-    if auth_method == "IdC" {
+    // Social token：2.37.1 真实样本为精确 6 字段 —— access_token / refresh_token /
+    // expires_at / telemetry_generation / provider / profile_arn。region /
+    // oauth_flow / scopes / start_url 存于 device-registration，不在 token 里；
+    // 此前多写的 4 个字段虽被 serde 容忍，但不像素级一致，按样本剔除。
+    // IdC：2.37.1 无实测样本，沿用既有字段集（含 start_url 校验，issue #119）。
+    let token_data = if auth_method == "IdC" {
+        let mut token_data = serde_json::json!({
+            "access_token": account.access_token,
+            "refresh_token": account.refresh_token,
+            "expires_at": token_expires_at,
+            "region": region,
+            "oauth_flow": "Pkce",
+            "scopes": [
+                "codewhisperer:completions",
+                "codewhisperer:analysis",
+                "codewhisperer:conversations"
+            ],
+        });
+
         // IdC/SSO token：带 start_url，且 **不带** profile_arn（与真实 kiro-cli 一致）
         // 写出边界统一 normalize_start_url 去尾斜杠：本次修复前存的老账号 start_url
         // 可能带斜杠，真实 kiro-cli token 里存的是无斜杠版本，这里兜底规范化。
@@ -661,26 +674,26 @@ fn build_switch_payload(
             _ => return Err(format!("不支持的 IdC provider: {provider}")),
         };
         token_data["start_url"] = serde_json::json!(start_url);
+        token_data
     } else {
-        // Social token：带 start_url 与 profile_arn
-        token_data["start_url"] = serde_json::json!(DEFAULT_START_URL);
         let profile_arn = account
             .profile_arn
             .as_deref()
             .filter(|s| !s.is_empty())
             .unwrap_or(SOCIAL_PROFILE_ARN);
-        token_data["profile_arn"] = serde_json::json!(profile_arn);
-        // provider 必填且**只认小写**（issue #158 / #161）。
-        // kiro-cli 的 SocialToken 结构是 5 字段：
-        //   access_token / expires_at / refresh_token / provider / profile_arn
-        // 实测（同份 token 逐个改 provider）：
-        //   缺失         → whoami: Not logged in
-        //   "GOOGLE"     → whoami: Not logged in
-        //   "Google"     → whoami 显示已登录，但请求报 dispatch failure（NoToken）
-        //   "google"     → 正常
-        // 所以必须写成小写；写 "Google" 是最阴的一种——表面登录成功，实际无法对话。
-        token_data["provider"] = serde_json::json!(social_provider);
-    }
+        serde_json::json!({
+            "access_token": account.access_token,
+            "refresh_token": account.refresh_token,
+            "expires_at": token_expires_at,
+            "telemetry_generation": telemetry_generation,
+            // provider 必填且**只认小写**（issue #158 / #161）。
+            // kiro-cli 的 SocialToken 结构是 5 字段 + 2.37.1 新增 telemetry_generation：
+            // 实测（同份 token 逐个改 provider）：缺失/"GOOGLE" → Not logged in；
+            // "Google" → 表面登录成功但请求 dispatch failure；"google" → 正常。
+            "provider": social_provider,
+            "profile_arn": profile_arn,
+        })
+    };
 
     let token_value =
         serde_json::to_string(&token_data).map_err(|e| format!("序列化 token 失败: {e}"))?;
