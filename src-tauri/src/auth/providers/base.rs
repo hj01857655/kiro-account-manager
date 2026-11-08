@@ -31,6 +31,12 @@ pub struct AuthResult {
     pub profile_arn: Option<String>,
     #[serde(default)]
     pub machine_id: Option<String>,
+
+    // external_idp（企业 SSO / Entra ID）专用：仅当登录流程经企业 IdP 完成时填充。
+    // 写入 Account 后刷新链路据此 POST 微软 token_endpoint 而非 AWS OIDC。
+    pub token_endpoint: Option<String>,
+    pub issuer_url: Option<String>,
+    pub idp_scopes: Option<String>,
 }
 
 /// 刷新 Token 所需的元数据

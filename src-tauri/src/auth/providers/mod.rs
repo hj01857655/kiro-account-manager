@@ -1,7 +1,7 @@
 // Providers 模块 - 认证提供者
 
 mod base;
-mod external_idp;
+pub(crate) mod external_idp;
 mod factory;
 mod idc;
 mod social;

@@ -106,6 +106,9 @@ impl AuthProvider for SocialProvider {
             start_url: None, // Social 不需要 start_url
             profile_arn: token_response.profile_arn,
             machine_id: Some(machine_id),
+            token_endpoint: None,
+            issuer_url: None,
+            idp_scopes: None,
         })
     }
 
@@ -147,6 +150,9 @@ impl AuthProvider for SocialProvider {
             // 优先使用 API 返回的新 profileArn，没有才用旧的
             profile_arn: token_response.profile_arn.or(metadata.profile_arn),
             machine_id: Some(machine_id),
+            token_endpoint: None,
+            issuer_url: None,
+            idp_scopes: None,
         })
     }
 

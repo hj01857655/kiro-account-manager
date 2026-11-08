@@ -214,6 +214,10 @@ impl AuthProvider for ExternalIdpProvider {
             // profile_arn 原样保留（external_idp 号必须透传真实 arn）
             profile_arn: metadata.profile_arn.clone(),
             machine_id: None,
+            // 刷新走的元数据原样回传，保持凭据自描述
+            token_endpoint: metadata.token_endpoint.clone(),
+            issuer_url: metadata.issuer_url.clone(),
+            idp_scopes: metadata.scopes.clone(),
         })
     }
 
