@@ -290,7 +290,7 @@ pub fn extract_tool_results(content: Option<&Value>) -> Vec<KiroToolResult> {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string();
-            let content_text = match item.get("content") {
+            let mut content_text = match item.get("content") {
                 Some(Value::String(text)) => text.clone(),
                 Some(Value::Array(array)) => {
                     extract_text_blocks(&Value::Array(array.clone()), &["text", "output_text"])
@@ -302,6 +302,10 @@ pub fn extract_tool_results(content: Option<&Value>) -> Vec<KiroToolResult> {
                 }
                 None => String::new(),
             };
+            // tool_result 里的 image 块：extract_text_blocks 已给数组形态的
+            // image 留了 "[Image]" 占位；字符串/其他形态无图片，无需补占位。
+            // 上游收图的唯一通道是 currentMessage.images，payload.rs 会把这里
+            // 的 image 块提升到顶层 images。
             let status = if item
                 .get("is_error")
                 .and_then(Value::as_bool)
@@ -319,6 +323,35 @@ pub fn extract_tool_results(content: Option<&Value>) -> Vec<KiroToolResult> {
             })
         })
         .collect()
+}
+
+/// 提取 content 块数组中、最后一个 tool_result 之后的顶层 text 文本。
+///
+/// Claude Code 的 /compact（以及自动压缩）把总结指令放在 tool_result 之后的
+/// 同一条 user 消息里；Kiro 要求 tool result continuation 的 content 为空，
+/// 这段指令不能随 `current_content.clear()` 一起丢掉，必须并入最后一个
+/// tool_result 的文本（见 payload.rs 组装处）。
+pub fn extract_trailing_text_after_tool_results(content: Option<&Value>) -> String {
+    let Some(Value::Array(items)) = content else {
+        return String::new();
+    };
+
+    let mut trailing: Vec<String> = Vec::new();
+    let mut seen_tool_result = false;
+    for item in items {
+        let item_type = item.get("type").and_then(Value::as_str).unwrap_or_default();
+        if item_type == "tool_result" {
+            seen_tool_result = true;
+            trailing.clear();
+        } else if seen_tool_result && item_type == "text" {
+            if let Some(text) = item.get("text").and_then(Value::as_str) {
+                if !text.trim().is_empty() {
+                    trailing.push(text.to_string());
+                }
+            }
+        }
+    }
+    trailing.join("\n")
 }
 
 pub fn extract_tool_results_from_tool_message(message: &NormalizedMessage) -> Vec<KiroToolResult> {

@@ -1887,3 +1887,153 @@ async fn build_kiro_payload_omits_amrf_when_nothing_to_send() {
         payload.additional_model_request_fields
     );
 }
+
+#[tokio::test]
+async fn build_kiro_payload_appends_trailing_text_into_last_tool_result() {
+    // Claude Code /compact：总结指令在 tool_result 之后的同一条 user 消息里。
+    // content 被清空前，这段指令必须并入最后一个 tool_result，否则上游
+    // 收到普通续写请求，模型继续调工具不写总结 → summarization empty。
+    let request = NormalizedRequest {
+        model: "claude-sonnet-4-5-20250929".to_string(),
+        messages: vec![NormalizedMessage {
+            role: "user".to_string(),
+            content: Some(json!([
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "file text"
+                },
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_2",
+                    "content": "other file"
+                },
+                {
+                    "type": "text",
+                    "text": "Summarize the conversation. Reply with exactly: SUMMARY"
+                }
+            ])),
+            tool_calls: None,
+            tool_call_id: None,
+            metadata: None,
+        }],
+        stream: false,
+        max_tokens: None,
+        temperature: None,
+        top_p: None,
+        stop: None,
+        tools: None,
+        tool_choice: None,
+        previous_response_id: None,
+        thinking: None,
+        effort: None,
+        include_usage: false,
+        tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
+        deferred_tool_names: Vec::new(),
+        deferred_tools: Vec::new(),
+    };
+
+    let payload = build_kiro_payload(&Client::new(), &request, None, None)
+        .await
+        .expect("payload should build");
+
+    assert!(
+        payload
+            .conversation_state
+            .current_message
+            .user_input_message
+            .content
+            .is_empty(),
+        "tool result continuation content must stay empty"
+    );
+
+    let context = payload
+        .conversation_state
+        .current_message
+        .user_input_message
+        .user_input_message_context
+        .expect("tool_results context should exist");
+    let results = context.tool_results.expect("tool_results should exist");
+    assert_eq!(results.len(), 2);
+
+    // 指令并入最后一个 tool_result（toolu_2），第一个不受影响
+    let KiroToolResultContent::Text { text } = &results[1].content[0] else {
+        panic!("last tool result should carry text content");
+    };
+    assert!(
+        text.contains("Summarize the conversation"),
+        "trailing instruction must be appended into the last tool_result, got: {text}"
+    );
+    let KiroToolResultContent::Text { text } = &results[0].content[0] else {
+        panic!("first tool result should carry text content");
+    };
+    assert_eq!(text, "file text", "earlier tool_result must stay untouched");
+}
+
+#[tokio::test]
+async fn build_kiro_payload_promotes_images_from_tool_result_to_current_images() {
+    // Claude Code Read 读图：图片嵌在 tool_result.content 里。上游收图的
+    // 唯一通道是 currentMessage.images，必须提升到顶层；tool_result 文本里
+    // 留 "[Image]" 占位。
+    let png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAIAAAACUFjqAAAAEElEQVR4nGP8z8DAwMDAxAAAAKcAq2Pb1WwAAAAASUVORK5CYII=";
+    let request = NormalizedRequest {
+        model: "claude-sonnet-4-5-20250929".to_string(),
+        messages: vec![NormalizedMessage {
+            role: "user".to_string(),
+            content: Some(json!([
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_img",
+                    "content": [
+                        { "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": png_b64 } },
+                        { "type": "text", "text": "screenshot of the page" }
+                    ]
+                }
+            ])),
+            tool_calls: None,
+            tool_call_id: None,
+            metadata: None,
+        }],
+        stream: false,
+        max_tokens: None,
+        temperature: None,
+        top_p: None,
+        stop: None,
+        tools: None,
+        tool_choice: None,
+        previous_response_id: None,
+        thinking: None,
+        effort: None,
+        include_usage: false,
+        tool_name_map: Default::default(),
+        server_tool_names: Vec::new(),
+        deferred_tool_names: Vec::new(),
+        deferred_tools: Vec::new(),
+    };
+
+    let payload = build_kiro_payload(&Client::new(), &request, None, None)
+        .await
+        .expect("payload should build");
+
+    let current = &payload.conversation_state.current_message.user_input_message;
+    let images = current
+        .images
+        .as_ref()
+        .expect("tool_result image must be promoted to currentMessage.images");
+    assert_eq!(images.len(), 1, "exactly one image should be forwarded");
+    assert_eq!(images[0].format, "png");
+
+    let context = current
+        .user_input_message_context
+        .as_ref()
+        .expect("tool_results context should exist");
+    let results = context.tool_results.as_ref().expect("tool_results");
+    let KiroToolResultContent::Text { text } = &results[0].content[0] else {
+        panic!("tool result should carry text content");
+    };
+    assert!(
+        text.contains("[Image]") && text.contains("screenshot of the page"),
+        "tool_result text must keep [Image] placeholder alongside text, got: {text}"
+    );
+}

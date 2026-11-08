@@ -574,6 +574,26 @@ pub async fn build_kiro_payload_with_tool_limit(
         };
     order_tool_results_like_previous_tool_uses(&mut current_tool_results, &history);
 
+    // Claude Code 的压缩（/compact 与自动 compact）把总结指令放在 tool_result
+    // 之后的同一条 user 消息里。Kiro 要求 tool result continuation 的 content
+    // 为空（下方 clear），这段指令若不并入 tool_result 会被静默丢掉——上游
+    // 收到的请求与普通续写一模一样，模型只会继续调工具而不写总结，客户端
+    // 侧表现为 "summarization produced empty response"。
+    if !current_tool_results.is_empty() {
+        let trailing_text =
+            extract_trailing_text_after_tool_results(current_message.content.as_ref());
+        if !trailing_text.is_empty() {
+            if let Some(last) = current_tool_results.last_mut() {
+                if let Some(KiroToolResultContent::Text { text }) = last.content.last_mut() {
+                    if !text.trim().is_empty() {
+                        text.push('\n');
+                    }
+                    text.push_str(&trailing_text);
+                }
+            }
+        }
+    }
+
     // 始终传递工具定义给 currentMessage,让 AI 能够调用工具
     // 只有当工具列表真的为空时,才会返回 None
     let tools_for_current = convert_tools(&processed_tools);
@@ -592,10 +612,32 @@ pub async fn build_kiro_payload_with_tool_limit(
     } || current_message.tool_call_id.is_some();
 
     // Kiro 的 tool result continuation 要求 content 为空，结果只放在 toolResults。
+    // tool_result 之后的顶层 text（压缩总结指令）已在上方并入最后一个
+    // tool_result，这里清空不会丢指令。
     if !current_tool_results.is_empty() || original_has_tool_results {
         current_content.clear();
     }
-    let current_images = extract_images(client, current_message.content.as_ref()).await;
+    // tool_result 里的图片：上游收图的唯一通道是 currentMessage.images
+    // （只有顶层块会被 extract_images 转发，嵌在 tool_result 里的会被静默
+    // 丢成文字占位）。把 tool_result content 里的 image 块提升到顶层 images；
+    // content.rs 已在 tool_result 文本里留了 "[Image]" 占位。
+    let mut current_images = extract_images(client, current_message.content.as_ref()).await;
+    if let Some(Value::Array(items)) = current_message.content.as_ref() {
+        for item in items {
+            if item.get("type").and_then(Value::as_str) != Some("tool_result") {
+                continue;
+            }
+            if let Some(Value::Array(blocks)) = item.get("content") {
+                for block in blocks {
+                    if block.get("type").and_then(Value::as_str) == Some("image") {
+                        if let Some(image) = extract_image_block(client, block).await {
+                            current_images.push(image);
+                        }
+                    }
+                }
+            }
+        }
+    }
     let current_documents = if let Some(HistoryItem::User { user_input_message }) = &sanitized_current {
         user_input_message.documents.clone().unwrap_or_default()
     } else {
