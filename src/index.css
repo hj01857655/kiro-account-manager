@@ -144,7 +144,7 @@
   --secondary-foreground: #ffffff !important;
   --accent-foreground: #ffffff !important;
   --muted-foreground: #cbd5e1 !important;
-  --input: rgba(255, 255, 255, 0.15) !important;
+  --input: rgb(var(--surface-rgb)) !important;
   --ring: rgba(255, 255, 255, 0.35) !important;
   --secondary: rgb(var(--surface-rgb)) !important;
   --muted: rgb(var(--primary-rgb) / 0.1) !important;
@@ -297,7 +297,7 @@
 .info-badge { background: rgb(59 130 246 / 0.1); color: rgb(59 130 246); }
 
   /* --- 侧边栏语义化类名 --- */
-  .sidebar-card { background: rgb(var(--surface-rgb) / 0.1); }
+  .sidebar-card { background: rgb(var(--surface-rgb)); }
   .sidebar-foreground { color: var(--foreground); }
   .sidebar-muted { color: var(--muted-foreground); opacity: 0.7; }
   .sidebar-active { background: var(--primary); color: white; }
