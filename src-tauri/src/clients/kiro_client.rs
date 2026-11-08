@@ -117,22 +117,72 @@ fn build_list_available_profiles_body() -> serde_json::Value {
 /// 给 RequestBuilder 加上 Kiro Management API 通用 headers
 ///
 /// 包含 Authorization、UA、AWS SDK 中间件需要的请求 ID/重试头。
+/// 数据面 TokenType 头：external_idp 账号的数据面/Profile 请求必须携带
+/// `TokenType: EXTERNAL_IDP`（对齐 kiro.rs-admin 与 Kiro IDE 的 auth-method
+/// 中间件）。其余账号类型不带头——AWS 侧按缺省（IdC/social）处理。
+/// external_idp 账号的 access token 是微软 JWT，AWS 仅凭 Bearer 无法区分身份类型。
+fn token_type_header(auth_method: Option<&str>) -> Option<(&'static str, String)> {
+    match auth_method.map(str::trim) {
+        Some(m) if m.eq_ignore_ascii_case("external_idp") => {
+            Some(("TokenType", "EXTERNAL_IDP".to_string()))
+        }
+        _ => None,
+    }
+}
+
+#[cfg(test)]
 fn with_kiro_runtime_management_headers(
     req: RequestBuilder,
     access_token: &str,
     machine_id: &str,
     region: &str,
 ) -> RequestBuilder {
+    with_kiro_runtime_management_headers_for_auth(req, access_token, machine_id, region, None)
+}
+
+fn with_kiro_runtime_management_headers_for_auth(
+    req: RequestBuilder,
+    access_token: &str,
+    machine_id: &str,
+    region: &str,
+    auth_method: Option<&str>,
+) -> RequestBuilder {
     let user_agent = build_kiro_management_user_agent(machine_id);
     let x_amz_user_agent = build_kiro_management_x_amz_user_agent(machine_id);
     let invocation_id = Uuid::new_v4().to_string();
-    req.header("Authorization", format!("Bearer {access_token}"))
+    let req = req
+        .header("Authorization", format!("Bearer {access_token}"))
         .header("host", build_kiro_management_host(region))
         .header("user-agent", user_agent.clone())
         .header("x-amz-user-agent", x_amz_user_agent)
         .header("amz-sdk-invocation-id", invocation_id)
         .header("amz-sdk-request", "attempt=1; max=1")
-        .header("connection", "close")
+        .header("connection", "close");
+    match token_type_header(auth_method) {
+        Some((name, value)) => req.header(name, value),
+        None => req,
+    }
+}
+
+fn with_kiro_control_plane_headers_for_auth(
+    req: RequestBuilder,
+    access_token: &str,
+    region: &str,
+    auth_method: Option<&str>,
+) -> RequestBuilder {
+    let invocation_id = Uuid::new_v4().to_string();
+    let req = req
+        .header("Authorization", format!("Bearer {access_token}"))
+        .header("host", build_kiro_management_host(region))
+        .header("user-agent", build_kiro_control_plane_user_agent())
+        .header("x-amz-user-agent", "aws-sdk-js/1.0.0")
+        .header("amz-sdk-invocation-id", invocation_id)
+        .header("amz-sdk-request", "attempt=1; max=3")
+        .header("connection", "close");
+    match token_type_header(auth_method) {
+        Some((name, value)) => req.header(name, value),
+        None => req,
+    }
 }
 
 fn with_kiro_control_plane_headers(
@@ -140,14 +190,7 @@ fn with_kiro_control_plane_headers(
     access_token: &str,
     region: &str,
 ) -> RequestBuilder {
-    let invocation_id = Uuid::new_v4().to_string();
-    req.header("Authorization", format!("Bearer {access_token}"))
-        .header("host", build_kiro_management_host(region))
-        .header("user-agent", build_kiro_control_plane_user_agent())
-        .header("x-amz-user-agent", "aws-sdk-js/1.0.0")
-        .header("amz-sdk-invocation-id", invocation_id)
-        .header("amz-sdk-request", "attempt=1; max=3")
-        .header("connection", "close")
+    with_kiro_control_plane_headers_for_auth(req, access_token, region, None)
 }
 
 async fn classify_kiro_management_error(api: &str, resp: reqwest::Response) -> String {
@@ -204,6 +247,7 @@ impl KiroClient {
         machine_id: &str,
         region: &str,
         profile_arn: Option<&str>,
+        auth_method: Option<&str>,
     ) -> Result<serde_json::Value, String> {
         let url = build_get_usage_limits_url(region, profile_arn);
 
@@ -212,11 +256,12 @@ impl KiroClient {
             profile_arn.unwrap_or("(none)")
         );
 
-        let request = with_kiro_runtime_management_headers(
+        let request = with_kiro_runtime_management_headers_for_auth(
             self.client.get(&url),
             access_token,
             machine_id,
             region,
+            auth_method,
         )
         .header("accept", "application/json");
 
@@ -243,11 +288,12 @@ impl KiroClient {
         machine_id: &str,
         regions: &[String],
         profile_arn: Option<&str>,
+        auth_method: Option<&str>,
     ) -> Result<(String, serde_json::Value), String> {
         let mut last_err = String::new();
         for region in regions {
             match self
-                .get_usage_limits(access_token, machine_id, region, profile_arn)
+                .get_usage_limits(access_token, machine_id, region, profile_arn, auth_method)
                 .await
             {
                 Ok(v) => return Ok((region.clone(), v)),
@@ -270,9 +316,13 @@ impl KiroClient {
         &self,
         access_token: &str,
         regions: &[String],
+        auth_method: Option<&str>,
     ) -> Result<Option<String>, String> {
         for region in regions {
-            match self.list_available_profiles(access_token, region).await {
+            match self
+                .list_available_profiles(access_token, region, auth_method)
+                .await
+            {
                 Ok(value) => {
                     if let Some(arn) = first_profile_arn_from_list_response(&value) {
                         log::info!(
@@ -300,17 +350,19 @@ impl KiroClient {
         _machine_id: &str,
         region: &str,
         profile_arn: Option<&str>,
+        auth_method: Option<&str>,
     ) -> Result<serde_json::Value, String> {
         let url = build_kiro_management_service_url(region);
         let body = build_list_available_models_body(profile_arn);
 
-        let request = with_kiro_control_plane_headers(self.client.post(&url), access_token, region)
-            .header("content-type", "application/x-amz-json-1.0")
-            .header(
-                "x-amz-target",
-                "KiroControlPlaneBearerService.ListAvailableModels",
-            )
-            .json(&body);
+        let request =
+            with_kiro_control_plane_headers_for_auth(self.client.post(&url), access_token, region, auth_method)
+                .header("content-type", "application/x-amz-json-1.0")
+                .header(
+                    "x-amz-target",
+                    "KiroControlPlaneBearerService.ListAvailableModels",
+                )
+                .json(&body);
 
         let response = request
             .send()
@@ -332,17 +384,19 @@ impl KiroClient {
         &self,
         access_token: &str,
         region: &str,
+        auth_method: Option<&str>,
     ) -> Result<serde_json::Value, String> {
         let url = build_kiro_management_service_url(region);
         let body = build_list_available_profiles_body();
 
-        let request = with_kiro_control_plane_headers(self.client.post(&url), access_token, region)
-            .header("content-type", "application/x-amz-json-1.0")
-            .header(
-                "x-amz-target",
-                "KiroControlPlaneBearerService.ListAvailableProfiles",
-            )
-            .json(&body);
+        let request =
+            with_kiro_control_plane_headers_for_auth(self.client.post(&url), access_token, region, auth_method)
+                .header("content-type", "application/x-amz-json-1.0")
+                .header(
+                    "x-amz-target",
+                    "KiroControlPlaneBearerService.ListAvailableProfiles",
+                )
+                .json(&body);
 
         let response = request
             .send()
@@ -366,14 +420,16 @@ impl KiroClient {
         machine_id: &str,
         region: &str,
         path: &str,
+        auth_method: Option<&str>,
     ) -> Result<serde_json::Value, String> {
         let url = format!("{}{}", build_kiro_management_service_url(region), path);
 
-        let request = with_kiro_runtime_management_headers(
+        let request = with_kiro_runtime_management_headers_for_auth(
             self.client.get(&url),
             access_token,
             machine_id,
             region,
+            auth_method,
         )
         .header("accept", "application/json");
 
@@ -400,6 +456,7 @@ impl KiroClient {
         region: &str,
         profile_arn: Option<&str>,
         overage_status: &str,
+        auth_method: Option<&str>,
     ) -> Result<(), String> {
         let url = format!(
             "{}/setUserPreference",
@@ -413,11 +470,12 @@ impl KiroClient {
             body["profileArn"] = serde_json::json!(profile_arn);
         }
 
-        let request = with_kiro_runtime_management_headers(
+        let request = with_kiro_runtime_management_headers_for_auth(
             self.client.post(&url),
             access_token,
             machine_id,
             region,
+            auth_method,
         )
         .header("content-type", "application/json")
         .json(&body);
