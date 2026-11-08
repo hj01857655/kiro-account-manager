@@ -265,6 +265,26 @@ impl AuthProvider for IdcProvider {
         let region = &self.region;
         let start_url = self.get_start_url();
 
+        // Enterprise + Kiro 门户 Start URL（kiro.dev / kiro.dev/start/k-xxx）→
+        // 外部 IdP（企业 SSO）两段式流程；AWS SSO 门户（*.awsapps.com）走原 IdC 流程。
+        // 对齐 portal vendor.js 的判别（ahe/zv：kiro.dev 域 → KiroStartUrl）与
+        // Enterprise 能力判定（awsidc || external_idp）。
+        if provider == "Enterprise" && crate::auth::external_idp_login::is_kiro_portal_start_url(start_url) {
+            #[cfg(debug_assertions)]
+            println!("[IdC] Enterprise start URL is a Kiro portal address, routing to External IdP (two-stage) flow");
+            let cancelled = Arc::new(AtomicBool::new(false));
+            set_pending_login(
+                Arc::new(std::sync::Mutex::new(None)),
+                cancelled.clone(),
+            );
+            let _pending_login_guard = PendingLoginGuard;
+            return crate::auth::external_idp_login::login_external_idp_via_portal(
+                start_url.to_string(),
+                cancelled,
+            )
+            .await;
+        }
+
         #[cfg(debug_assertions)]
         println!("\n[IdC] Starting {provider} authentication (Authorization Code Flow)...");
         #[cfg(debug_assertions)]
@@ -375,6 +395,10 @@ impl AuthProvider for IdcProvider {
             }, // Enterprise 保存 start_url
             profile_arn: None,
             machine_id: None,
+            // IdC 登录默认无 external_idp 元数据；descriptor 分支构造时会填充
+            token_endpoint: None,
+            issuer_url: None,
+            idp_scopes: None,
         })
     }
 
@@ -424,6 +448,9 @@ impl AuthProvider for IdcProvider {
             start_url: self.start_url.clone(), // 保留原有的 start_url
             profile_arn: None,
             machine_id: None,
+            token_endpoint: None,
+            issuer_url: None,
+            idp_scopes: None,
         })
     }
 
