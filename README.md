@@ -100,6 +100,9 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 
 ### 🚧 未发版（public，相对 v1.9.2）
 
+- **修复**: 网关数据面补发 `TokenType: EXTERNAL_IDP` — 微软 Entra ID（`external_idp`）账号此前仅管理面注入该头，对话主路径（`call_generate_assistant_response`）漏发导致网关核心对话不可用；现与管理面对齐
+- **修复**: macOS Cmd 系快捷键拦截与字体渲染灰阶抗锯齿
+- **样式**: UI 视觉降噪 — 渐变高光改纯色主色、背景渐变强度调低、玻璃拟态残留透明度移除
 - **新增**: 微软 Entra ID / Azure AD 账号（`external_idp`）导入与 Token 刷新 — 刷新走微软 OAuth2 token 端点，不走 AWS OIDC；仅支持导入，不支持应用内微软登录
 - **修复**: 企业 IdC 导入时从 `clientSecret` JWT 提取 `startUrl` / 纠正 provider，并优先企业域，减少误判 BuilderId 导致刷新 400
 - **修复**: `getUsageLimits` 不再携带 `profileArn`（企业号带了会 400）；Enterprise 查配额与普通账号统一路径，region 优先账号自身再回退 `us-east-1` / `eu-central-1`
