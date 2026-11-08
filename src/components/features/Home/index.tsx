@@ -177,7 +177,7 @@ function Home({ onNavigate }: HomeProps) {
       <div className="w-full">
         {/* Header（紧凑）*/}
         <div className="mb-4 flex items-center gap-2.5 animate-slide-in-left">
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-md ring-1 ring-primary/20`}>
+          <div className={`w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md ring-1 ring-primary/20`}>
             <Sparkles size={20} className="text-white" />
           </div>
           <div className="flex flex-col">
@@ -495,7 +495,7 @@ function CurrentAccountDetail({ account, accent, maskEmail, t }: {
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0 ${
           provider === 'Google' ? 'bg-gradient-to-br from-red-500 to-orange-500' :
           isGitHubProvider(provider) ? 'bg-gradient-to-br from-gray-700 to-gray-900' :
-          `bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo}`
+          `bg-primary`
         }`}>
           {provider?.[0] || 'K'}
         </div>

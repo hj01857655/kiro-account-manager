@@ -103,11 +103,11 @@ const AccountCard = memo(function AccountCard({
   }, [onContextMenuOpen])
 
   const cardStatusClass = isSelected
-    ? "border-primary bg-primary/5 shadow-primary/10"
+    ? "border-primary bg-primary/5 shadow-sm"
     : isCurrentAccount
-      ? "border-green-500/50 bg-green-500/5 shadow-green-500/10"
+      ? "border-green-500/50 bg-green-500/5 shadow-sm"
       : isBanned
-        ? "border-red-500/50 bg-red-500/5 shadow-red-500/10"
+        ? "border-red-500/50 bg-red-500/5 shadow-sm"
         : !isNormal
           ? "border-orange-500/40 bg-orange-500/5 shadow-orange-500/5"
           : "bg-card border-border hover:border-primary/30"

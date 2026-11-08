@@ -110,7 +110,7 @@ function AgentConfig() {
     <div className="h-full flex flex-col max-w-full overflow-x-hidden surface-main">
       {/* Header（紧凑）*/}
       <div className="px-5 py-3 border-b border-border flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-md ring-1 ring-primary/20 flex-shrink-0`}>
+        <div className={`w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md ring-1 ring-primary/20 flex-shrink-0`}>
           <Settings2 size={20} className="text-primary-foreground" />
         </div>
         <div className="flex flex-col min-w-0 flex-1">

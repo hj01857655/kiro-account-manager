@@ -609,7 +609,7 @@ return (
     <DialogContent maxWidth="700px">
       <DialogHeader>
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-md ${accent.shadow}`}>
+          <div className={`w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md`}>
             <Upload size={20} className="text-white" strokeWidth={2} />
           </div>
           <div>

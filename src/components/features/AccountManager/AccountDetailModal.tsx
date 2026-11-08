@@ -34,7 +34,7 @@ const QuotaCard = memo(({ title, used, quota, icon, status, expiry, colors, t }:
   return (
     <div className={`rounded-lg p-3 border transition-colors duration-200 hover:shadow-md ${
       hasQuota && isActive
-        ? 'border-blue-500/30 bg-blue-500/5 shadow-blue-500/10'
+        ? 'border-blue-500/30 bg-blue-500/5 shadow-sm'
         : `border-border bg-muted/30`
     }`}>
       <div className="flex items-center gap-2 mb-3">
@@ -43,8 +43,8 @@ const QuotaCard = memo(({ title, used, quota, icon, status, expiry, colors, t }:
             ? title.includes('试用')
               ? 'bg-cyan-500 shadow-lg shadow-cyan-500/50'
               : title.includes('奖励')
-                ? 'bg-purple-500 shadow-lg shadow-purple-500/50'
-                : 'bg-blue-500 shadow-lg shadow-blue-500/50'
+                ? 'bg-purple-500 shadow-lg'
+                : 'bg-blue-500 shadow-lg'
             : 'bg-gray-400'
         }`}></div>
         <span className={`text-xs font-medium uppercase tracking-wide ${
@@ -286,9 +286,9 @@ function AccountDetailModal({ account, onClose, onRefresh }: AccountDetailModalP
                   (currentAccount.usageData?.subscriptionInfo?.subscriptionTitle?.toUpperCase()?.includes('ENTERPRISE'))
                     ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-amber-500/30'
                     : (currentAccount.usageData?.subscriptionInfo?.subscriptionTitle?.includes('PRO+'))
-                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-purple-500/30'
+                      ? 'bg-purple-500 text-white shadow-md'
                       : (currentAccount.usageData?.subscriptionInfo?.subscriptionTitle?.includes('PRO'))
-                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-blue-500/30'
+                        ? 'bg-blue-500 text-white shadow-md'
                         : (currentAccount.usageData?.subscriptionInfo?.subscriptionTitle?.toUpperCase()?.includes('KIRO'))
                           ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-teal-500/30'
                           : `bg-muted/30 text-muted-foreground`

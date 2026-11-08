@@ -129,7 +129,7 @@ function AccountHeader({ currentAccount, userInfo, subInfo, daysUntilReset, refr
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md flex-shrink-0 ${
           currentAccount.provider === 'Google' ? 'bg-gradient-to-br from-red-500 to-orange-500' :
           isGitHubProvider(currentAccount.provider) ? 'bg-gradient-to-br from-gray-700 to-gray-900' :
-          `bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo}`
+          `bg-primary`
         }`}>
           {currentAccount.provider?.[0] || 'K'}
         </div>

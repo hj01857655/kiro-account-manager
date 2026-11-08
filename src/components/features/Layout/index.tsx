@@ -250,7 +250,6 @@ function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
               <div className="flex items-center gap-2 mb-2">
                 <div className="relative">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  <div className="absolute inset-0 w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />
                 </div>
                 <span className="text-xs sidebar-foreground">{t('nav.kiroConnected')}</span>
               </div>
@@ -268,7 +267,6 @@ function Sidebar({ activeMenu, onMenuChange }: SidebarProps) {
           ) : (
             <div className="relative">
               <div className="w-2 h-2 rounded-full bg-green-500" />
-              <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping" />
             </div>
           )}
         </div>

@@ -1080,7 +1080,7 @@ export default function SessionManager() {
       <div className="shrink-0 border-b border-border/70 bg-card/70 px-6 py-4 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/70 shadow-lg shadow-primary/20 ring-1 ring-primary/25">
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-primary shadow-md ring-1 ring-primary/25">
               <div className="absolute inset-0 rounded-2xl bg-white/10" />
               <MessageSquare size={21} className="relative text-primary-foreground" />
             </div>

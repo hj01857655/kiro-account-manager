@@ -149,7 +149,7 @@ function AccountHeader({
       <div className="flex items-center justify-between gap-3">
         {/* 左侧：标题 / 选中提示 */}
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-md ring-1 ring-primary/20 flex-shrink-0`}>
+          <div className={`w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md ring-1 ring-primary/20 flex-shrink-0`}>
             <Sparkles size={20} className="text-primary-foreground" />
           </div>
           <div className="flex flex-col min-w-0">
@@ -299,7 +299,7 @@ function AccountHeader({
               </IconButton>
               <button
                 onClick={onBatchEdit}
-                className={`px-3 h-8 text-xs font-medium rounded-md inline-flex items-center gap-1.5 cursor-pointer text-white shadow-sm bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} hover:opacity-90 transition-opacity`}
+                className={`px-3 h-8 text-xs font-medium rounded-md inline-flex items-center gap-1.5 cursor-pointer text-white shadow-sm bg-primary hover:opacity-90 transition-opacity`}
                 title={t('accounts.batchEditTagsAndGroups')}
               >
                 <Edit size={13} />
@@ -339,7 +339,7 @@ function AccountHeader({
         <div className="mt-2 flex items-center gap-2">
           <div className="flex-1 h-1 bg-muted/40 rounded-full overflow-hidden">
             <div
-              className={`h-full bg-gradient-to-r ${accent.gradientFrom} ${accent.gradientTo} rounded-full transition-all`}
+              className={`h-full bg-primary rounded-full transition-all`}
               style={{ width: `${(refreshProgress.current / refreshProgress.total) * 100}%` }}
             />
           </div>

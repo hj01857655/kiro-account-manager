@@ -55,10 +55,10 @@ function CurrentAccountCard({
       <CardContent className="pt-6">
         {localToken ? (
           <div className="flex items-center gap-4 group relative">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg transition-transform hover:scale-105 flex-shrink-0 ${
-              localToken.provider === 'Google' ? 'bg-gradient-to-br from-red-500 to-orange-500 shadow-red-500/25' :
-              isGitHubProvider(localToken.provider) ? 'bg-gradient-to-br from-gray-700 to-gray-900 shadow-gray-500/25' :
-              `bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} ${accent.shadow}`
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-md transition-transform hover:scale-105 flex-shrink-0 ${
+              localToken.provider === 'Google' ? 'bg-gradient-to-br from-red-500 to-orange-500' :
+              isGitHubProvider(localToken.provider) ? 'bg-gradient-to-br from-gray-700 to-gray-900' :
+              'bg-primary'
             }`}>
               {localToken.provider?.[0] || 'K'}
             </div>
@@ -80,7 +80,7 @@ function CurrentAccountCard({
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 py-8">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center animate-float bg-muted/30`}>
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center bg-muted/30`}>
               <Users size={28} className={"text-muted-foreground"} />
             </div>
             <span className={`text-muted-foreground font-medium`}>{t('home.notLoggedIn')}</span>

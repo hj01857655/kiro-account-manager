@@ -82,7 +82,7 @@ function FilterField({ label, hint, active, accent, children, fullWidth = false 
     <div
       className={`
         rounded-xl border p-3 space-y-2.5 transition-all duration-200
-        ${active ? `${accent.border} ${accent.bgSoft} shadow-sm ${accent.shadow}` : `border-border surface-card`}
+        ${active ? `${accent.border} ${accent.bgSoft} shadow-sm` : `border-border surface-card`}
         ${fullWidth ? 'sm:col-span-2' : ''}
       `}
     >

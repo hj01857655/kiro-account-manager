@@ -241,7 +241,7 @@ function AddMCPModal({ onClose, onSuccess, projectDir, readOnly }: any) {
         {/* 标题 */}
         <div className={`relative flex items-center justify-between px-6 py-4 border-b border-border`}>
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} flex items-center justify-center shadow-lg ${accent.shadow}`}>
+            <div className={`w-10 h-10 rounded-lg bg-primary flex items-center justify-center shadow-md`}>
               <Terminal size={20} className="text-white" />
             </div>
             <h2 className={`text-base font-semibold text-foreground`}>{t('mcpManager.addMCPServer')}</h2>

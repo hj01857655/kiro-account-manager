@@ -84,7 +84,7 @@ export function getSolidAccentButton(accent: any) {
 }
 
 export function getGradientAccentButton(accent: any) {
-  return `bg-gradient-to-br ${accent.gradientFrom} ${accent.gradientTo} text-white hover:shadow-lg shadow-md`;
+  return `bg-primary text-white hover:shadow-lg shadow-md`;
 }
 
 export function getThemeSurfaceStyles(theme: string) {
