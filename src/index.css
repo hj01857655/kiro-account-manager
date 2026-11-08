@@ -315,10 +315,14 @@
   html { background-color: var(--bg-color) !important; }
   body {
     background-color: var(--bg-color);
+    /* 渐变透明度整体压低（0.92/0.78/0.68 → 0.35/0.28/0.22）：
+       卡片层实色化之后，高饱和光斑底成了"底花面实"的不协调来源，
+       这里退成若隐若现的色调倾向——主题色相保留（tech 偏青、sakura 偏粉），
+       但不再与实色卡片争夺视觉权重。若要完全平铺，把三层 radial 整段删除即可。 */
     background-image:
-      radial-gradient(circle at 0% 0%, rgb(var(--bg-gradient-1-rgb) / 0.92) 0%, transparent 42%),
-      radial-gradient(circle at 100% 0%, rgb(var(--bg-gradient-2-rgb) / 0.78) 0%, transparent 38%),
-      radial-gradient(circle at 50% 100%, rgb(var(--bg-gradient-3-rgb) / 0.68) 0%, transparent 44%),
+      radial-gradient(circle at 0% 0%, rgb(var(--bg-gradient-1-rgb) / 0.35) 0%, transparent 42%),
+      radial-gradient(circle at 100% 0%, rgb(var(--bg-gradient-2-rgb) / 0.28) 0%, transparent 38%),
+      radial-gradient(circle at 50% 100%, rgb(var(--bg-gradient-3-rgb) / 0.22) 0%, transparent 44%),
       linear-gradient(180deg, rgb(var(--background-rgb) / 0.96) 0%, rgb(var(--background-rgb) / 1) 100%);
     background-attachment: fixed;
     color: var(--foreground);
@@ -326,6 +330,12 @@
     position: relative;
     overflow: hidden;
   }
+}
+
+/* macOS 字体渲染：WKWebView 在深色 UI 上默认亚像素渲染会发虚，
+   灰阶抗锯齿更贴近原生 mac 应用观感；浅色主题下差异极小，无需分支。 */
+html[data-os='macos'] {
+  -webkit-font-smoothing: antialiased;
 }
 
 /* macOS 交通灯避让：窗口左上角的红黄绿按钮约 70×28px，浮在内容之上。
