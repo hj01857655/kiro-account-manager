@@ -48,7 +48,7 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 
 ## 📥 下载
 
-**最新版本 v1.9.3**（发布于 2026-11-08）：请前往 [Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest)（自动保持最新）
+**最新版本 v1.9.301**（发布于 2026-11-08）：请前往 [Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest)（自动保持最新）
 
 > 以下下载链接可能滞后，以 Releases 为准。
 
@@ -62,18 +62,18 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 
 | 平台 | 架构 | 文件格式 | 下载链接 |
 |------|------|---------|---------|
-| 🪟 **Windows** | x64 | MSI 安装包 | [KiroAccountManager_1.9.3_x64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_x64_zh-CN.msi) |
-| 🪟 **Windows** | ARM64 | MSI 安装包 | [KiroAccountManager_1.9.3_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_arm64_zh-CN.msi) |
-| 🍎 **macOS** | x64 / Intel | DMG 镜像 | [KiroAccountManager_1.9.3_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_x64.dmg) |
-| 🍎 **macOS** | x64 / Intel | App 压缩包 | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_x64.app.tar.gz) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG 镜像 | [KiroAccountManager_1.9.3_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_aarch64.dmg) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App 压缩包 | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_aarch64.app.tar.gz) |
-| 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.3_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_amd64.AppImage) |
-| 🐧 **Linux** | x86_64 | DEB 包 | [KiroAccountManager_1.9.3_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_amd64.deb) |
-| 🐧 **Linux** | x86_64 | RPM 包 | [KiroAccountManager-1.9.3-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager-1.9.3-1.x86_64.rpm) |
-| 🐧 **Linux** | ARM64 | AppImage | [KiroAccountManager_1.9.3_arm64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_arm64.AppImage) |
-| 🐧 **Linux** | ARM64 | DEB 包 | [KiroAccountManager_1.9.3_arm64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_arm64.deb) |
-| 🐧 **Linux** | ARM64 | RPM 包 | [KiroAccountManager-1.9.3-1.aarch64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager-1.9.3-1.aarch64.rpm) |
+| 🪟 **Windows** | x64 | MSI 安装包 | [KiroAccountManager_1.9.301_x64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_x64_zh-CN.msi) |
+| 🪟 **Windows** | ARM64 | MSI 安装包 | [KiroAccountManager_1.9.301_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_arm64_zh-CN.msi) |
+| 🍎 **macOS** | x64 / Intel | DMG 镜像 | [KiroAccountManager_1.9.301_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_x64.dmg) |
+| 🍎 **macOS** | x64 / Intel | App 压缩包 | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_x64.app.tar.gz) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG 镜像 | [KiroAccountManager_1.9.301_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_aarch64.dmg) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App 压缩包 | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_aarch64.app.tar.gz) |
+| 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.301_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_amd64.AppImage) |
+| 🐧 **Linux** | x86_64 | DEB 包 | [KiroAccountManager_1.9.301_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_amd64.deb) |
+| 🐧 **Linux** | x86_64 | RPM 包 | [KiroAccountManager-1.9.301-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager-1.9.301-1.x86_64.rpm) |
+| 🐧 **Linux** | ARM64 | AppImage | [KiroAccountManager_1.9.301_arm64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_arm64.AppImage) |
+| 🐧 **Linux** | ARM64 | DEB 包 | [KiroAccountManager_1.9.301_arm64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_arm64.deb) |
+| 🐧 **Linux** | ARM64 | RPM 包 | [KiroAccountManager-1.9.301-1.aarch64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager-1.9.301-1.aarch64.rpm) |
 
 > **macOS 样式说明**：若出现样式显示异常，请基于当前仓库源码自行调整（我没有 macOS 设备，无法复现与调试）。
 
@@ -98,10 +98,13 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 以下内容按 GitHub Release 的实际发布时间窗口整理。  
 **「未发版」** 为 `public` 分支已合入、尚未打 GitHub Release 的改动（用户安装包仍以 Releases 为准）。
 
-### 🚧 未发版（public，相对 v1.9.3）
+### 🚀 v1.9.301 - 2026-11-08 — 网关修复合集
 
 - **修复**: 网关数据面补发 `TokenType: EXTERNAL_IDP` — Entra ID 账号此前仅管理面注入该头，对话主路径漏发导致网关核心对话不可用；现与管理面对齐
 - **修复**: `/health` 健康检查免客户端 Key — 探活与健康检查不应要求业务 Key（#137）
+- **修复**: Claude Code `/compact` 压缩空响应（#142）— 总结指令跟在最后一个 tool_result 之后的同一条 user 消息里，之前随 content 清空被丢弃，上游收到的请求与普通续写无异，模型只会继续调工具；现该指令并入最后一个 tool_result 透传
+- **修复**: tool_result 中的图片透传（#142）— Claude Code Read 读图时 image 块嵌在 tool_result.content 里，之前被静默丢弃；现提升到 currentMessage.images 转发上游，模型可以看到截图
+- **修复**: 图片 token 估算虚高（#142）— 图片 base64 之前按文本长度 ÷4 计入（一张 240KB PNG 虚报十几万 token，提前触发自动压缩），现解析 PNG/JPEG 图像头部按像素计（宽×高÷750，单张上限 1600）；非流式/流式/count_tokens 三处口径统一
 - **修复**: macOS Cmd 系快捷键拦截与字体渲染灰阶抗锯齿
 - **样式**: 界面视觉降噪 — 表面体系全面实色化、品牌渐变改纯色主色、背景渐变强度调低、玻璃拟态残留透明度移除；导入入口图标改为「添加」语义
 
@@ -491,4 +494,4 @@ bun run tauri build  # 构建发行版
 ---
 
 <p align="center">Made with ❤️ by hj01857655</p>
-<p align="center"><sub>最后更新：2026-06-17 | 版本：v1.9.2</sub></p>
+<p align="center"><sub>最后更新：2026-11-08 | 版本：v1.9.3</sub></p>

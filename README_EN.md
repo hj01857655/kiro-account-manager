@@ -46,24 +46,24 @@ Kiro Account Manager is a desktop application based on **Tauri 2.x** for central
 
 ## 📥 Download
 
-**Latest Version v1.9.2** (Released 2026-06-17): Please visit [Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest) (auto-kept up-to-date)
+**Latest Version v1.9.301** (Released 2026-11-08): Please visit [Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest) (auto-kept up-to-date)
 
 > The download links below may lag behind, refer to Releases for the latest versions.
 
 | Platform | Architecture | File Format | Download Link |
 |----------|-------------|-------------|---------------|
-| 🪟 **Windows** | x64 | MSI Installer | [KiroAccountManager_1.9.2_x64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_x64_zh-CN.msi) |
-| 🪟 **Windows** | ARM64 | MSI Installer | [KiroAccountManager_1.9.2_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64_zh-CN.msi) |
-| 🍎 **macOS** | x64 / Intel | DMG Image | [KiroAccountManager_1.9.2_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_x64.dmg) |
-| 🍎 **macOS** | x64 / Intel | App Archive | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_x64.app.tar.gz) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG Image | [KiroAccountManager_1.9.2_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_aarch64.dmg) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App Archive | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_aarch64.app.tar.gz) |
-| 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.2_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.AppImage) |
-| 🐧 **Linux** | x86_64 | DEB Package | [KiroAccountManager_1.9.2_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.deb) |
-| 🐧 **Linux** | x86_64 | RPM Package | [KiroAccountManager-1.9.2-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager-1.9.2-1.x86_64.rpm) |
-| 🐧 **Linux** | ARM64 | AppImage | [KiroAccountManager_1.9.2_arm64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64.AppImage) |
-| 🐧 **Linux** | ARM64 | DEB Package | [KiroAccountManager_1.9.2_arm64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64.deb) |
-| 🐧 **Linux** | ARM64 | RPM Package | [KiroAccountManager-1.9.2-1.aarch64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager-1.9.2-1.aarch64.rpm) |
+| 🪟 **Windows** | x64 | MSI Installer | [KiroAccountManager_1.9.301_x64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_x64_zh-CN.msi) |
+| 🪟 **Windows** | ARM64 | MSI Installer | [KiroAccountManager_1.9.301_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_arm64_zh-CN.msi) |
+| 🍎 **macOS** | x64 / Intel | DMG Image | [KiroAccountManager_1.9.301_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_x64.dmg) |
+| 🍎 **macOS** | x64 / Intel | App Archive | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_x64.app.tar.gz) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG Image | [KiroAccountManager_1.9.301_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_aarch64.dmg) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App Archive | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_aarch64.app.tar.gz) |
+| 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.301_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_amd64.AppImage) |
+| 🐧 **Linux** | x86_64 | DEB Package | [KiroAccountManager_1.9.301_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_amd64.deb) |
+| 🐧 **Linux** | x86_64 | RPM Package | [KiroAccountManager-1.9.301-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager-1.9.301-1.x86_64.rpm) |
+| 🐧 **Linux** | ARM64 | AppImage | [KiroAccountManager_1.9.301_arm64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_arm64.AppImage) |
+| 🐧 **Linux** | ARM64 | DEB Package | [KiroAccountManager_1.9.301_arm64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager_1.9.301_arm64.deb) |
+| 🐧 **Linux** | ARM64 | RPM Package | [KiroAccountManager-1.9.301-1.aarch64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.301/KiroAccountManager-1.9.301-1.aarch64.rpm) |
 
 > **macOS Style Note**: If style display issues occur, please adjust based on the current repository source code (I don't have a macOS device, cannot reproduce and debug).
 
@@ -86,16 +86,48 @@ Kiro Account Manager is a desktop application based on **Tauri 2.x** for central
 Entries are grouped by the actual GitHub Release publish windows.  
 **Unreleased** lists changes already on the `public` branch that are **not** yet in a GitHub Release (installed packages still follow Releases).
 
-### 🚧 Unreleased (public, since v1.9.2)
+### 🚀 v1.9.301 - 2026-11-08 — Gateway Fix Collection
 
-- **New**: Microsoft Entra ID / Azure AD accounts (`external_idp`) — import + token refresh via Microsoft OAuth2 token endpoint (not AWS OIDC); import-only, no in-app Microsoft login
-- **Fix**: Enterprise IdC import extracts `startUrl` / provider from `clientSecret` JWT and prefers enterprise domains to avoid mis-classifying as BuilderId (refresh 400)
+- **Fix**: Gateway data plane now sends `TokenType: EXTERNAL_IDP` — Entra ID accounts previously had the header injected only on the management side; the main conversation path omitted it, breaking gateway chat; now aligned with the management plane
+- **Fix**: `/health` no longer requires a client key — health checks should not require a business key (#137)
+- **Fix**: Claude Code `/compact` returned empty responses (#142) — the summary instruction follows the last `tool_result` inside the same user message and was previously dropped along with the emptied content, so upstream saw a normal continuation request; it is now merged into the last tool_result and forwarded
+- **Fix**: Images inside `tool_result` are now forwarded (#142) — image blocks returned by Claude Code's Read were nested in `tool_result.content` and silently dropped; they are now promoted to `currentMessage.images` so the model can see screenshots
+- **Fix**: Image token overestimation (#142) — image base64 was previously counted as text length ÷ 4 (a 240KB PNG inflated by 100k+ tokens, triggering early auto-compaction); now parsed from PNG/JPEG headers by pixels (width × height ÷ 750, max 1600 per image), unified across non-streaming / streaming / count_tokens
+- **Fix**: macOS Cmd-series shortcut interception and grayscale font anti-aliasing
+- **Style**: Visual noise reduction — fully solid surface system, brand gradients replaced with a solid primary color, weaker background gradients, glassmorphism residue removed; import entry icon changed to "add" semantics
+
+### 🚀 v1.9.3 - 2026-11-08 — Microsoft Entra ID Support, Kiro IDE 1.0 Adaptation and Gateway Usage System
+
+> This release adds full **Microsoft Entra ID (Azure AD)** account support (interactive login + multi-channel import + token refresh), follows **Kiro IDE 1.0** local config formats (Hooks / Custom Agents / permission model), adds gateway usage statistics, privacy masking and conversation capture, and overhauls the UI visual system.
+
+#### 🔐 Microsoft Entra ID (Azure AD) Accounts
+- **New**: External IdP interactive login — enterprise entries recognizing `kiro.dev/start/k-xxx` URLs automatically run the two-step Kiro portal → Microsoft OAuth2 flow, separate from the IdC `*.awsapps.com` flow
+- **New**: Entra ID import + token refresh via the Microsoft OAuth2 token endpoint (`login.microsoftonline.com`), not AWS OIDC; import-only, no in-app Microsoft login
+- **New**: Management and gateway data planes both inject `TokenType: EXTERNAL_IDP` by account identity; identity claims (email / preferred_username / upn) readable locally
+- **Fix**: Enterprise IdC import extracts `startUrl` / provider from the `clientSecret` JWT and prefers enterprise domains to avoid mis-classifying as BuilderId (refresh 400)
 - **Fix**: `getUsageLimits` no longer sends `profileArn` (enterprise 400); Enterprise usage uses the same path as other accounts with region preference + `us-east-1` / `eu-central-1` fallback
+- **Fix**: Enterprise accounts allow missing `userId` / `email` (auto-generated identifiers), and `accounts-updated` is dispatched after login (#136)
+
+#### 🌐 Gateway: Usage Statistics, Privacy Masking and Capture
+- **New**: Usage statistics — quota / session / billing views with context occupancy columns and OTLP export; load-balancing quota strategy uses `usageBreakdownList`
+- **New**: Privacy masking — redaction backend + streaming/non-streaming response replacement, fixing streaming placeholder split leakage (hold-back across deltas); user-editable rules + 7-day trend + audit page
+- **New**: Conversation capture (opt-in) — per-turn shard persistence + session replay
+- **New**: Context page rework — prompt composition estimate / calibration, session-level cache / baseline / velocity / scoring
+- **New**: Session-sticky account selection; client agent identification (UA signature table + `x-agent-name`)
+- **New**: Health-check completion — half-open probing recovers unhealthy accounts; optional per-event stream logging (`log_stream_events`)
+- **Enhance**: Request logs gain token / billing / cache read-write / client (User-Agent) columns
+- **Fix**: Duplicate `content_block_start` for the same `tool_use` id; stream body logs record the full protocol response
+
+#### 🧩 Kiro IDE 1.0 Adaptation
+- **Compat**: Hooks support the new `.json` format (one file may hold multiple hooks; fields changed to `trigger` / `action`) plus user-level global hooks (`~/.kiro/hooks`); Custom Agents support the new JSON format (replacing Markdown front-matter). Legacy formats remain readable and editable
+- **Compat**: Permission management migrated from legacy Trusted Commands to Kiro IDE 1.0's `permissions.yaml` capability model — global permission rule editor (capability / effect / match / exclude / policies); legacy `kiroAgent.*` config migrated as a one-time fallback; legacy dead code removed
+
+#### 🔧 Fixes and Hardening
+- **Fix**: Main window visible immediately (no startup white screen); tool calling restored (tools always passed); Bedrock `TOOL_CONFIG_MISSING`
+- **Fix**: Kiro CLI 2.37 token write format; auto-switch quota parsing precision; one-click switch skips zero-quota accounts
+- **Change**: Gateway client key fixed to `kiro` (both `Authorization: Bearer kiro` and `x-api-key: kiro` accepted), API Key management removed — legacy key fields are read for compatibility only
+- **Gateway**: GPT-5.6 series and Claude Sonnet 5 models; OpenAI token estimates via tiktoken-rs (`o200k_base`); retired Claude 3 alias mappings removed
 - **Harden**: Skill branch-name injection guard, elevation restart confirmation, OAuth deep-link lock poison recovery
-- **Gateway**: GPT-5.6 series and Claude Sonnet 5; OpenAI token estimates via tiktoken-rs (`o200k_base`); removed retired Claude 3 alias mapping
-- **Gateway**: Removed API Key management — the client key is fixed to `kiro` (both `Authorization: Bearer kiro` and `x-api-key: kiro` are accepted); legacy key fields in existing configs are read for compatibility only
-- **Compat**: Follow Kiro IDE 1.0 local config format — Hooks support the new `.json` format (one file may hold multiple hooks; fields changed to `trigger` / `action`) plus user-level global hooks (`~/.kiro/hooks`); Custom Agents support the new JSON format (replacing Markdown front-matter). Legacy `.kiro.hook` and `.md` files remain readable and editable
-- **Compat**: Permission management migrated from the legacy Trusted Commands to Kiro IDE 1.0's `permissions.yaml` capability model — added a global permission rule editor (capability / effect / match / exclude / policies); the backend reads/writes `~/.kiro/settings/permissions.yaml` directly; legacy `kiroAgent.*` config is migrated as a one-time fallback on first read, and all legacy Trusted Commands dead code was removed
 
 ### 🏗️ v1.9.2 - 2026-06-17 — Linux ARM64 Architecture Support and macOS Startup Fix
 
@@ -111,7 +143,7 @@ Entries are grouped by the actual GitHub Release publish windows.
 #### 🔒 UA Alignment
 - **Fix**: API request User-Agent fully aligned with the real Kiro IDE — management APIs (`getUsageLimits`, `ListAvailableModels`) use `aws-sdk-js/1.0.0` + `codewhispererruntime#1.0.0` + `m/N,E`; streaming API (`generateAssistantResponse`) uses `aws-sdk-js/1.0.39` + `codewhispererstreaming#1.0.39` + `m/N`.
 
-### 🚧 Unreleased — Account Isolation and Kiro2API Reliability
+#### 🔑 Account Isolation and Kiro2API Reliability (v1.9.2 continued)
 
 > Focuses on long-running multi-account issues: account-scoped machine IDs, per-account proxies, safer account-file saves, upstream error passthrough, Responses compatibility, and Linux WebKit software-rendering behavior.
 
@@ -376,4 +408,4 @@ This software is for learning and communication purposes only. Users are respons
 ---
 
 <p align="center">Made with ❤️ by hj01857655</p>
-<p align="center"><sub>Last updated: 2026-06-17 | Version: v1.9.2</sub></p>
+<p align="center"><sub>Last updated: 2026-11-08 | Version: v1.9.301</sub></p>
