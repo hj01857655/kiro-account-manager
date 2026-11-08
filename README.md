@@ -125,8 +125,6 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 - **适配**: 权限管理从旧版 Trusted Commands 迁移到 `permissions.yaml` 能力模型 — 新增全局权限规则编辑器（capability / effect / match / exclude / policies），后端直接读写 `~/.kiro/settings/permissions.yaml`；首次读取时兜底迁移旧 `kiroAgent.*` 配置，并移除旧 Trusted Commands 死代码
 
 #### 🖥️ 界面与体验
-- **样式**: 界面视觉降噪 — 表面体系全面实色化、品牌渐变改纯色主色、背景渐变强度调低、玻璃拟态残留透明度移除；导入入口图标改为「添加」语义
-- **修复**: macOS Cmd 系快捷键拦截与字体渲染灰阶抗锯齿
 - **修复**: 主窗口立即可见 — 消除启动白屏 / 无窗口体感
 - **优化**: 会话页四项体验优化；Kiro 会话迁移标记目录过滤；memory 注入预览（模拟 Kiro buildMemoryBlock 的分层与预算）
 
@@ -141,6 +139,8 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 
 - **修复**: 网关数据面补发 `TokenType: EXTERNAL_IDP` — Entra ID 账号此前仅管理面注入该头，对话主路径漏发导致网关核心对话不可用；现与管理面对齐
 - **修复**: `/health` 健康检查免客户端 Key — 探活与健康检查不应要求业务 Key（#137）
+- **修复**: macOS Cmd 系快捷键拦截与字体渲染灰阶抗锯齿
+- **样式**: 界面视觉降噪 — 表面体系全面实色化、品牌渐变改纯色主色、背景渐变强度调低、玻璃拟态残留透明度移除；导入入口图标改为「添加」语义
 
 ### 🏗️ v1.9.2 - 2026-06-17 — Linux ARM64 架构支持与 macOS 启动修复
 
