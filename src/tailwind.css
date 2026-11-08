@@ -1,0 +1,54 @@
+/* Tailwind at-rule 隔离层：@custom-variant / @theme 是 Tailwind v4 语法，
+   VSCode 内置 CSS 语言服务不认识（unknownAtRules 警告），统一收进本文件；
+   主样式表 index.css 顶部只留一行普通 @import，编辑器面板保持干净。 */
+
+@import "tailwindcss";
+
+/* 暗色变体。此前写作 &:where(.dark, .dark *)，但主题切换走 next-themes 的
+   attribute="data-theme"，全站没有任何地方添加 .dark 类——于是 25 个文件里
+   54 处 dark: 用法从未生效，暗色主题上这些元素一直用着浅色配色。
+
+   改为直接匹配暗色主题的 data-theme 值。清单与 src/utils/themeMode.ts 的
+   DARK_THEME_NAMES 及 index.css 的 "DARK MODE SHARED BASE" 块三处一致，
+   新增暗色主题时需同步这三处。
+
+   必须同时列出后代选择器（[... ] *）：data-theme 只写在 <html> 上，
+   漏掉 * 形式则页面内部元素全都不匹配。 */
+@custom-variant dark (
+  &:where(
+    [data-theme='dark'], [data-theme='dark-one'], [data-theme='tech'], [data-theme='midnight'],
+    [data-theme='dark'] *, [data-theme='dark-one'] *, [data-theme='tech'] *, [data-theme='midnight'] *
+  )
+);
+
+/* 动画工具集：提供 .animate-in/.animate-out、fade-in-*、zoom-in-*、slide-in-from-*、
+   animate-accordion-down/up 等。shadcn 组件的过渡类全部依赖它，缺了会静默失效。
+   用 tw-animate-css 的纯 CSS 实现（bun 管理的依赖，见 package.json），
+   不再经过 Tailwind v4 加载 v3 JS 插件的兼容层。 */
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}

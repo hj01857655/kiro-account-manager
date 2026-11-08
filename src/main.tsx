@@ -32,13 +32,14 @@ void import('./components/features/Home/index').catch(() => {
 // 任何特性查询都会把 Linux 误判成 macOS（详见 src/utils/os.ts 注释）。
 applyOsAttribute()
 
-// 生产环境禁用浏览器快捷键
+// 生产环境禁用浏览器快捷键：Ctrl(Win/Linux) 与 Cmd(mac) 双键都要拦——
+// WKWebView 里 Cmd+R 会真的 reload 整页，只拦 ctrlKey 时 mac 用户一按就重载。
 if (import.meta.env.PROD) {
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === 'F5' || e.key === 'F12') {
       e.preventDefault()
     }
-    if (e.ctrlKey) {
+    if (e.ctrlKey || e.metaKey) {
       const key = e.key.toLowerCase()
       if (['r', 'u', 'p', 's', 'g', 'f'].includes(key)) {
         e.preventDefault()
