@@ -581,7 +581,7 @@ async fn get_usage_by_account_inner(
     let mut profile_arn = ctx.profile_arn;
     if is_enterprise && profile_arn.is_none() {
         match client
-            .resolve_enterprise_profile_arn(access_token, &regions)
+            .resolve_enterprise_profile_arn(access_token, &regions, account.auth_method.as_deref())
             .await
         {
             Ok(arn) => profile_arn = arn,
@@ -605,6 +605,7 @@ async fn get_usage_by_account_inner(
             &ctx.machine_id,
             &regions,
             profile_arn.as_deref(),
+            account.auth_method.as_deref(),
         )
         .await
     {
@@ -622,6 +623,7 @@ async fn get_usage_by_account_inner(
                 &ctx.machine_id,
                 &used_region,
                 result.resolved_profile_arn.as_deref(),
+                account.auth_method.as_deref(),
             )
             .await
         {

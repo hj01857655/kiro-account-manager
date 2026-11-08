@@ -277,7 +277,10 @@ pub async fn fetch_all_available_models(
     let resolved_profile_arn = if ctx.profile_arn.is_some() {
         ctx.profile_arn.clone()
     } else {
-        match client.list_available_profiles(access_token, &ctx.region).await {
+        match client
+            .list_available_profiles(access_token, &ctx.region, account.auth_method.as_deref())
+            .await
+        {
             Ok(value) => {
                 let profiles: ListAvailableProfilesResponse = serde_json::from_value(value)
                     .map_err(|error| format!("解析 ListAvailableProfiles 响应失败: {error}"))?;
@@ -307,6 +310,7 @@ pub async fn fetch_all_available_models(
             &ctx.machine_id,
             &ctx.region,
             resolved_profile_arn.as_deref(),
+            account.auth_method.as_deref(),
         )
         .await?;
 

@@ -2203,6 +2203,7 @@ pub async fn set_overage_status(
             &ctx.region,
             ctx.profile_arn.as_deref(),
             overage_status,
+            account.auth_method.as_deref(),
         )
         .await;
 
@@ -2229,6 +2230,7 @@ pub async fn set_overage_status(
                     &ctx.region,
                     ctx.profile_arn.as_deref(),
                     overage_status,
+                    account.auth_method.as_deref(),
                 )
                 .await?;
         } else {

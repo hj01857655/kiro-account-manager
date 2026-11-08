@@ -16,13 +16,27 @@ use std::sync::{Mutex, MutexGuard};
 use tauri::{Emitter, State};
 
 /// 尝试从 access_token 调用 getAccount API 获取用户信息（Enterprise 账号兜底）
-async fn fetch_enterprise_user_info(access_token: &str, machine_id: &str, region: &str) -> (Option<String>, Option<String>) {
+async fn fetch_enterprise_user_info(
+    access_token: &str,
+    machine_id: &str,
+    region: &str,
+    auth_method: Option<&str>,
+) -> (Option<String>, Option<String>) {
     let client = match KiroClient::new() {
         Ok(c) => c,
         Err(_) => return (None, None),
     };
     // 使用公共方法调用 getAccount API
-    let response = match client.get_management_api(access_token, machine_id, region, &format!("/getAccount?machineId={machine_id}")).await {
+    let response = match client
+        .get_management_api(
+            access_token,
+            machine_id,
+            region,
+            &format!("/getAccount?machineId={machine_id}"),
+            auth_method,
+        )
+        .await
+    {
         Ok(resp) => resp,
         Err(_) => return (None, None),
     };
@@ -268,7 +282,9 @@ pub async fn import_from_kiro_cli(
                         &cli_account.access_token,
                         &account_machine_id,
                         &cli_account.region,
-                    ).await;
+                        Some(cli_account.auth_method.as_str()),
+                    )
+                    .await;
                     if email_from_api.is_some() || user_id_from_api.is_some() {
                         eprintln!("[Kiro CLI Import] Fetched from getAccount API - email: {:?}, user_id: {:?}", email_from_api, user_id_from_api);
                         (email_from_api, user_id_from_api)

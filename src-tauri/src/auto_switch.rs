@@ -380,7 +380,7 @@ async fn resolve_current_account_by_usage(
 
     if needs_profile_discovery {
         match client
-            .resolve_enterprise_profile_arn(access_token, &regions)
+            .resolve_enterprise_profile_arn(access_token, &regions, auth_method)
             .await
         {
             Ok(Some(arn)) => profile_arn = Some(arn),
@@ -412,6 +412,7 @@ async fn resolve_current_account_by_usage(
             &machine_id,
             &regions,
             profile_arn.as_deref(),
+            auth_method,
         )
         .await
     {

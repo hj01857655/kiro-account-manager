@@ -32,6 +32,7 @@ pub async fn get_available_models_for_upstream(
             machine_id,
             &upstream.region,
             profile_arn,
+            upstream.auth_method.as_deref(),
         )
         .await?;
 

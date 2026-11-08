@@ -516,7 +516,7 @@ async fn ensure_enterprise_profile_arn(
     let client = KiroClient::from_client(creds.http.clone());
     let regions = usage_limits_region_candidates(&creds.region, true);
     let arn = client
-        .resolve_enterprise_profile_arn(&creds.access_token, &regions)
+        .resolve_enterprise_profile_arn(&creds.access_token, &regions, creds.auth_method.as_deref())
         .await?
         .ok_or_else(|| {
             format!(
