@@ -1561,10 +1561,15 @@ pub async fn proxy_handler(
     // 直接使用本地估算 token（不依赖响应中的 token 信息）
     log::info!("[非流式响应] 使用本地 token 估算");
 
-    // 估算输入 tokens（从请求消息中）
-    let request_text = serde_json::to_string(&final_messages).unwrap_or_default();
-    aggregated.input_tokens =
-        crate::gateway::token_estimator::estimate_tokens(&request_text, &request.model);
+    // 估算输入 tokens（从请求消息中）：图片块按像素计，base64 不混入文本估算
+    let request_values: Vec<serde_json::Value> = final_messages
+        .iter()
+        .filter_map(|m| serde_json::to_value(m).ok())
+        .collect();
+    aggregated.input_tokens = crate::gateway::token_estimator::estimate_request_tokens_with_images(
+        &request_values,
+        &request.model,
+    );
 
     // 估算输出 tokens（从响应文本中）
     let response_text = format!("{}{}", aggregated.text, aggregated.thinking);

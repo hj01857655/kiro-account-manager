@@ -19,8 +19,14 @@ pub fn estimate_payload_tokens(payload: &Value) -> usize {
         .and_then(Value::as_str)
         .unwrap_or_default();
     let tokenizer_type = TokenizerType::from_model_id(model_id);
-    let serialized = serde_json::to_string(payload).unwrap_or_else(|_| payload.to_string());
-    let raw_tokens = estimate_text_tokens(&serialized, tokenizer_type);
+    // 图片块不按 base64 文本长度计（240KB PNG 会虚报十几万 token），改为
+    // 解析图像头部按像素计（宽×高÷750，上限 1600）；其余文本照旧估算
+    let (text, images) = crate::gateway::token_estimator::split_images_from_value(payload);
+    let mut raw_tokens = estimate_text_tokens(&text, tokenizer_type);
+    for image in images {
+        raw_tokens += crate::gateway::token_estimator::estimate_image_tokens(image.get("source"))
+            as usize;
+    }
     ((raw_tokens as f64) * COUNT_TOKENS_SAFETY_MULTIPLIER).ceil() as usize
 }
 

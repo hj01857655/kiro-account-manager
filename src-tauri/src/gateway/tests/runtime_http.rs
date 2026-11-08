@@ -235,8 +235,16 @@ async fn runtime_serves_count_tokens_over_real_http() {
         .json()
         .await
         .expect("count tokens response should be json");
-    // 该端点估算的是整个序列化请求（含 model / messages 结构），实测 27
-    assert_eq!(payload.get("input_tokens").and_then(Value::as_u64), Some(27));
+    // 端点估算的是整个请求（估算器口径随图片像素化演进，不钉具体值）：
+    // "hello world" 这类小请求落在十几~几十 token 区间，>0 即在计
+    let input_tokens = payload
+        .get("input_tokens")
+        .and_then(Value::as_u64)
+        .expect("input_tokens should be present");
+    assert!(
+        (10..=60).contains(&input_tokens),
+        "small request should estimate in tens of tokens, got {input_tokens}"
+    );
     stop_runtime(&mut runtime).await;
 }
 

@@ -1285,10 +1285,17 @@ function_call: None,
 
         // 流式结束后，使用本地估算 token（在发送响应之前）
         let token_source = if aggregated.input_tokens == 0 || aggregated.output_tokens == 0 {
-            // 估算输入 tokens（从请求消息中）
-            let request_text = serde_json::to_string(&request_messages).unwrap_or_default();
+            // 估算输入 tokens（从请求消息中）：图片块解析图像头部按像素计，
+            // base64 不再混入文本估算——读图场景不再虚报十几万 token
+            let request_values: Vec<serde_json::Value> = request_messages
+                .iter()
+                .filter_map(|m| serde_json::to_value(m).ok())
+                .collect();
             aggregated.input_tokens =
-                crate::gateway::token_estimator::estimate_tokens(&request_text, &model);
+                crate::gateway::token_estimator::estimate_request_tokens_with_images(
+                    &request_values,
+                    &model,
+                );
 
             // 估算输出 tokens（从响应文本中）
             let response_text = format!("{}{}", aggregated.text, aggregated.thinking);
