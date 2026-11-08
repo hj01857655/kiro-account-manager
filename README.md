@@ -98,19 +98,49 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 以下内容按 GitHub Release 的实际发布时间窗口整理。  
 **「未发版」** 为 `public` 分支已合入、尚未打 GitHub Release 的改动（用户安装包仍以 Releases 为准）。
 
-### 🚧 未发版（public，相对 v1.9.3）
+### 🚀 v1.9.3 - 2026-11-08 — 微软 Entra ID 账号支持、Kiro IDE 1.0 适配与网关用量体系
 
-- **修复**: 网关数据面补发 `TokenType: EXTERNAL_IDP` — 微软 Entra ID（`external_idp`）账号此前仅管理面注入该头，对话主路径（`call_generate_assistant_response`）漏发导致网关核心对话不可用；现与管理面对齐
-- **修复**: macOS Cmd 系快捷键拦截与字体渲染灰阶抗锯齿
-- **样式**: UI 视觉降噪 — 渐变高光改纯色主色、背景渐变强度调低、玻璃拟态残留透明度移除
-- **新增**: 微软 Entra ID / Azure AD 账号（`external_idp`）导入与 Token 刷新 — 刷新走微软 OAuth2 token 端点，不走 AWS OIDC；仅支持导入，不支持应用内微软登录
+> 本版本新增 **微软 Entra ID（Azure AD）** 账号的完整支持（交互式登录 + 多通道导入 + Token 刷新），跟进 **Kiro IDE 1.0** 的本地配置格式（Hooks / Custom Agents / 权限模型），网关新增用量统计、隐私遮蔽与对话捕获三大板块，并对 UI 视觉体系做整体降噪升级。
+
+#### 🔐 微软 Entra ID（Azure AD）账号支持
+- **新增**: External IdP 交互式登录 — Enterprise 入口识别 `kiro.dev/start/k-xxx` 格式地址后自动走 Kiro portal descriptor 两段式流程（portal 授权 → 微软 OAuth2），与 IdC 的 `*.awsapps.com` 流程自动分流
+- **新增**: Entra ID 账号导入与 Token 刷新 — 凭据落库支持 JSON 导入、Kiro IDE 本地登录态导入（读取微软刷新元数据，导入失败按「未登录 / 读取失败 / 解析失败」区分原因）；刷新走微软 OAuth2 token 端点（`login.microsoftonline.com`），不走 AWS OIDC
+- **新增**: 管理面与网关数据面均按账号身份类注入 `TokenType: EXTERNAL_IDP` 头；身份 claims（email / preferred_username / upn）本地可读，不依赖额度接口
 - **修复**: 企业 IdC 导入时从 `clientSecret` JWT 提取 `startUrl` / 纠正 provider，并优先企业域，减少误判 BuilderId 导致刷新 400
 - **修复**: `getUsageLimits` 不再携带 `profileArn`（企业号带了会 400）；Enterprise 查配额与普通账号统一路径，region 优先账号自身再回退 `us-east-1` / `eu-central-1`
-- **加固**: Skill 分支名注入防护、提权重启确认、OAuth deep link 锁中毒恢复
+- **修复**: Enterprise 账号允许缺失 `userId` / `email`（缺失时自动生成标识），登录后正确派发 `accounts-updated` 事件刷新 UI（#136）
+
+#### 🌐 网关：用量统计与隐私遮蔽
+- **新增**: 用量统计体系 — 额度 / 会话 / 账单三视图与上下文占用列，支持 OTLP 导出；额度页按 `getUsageLimits` 真实响应结构解析，负载均衡配额策略按 `usageBreakdownList` 计算剩余比例
+- **新增**: 隐私遮蔽 — 脱敏后端 + 流式 / 非流式响应回替，修复流式占位符分片泄漏（hold-back 跨 delta 回替）；遮蔽规则用户可配（规则编辑器 + 7 天趋势）并新增审计页
+- **新增**: 对话捕获（opt-in）— 每轮对话分片落盘 + 会话页回放，采用客户端原始协议体记录
+- **新增**: 上下文页重做 — prompt 构成估算 / 校准、会话级缓存 / 基线 / 增速 / 评分
+- **新增**: 会话粘性选号 — 同一客户端固定路由到同一账号；客户端 agent 识别（UA 特征表 + `x-agent-name` 显式头）
+- **新增**: 健康检查补全 — 半开巡检恢复不健康账号；可选记录流式逐事件明细（`log_stream_events`）
+- **增强**: 请求日志补 token / 计费 / 缓存读写 / 客户端（User-Agent）列，按运行会话取数，修复清空后回流
+- **修复**: 同一 `tool_use` id 重复发 `content_block_start`；流式响应体日志记录完整协议响应
+
+#### 🧩 Kiro IDE 1.0 适配
+- **适配**: Hooks 支持新的 `.json` 格式（单文件可含多个 hook，字段改为 `trigger` / `action`）并支持用户级全局 hooks（`~/.kiro/hooks`）；Custom Agents 支持新的 JSON 格式（替代 Markdown front-matter）；旧格式仍可识别与编辑
+- **适配**: 权限管理从旧版 Trusted Commands 迁移到 `permissions.yaml` 能力模型 — 新增全局权限规则编辑器（capability / effect / match / exclude / policies），后端直接读写 `~/.kiro/settings/permissions.yaml`；首次读取时兜底迁移旧 `kiroAgent.*` 配置，并移除旧 Trusted Commands 死代码
+
+#### 🖥️ 界面与体验
+- **样式**: 界面视觉降噪 — 表面体系全面实色化、品牌渐变改纯色主色、背景渐变强度调低、玻璃拟态残留透明度移除；导入入口图标改为「添加」语义
+- **修复**: macOS Cmd 系快捷键拦截与字体渲染灰阶抗锯齿
+- **修复**: 主窗口立即可见 — 消除启动白屏 / 无窗口体感
+- **优化**: 会话页四项体验优化；Kiro 会话迁移标记目录过滤；memory 注入预览（模拟 Kiro buildMemoryBlock 的分层与预算）
+
+#### 🔧 修复与加固
+- **修复**: 工具调用功能恢复（始终传递 tools 定义）；Bedrock API `TOOL_CONFIG_MISSING` 错误
+- **修复**: Kiro CLI 2.37 token 写出格式对齐真实样本；自动换号配额解析精度回退 + 主额度语义；一键切换只跳过零配额账号；账号切换与重启功能
+- **调整**: 网关客户端密钥固定为 `kiro`（`Authorization: Bearer kiro` 与 `x-api-key: kiro` 均可），移除 API Key 管理功能，历史配置中的 Key 字段仅做兼容读取
 - **网关**: 增加 GPT-5.6 系列与 Claude Sonnet 5；OpenAI token 估算改用 tiktoken-rs（`o200k_base`）；移除已下线的 Claude 3 别名映射
-- **网关**: 移除 API Key 管理功能 — 客户端密钥固定为 `kiro`（`Authorization: Bearer kiro` 与 `x-api-key: kiro` 均可），历史配置中的 Key 字段仅做兼容读取
-- **适配**: 跟进 Kiro IDE 1.0 的本地配置格式 — Hooks 支持新的 `.json` 格式（单文件可含多个 hook，字段改为 `trigger` / `action`）并支持用户级全局 hooks（`~/.kiro/hooks`），Custom Agents 支持新的 JSON 格式（替代 Markdown front-matter）；旧格式的 `.kiro.hook` 与 `.md` 文件仍可识别与编辑
-- **适配**: 权限管理从旧版 Trusted Commands 迁移到 Kiro IDE 1.0 的 `permissions.yaml` 能力模型 — 新增全局权限规则编辑器（capability / effect / match / exclude / policies），后端直接读写 `~/.kiro/settings/permissions.yaml`；首次读取时兜底迁移旧 `kiroAgent.*` 配置，并移除所有旧 Trusted Commands 死代码
+- **加固**: Skill 分支名注入防护、提权重启确认、OAuth deep link 锁中毒恢复
+
+### 🚧 未发版（public，相对 v1.9.3）
+
+- **修复**: 网关数据面补发 `TokenType: EXTERNAL_IDP` — Entra ID 账号此前仅管理面注入该头，对话主路径漏发导致网关核心对话不可用；现与管理面对齐
+- **修复**: `/health` 健康检查免客户端 Key — 探活与健康检查不应要求业务 Key（#137）
 
 ### 🏗️ v1.9.2 - 2026-06-17 — Linux ARM64 架构支持与 macOS 启动修复
 
