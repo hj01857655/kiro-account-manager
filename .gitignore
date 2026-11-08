@@ -71,3 +71,4 @@ MEMORY.md
 
 # Rust target directories (including custom profiles)
 src-tauri/target-*
+rel_body.txt
