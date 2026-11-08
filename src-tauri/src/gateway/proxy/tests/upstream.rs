@@ -105,8 +105,12 @@ fn add_kiro_upstream_headers_adds_generate_request_headers() {
             .and_then(|value| value.to_str().ok()),
         Some(DEFAULT_AGENT_MODE)
     );
-    // TokenType header 已移除（会导致某些接口 403 错误）
-    assert!(request.headers().get("TokenType").is_none());
+    // TokenType：仅 external_idp 账号（微软 JWT）数据面必须携带；
+    // 非 external_idp 账号不带（早期全局移除是因为它对某些接口 403）。
+    assert_eq!(
+        request.headers().get("TokenType").and_then(|v| v.to_str().ok()),
+        Some("EXTERNAL_IDP")
+    );
     assert!(request.headers().get("x-amzn-kiro-profile-arn").is_none());
     assert!(request.headers().get("redirect-for-internal").is_none());
 }
