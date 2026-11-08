@@ -2171,6 +2171,12 @@ pub fn add_kiro_upstream_headers(
         .header("amz-sdk-invocation-id", invocation_id)
         .header("amz-sdk-request", sdk_request_header);
 
+    // 数据面 TokenType：external_idp 账号（微软 JWT）必须携带该头，
+    // AWS 仅凭 Bearer 无法区分身份类（对齐管理面 kiro_client 的注入逻辑）
+    if let Some("external_idp") = upstream.auth_method.as_deref().map(str::trim) {
+        builder = builder.header("TokenType", "EXTERNAL_IDP");
+    }
+
     if include_opt_out && upstream.send_opt_out {
         builder = builder.header("x-amzn-codewhisperer-optout", "true");
     }
