@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Search, Download, Upload, RefreshCcw, RotateCw, Trash2, ArrowUp, ArrowDown, X, TrendingUp, Clock, Calendar, CheckSquare, Square, Sparkles, LayoutGrid, List, Edit } from 'lucide-react'
+import { Search, Download, Plus, RefreshCcw, RotateCw, Trash2, ArrowUp, ArrowDown, X, TrendingUp, Clock, Calendar, CheckSquare, Square, Sparkles, LayoutGrid, List, Edit } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import FilterDropdown from './FilterDropdown'
 import { getThemeAccent } from '../AgentConfig/themeAccent'
@@ -319,7 +319,7 @@ function AccountHeader({
           {/* 通用操作按钮组 */}
           <div className="flex gap-1 ml-1">
             <IconButton onClick={onImport} title={t('accounts.import')} accent={accent}>
-              <Upload size={14} className={accent.text} />
+              <Plus size={14} className={accent.text} />
             </IconButton>
             <IconButton onClick={onExport} title={t('accounts.export')} accent={accent}>
               <Download size={14} className={accent.text} />

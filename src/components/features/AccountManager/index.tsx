@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { Upload } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useApp } from '../../../hooks/useApp'
 import { useDialog } from '../../../contexts/DialogContext'
 import { useAccounts } from './hooks/useAccounts'
@@ -635,7 +635,7 @@ function AccountManager({ onNavigate }: AccountManagerProps) {
                 onClick={() => setShowImportModal(true)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r ${accent.gradientFrom} ${accent.gradientTo} shadow-md hover:shadow-lg transition-all duration-200 inline-flex items-center gap-1.5 cursor-pointer`}
               >
-                <Upload size={14} />
+                <Plus size={14} />
                 导入账号
               </button>
             )}
