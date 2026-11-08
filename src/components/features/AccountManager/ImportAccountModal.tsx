@@ -450,7 +450,24 @@ function ImportAccountModal({ onClose, onSuccess, onNavigate }: ImportAccountMod
     const importOne = async (account: any) => {
       try {
         let result: any
-        if (account.authMethod === 'IdC') {
+        if (account.authMethod === 'external_idp') {
+          // 企业 SSO（Entra ID / Azure AD）账号：走 external_idp 导入命令，
+          // 携带微软刷新元数据；profileArn 由 usage 链路懒解析回填
+          result = await addAccountByExternalIdp({
+            refreshToken: account.refreshToken,
+            clientId: account.clientId,
+            profileArn: account.profileArn ?? account.profile_arn ?? '',
+            clientSecret: account.clientSecret ?? null,
+            accessToken: account.accessToken || null,
+            tokenEndpoint: account.tokenEndpoint ?? account.token_endpoint ?? null,
+            issuerUrl: account.issuerUrl ?? account.issuer_url ?? null,
+            scopes: account.scopes ?? null,
+            region: account.region || null,
+            machineId: null,
+            email: account.email || null,
+            expiresAt: account.expiresAt || null
+          })
+        } else if (account.authMethod === 'IdC') {
           // IdC 账号：统一调用 add_account_by_idc
           const params = {
             provider: account.provider,  // BuilderId 或 Enterprise
@@ -817,7 +834,11 @@ return (
                                 </div>
                               </div>
                               <div className={`px-2 py-1 rounded text-xs info-badge`}>
-                                {account.authMethod === 'IdC' ? 'IdC' : 'Social'}
+                                {account.authMethod === 'IdC'
+                                  ? 'IdC'
+                                  : account.authMethod === 'external_idp'
+                                    ? 'External IdP'
+                                    : 'Social'}
                               </div>
                             </div>
                           </div>

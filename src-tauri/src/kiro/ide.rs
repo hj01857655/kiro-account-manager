@@ -50,6 +50,16 @@ pub struct KiroLocalToken {
     // IdC 专用
     pub client_id_hash: Option<String>,
     pub region: Option<String>,
+    // external_idp（企业 SSO / Entra ID）专用：Kiro IDE 登录企业 IdP 后写入缓存，
+    // 字段名对齐 kiro.rs-admin / Account Manager 导出格式（camelCase）
+    #[serde(default)]
+    pub client_id: Option<String>,
+    #[serde(default)]
+    pub token_endpoint: Option<String>,
+    #[serde(default)]
+    pub issuer_url: Option<String>,
+    #[serde(default)]
+    pub scopes: Option<String>,
     // 注意：Kiro IDE 不在 kiro-auth-token.json 中存储 startUrl
     // startUrl 包含在 clientSecret JWT 的 initiateLoginUri 字段中
 }
@@ -132,6 +142,10 @@ pub struct KiroAccountInfo {
     pub client_secret: Option<String>,
     pub client_id_hash: Option<String>,
     pub region: Option<String>,
+    // external_idp（企业 SSO / Entra ID）专用：微软刷新元数据
+    pub token_endpoint: Option<String>,
+    pub issuer_url: Option<String>,
+    pub scopes: Option<String>,
     // 注意：不需要 start_url 字段
     // startUrl 包含在 clientSecret JWT 的 initiateLoginUri 字段中
     // AWS SSO OIDC API 会自动从 JWT 中解析
@@ -179,6 +193,9 @@ pub async fn read_kiro_accounts() -> Result<Vec<KiroAccountInfo>, String> {
                         client_secret: None,
                         client_id_hash: token.client_id_hash.clone(),
                         region: token.region.clone(),
+                        token_endpoint: None,
+                        issuer_url: None,
+                        scopes: None,
                     };
 
                     // 如果是 IdC 账号，读取 client registration
@@ -193,6 +210,26 @@ pub async fn read_kiro_accounts() -> Result<Vec<KiroAccountInfo>, String> {
                                     account.client_secret = Some(client_reg.client_secret);
                                 }
                             }
+                        }
+                    }
+
+                    // external_idp（企业 SSO / Entra ID）：从主 token 文件读取微软刷新元数据
+                    if auth_method == "external_idp" {
+                        account.client_id = token.client_id.clone();
+                        account.token_endpoint = token.token_endpoint.clone();
+                        account.issuer_url = token.issuer_url.clone();
+                        account.scopes = token.scopes.clone();
+                        // profileArn 为空时置 None：external_idp 号的真实 ARN
+                        // 由 usage 链路的 ListAvailableProfiles 懒解析回填，
+                        // 绝不套 IdC/social 默认占位 ARN
+                        if account
+                            .profile_arn
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .is_none()
+                        {
+                            account.profile_arn = None;
                         }
                     }
 
