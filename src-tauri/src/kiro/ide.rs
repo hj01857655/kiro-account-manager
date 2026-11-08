@@ -172,74 +172,93 @@ pub async fn read_kiro_accounts() -> Result<Vec<KiroAccountInfo>, String> {
 
         // 读取主 token 文件
         let token_path = cache_dir.join("kiro-auth-token.json");
-        if token_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&token_path) {
-                if let Ok(token) = serde_json::from_str::<KiroLocalToken>(&content) {
-                    let auth_method = token.auth_method.as_deref().unwrap_or("social");
-                    let provider = token
-                        .provider
-                        .clone()
-                        .unwrap_or_else(|| "Google".to_string());
+        if !token_path.exists() {
+            return Err(format!(
+                "未找到 Kiro IDE 登录缓存（{}）。请先在 Kiro IDE 中登录；\
+                 若你使用的是 Kiro CLI 登录，请改用「Kiro CLI」导入页",
+                token_path.display()
+            ));
+        }
 
-                    let mut account = KiroAccountInfo {
-                        email: String::new(), // 需要通过 API 获取
-                        provider: provider.clone(),
-                        auth_method: auth_method.to_string(),
-                        access_token: token.access_token.clone(),
-                        refresh_token: token.refresh_token.clone(),
-                        expires_at: token.expires_at.clone(),
-                        profile_arn: token.profile_arn.clone(),
-                        client_id: None,
-                        client_secret: None,
-                        client_id_hash: token.client_id_hash.clone(),
-                        region: token.region.clone(),
-                        token_endpoint: None,
-                        issuer_url: None,
-                        scopes: None,
-                    };
+        let content = std::fs::read_to_string(&token_path)
+            .map_err(|e| format!("读取 Kiro IDE 缓存失败（{}）: {e}", token_path.display()))?;
 
-                    // 如果是 IdC 账号，读取 client registration
-                    if auth_method == "IdC" {
-                        if let Some(ref hash) = token.client_id_hash {
-                            let client_path = cache_dir.join(format!("{hash}.json"));
-                            if let Ok(client_content) = std::fs::read_to_string(&client_path) {
-                                if let Ok(client_reg) =
-                                    serde_json::from_str::<ClientRegistration>(&client_content)
-                                {
-                                    account.client_id = Some(client_reg.client_id);
-                                    account.client_secret = Some(client_reg.client_secret);
-                                }
-                            }
-                        }
-                    }
+        let token: KiroLocalToken = match serde_json::from_str(&content) {
+            Ok(t) => t,
+            Err(e) => {
+                // 解析失败 ≠ 未登录：格式漂移时给出可上报的具体原因
+                return Err(format!(
+                    "Kiro IDE 缓存解析失败（{}）：{e}。\
+                     可能是 Kiro IDE 版本更新导致缓存格式变化，请附带此信息反馈",
+                    token_path.display()
+                ));
+            }
+        };
 
-                    // external_idp（企业 SSO / Entra ID）：从主 token 文件读取微软刷新元数据
-                    if auth_method == "external_idp" {
-                        account.client_id = token.client_id.clone();
-                        account.token_endpoint = token.token_endpoint.clone();
-                        account.issuer_url = token.issuer_url.clone();
-                        account.scopes = token.scopes.clone();
-                        // profileArn 为空时置 None：external_idp 号的真实 ARN
-                        // 由 usage 链路的 ListAvailableProfiles 懒解析回填，
-                        // 绝不套 IdC/social 默认占位 ARN
-                        if account
-                            .profile_arn
-                            .as_deref()
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                            .is_none()
+        {
+            let auth_method = token.auth_method.as_deref().unwrap_or("social");
+            let provider = token
+                .provider
+                .clone()
+                .unwrap_or_else(|| "Google".to_string());
+
+            let mut account = KiroAccountInfo {
+                email: String::new(), // 需要通过 API 获取
+                provider: provider.clone(),
+                auth_method: auth_method.to_string(),
+                access_token: token.access_token.clone(),
+                refresh_token: token.refresh_token.clone(),
+                expires_at: token.expires_at.clone(),
+                profile_arn: token.profile_arn.clone(),
+                client_id: None,
+                client_secret: None,
+                client_id_hash: token.client_id_hash.clone(),
+                region: token.region.clone(),
+                token_endpoint: None,
+                issuer_url: None,
+                scopes: None,
+            };
+
+            // 如果是 IdC 账号，读取 client registration
+            if auth_method == "IdC" {
+                if let Some(ref hash) = token.client_id_hash {
+                    let client_path = cache_dir.join(format!("{hash}.json"));
+                    if let Ok(client_content) = std::fs::read_to_string(&client_path) {
+                        if let Ok(client_reg) =
+                            serde_json::from_str::<ClientRegistration>(&client_content)
                         {
-                            account.profile_arn = None;
+                            account.client_id = Some(client_reg.client_id);
+                            account.client_secret = Some(client_reg.client_secret);
                         }
                     }
-
-                    accounts.push(account);
                 }
             }
+
+            // external_idp（企业 SSO / Entra ID）：从主 token 文件读取微软刷新元数据
+            if auth_method == "external_idp" {
+                account.client_id = token.client_id.clone();
+                account.token_endpoint = token.token_endpoint.clone();
+                account.issuer_url = token.issuer_url.clone();
+                account.scopes = token.scopes.clone();
+                // profileArn 为空时置 None：external_idp 号的真实 ARN
+                // 由 usage 链路的 ListAvailableProfiles 懒解析回填，
+                // 绝不套 IdC/social 默认占位 ARN
+                if account
+                    .profile_arn
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .is_none()
+                {
+                    account.profile_arn = None;
+                }
+            }
+
+            accounts.push(account);
         }
 
         if accounts.is_empty() {
-            return Err("未找到 Kiro IDE 账号，请先在 Kiro IDE 中登录".to_string());
+            return Err("Kiro IDE 缓存已读取但未解析出有效账号".to_string());
         }
 
         Ok(accounts)
