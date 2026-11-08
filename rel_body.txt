@@ -1,0 +1,239 @@
+## 🎉 更新内容
+
+- chore(release): 1.9.3
+- style(accounts): replace import icon with add icon
+- fix(import): distinguish failure modes of Kiro IDE cache reads with actionable errors
+- feat(import): carry External IdP metadata through the Kiro IDE import path
+- feat(clients): thread account auth method into all management-plane call sites
+- feat(clients): propagate auth method through management-plane clients for TokenType injection
+- feat(auth): persist External IdP credentials and derive identity without relying on usage APIs
+- feat(auth): carry External IdP refresh metadata through AuthResult
+- feat(auth): add External IdP interactive login via Kiro portal descriptor flow
+- fix(kiro-cli): token 写出格式对齐 2.37.1 真实样本 + 清理死代码
+- fix(auto-switch): 配额解析对齐 usage.rs 口径——精度回退 + 主额度语义
+- fix(gateway): 补全烂尾的健康检查——半开巡检恢复不健康账号
+- fix(gateway): 对话捕获改用客户端原始协议体，响应日志统一为客户端格式 JSON
+- fix(startup): 主窗口立即可见——消除启动白屏/无窗口体感
+- feat(gateway): 对话捕获（opt-in）——每轮对话分片落盘 + 会话页回放
+- feat(gateway): 客户端 agent 识别——UA 特征表 + x-agent-name 显式头
+- feat(gateway): 上下文页重做——prompt 构成估算/校准 + 会话级缓存/基线/增速/评分
+- refactor(gateway): 撤掉用量页冗余的请求子标签
+- refactor(gateway): 用量页重排为一页四子标签（概览/请求/会话/上下文）
+- fix(gateway): 额度页按真实 getUsageLimits 结构解析；OTLP 配置全链路防冲掉
+- feat(gateway): 用量对齐 magpie 三块——额度/会话/账单页与 OTLP 导出
+- fix(gateway): 流式响应占位符分片泄漏，hold-back 跨 delta 回替
+- fix(gateway): 非流式响应补隐私遮蔽回替
+- fix(gateway): 恢复隐私遮蔽 tab 入口并补齐缺失翻译
+- feat(gateway): 遮蔽规则编辑器与 7 天趋势数据源
+- feat(gateway): 遮蔽规则用户可配与日志历史查询命令
+- feat(gateway): 日志页上下文列与健康度浮层化
+- feat(gateway): 用量页（Usage）与上下文占用列
+- feat(gateway): 遮蔽审计页与隐私遮蔽开关
+- feat(gateway): 隐私遮蔽后端与用量统计字段
+- refactor(gateway): 请求日志页删模型/端点/客户端维度统计
+- feat(gateway): 可选记录流式逐事件明细（log_stream_events）
+- feat(gateway): 会话粘性选号，同客户端固定路由同一账号
+- fix(gateway): 负载均衡配额策略改按 usageBreakdownList 算剩余比例
+- feat(gateway): 日志表补缓存读/写与计费列，修复清空后回流
+- feat(gateway): 请求日志补 token/计费字段与会话取数
+- style(theme): 表面体系实色化与主题变量补全
+- feat(gateway): 请求日志按运行会话取数，概览表补缓存读/写列
+- feat(session): 会话页四项体验优化
+- feat(memory): 注入预览——模拟 Kiro buildMemoryBlock 的分层与预算
+- fix(session): 过滤 Kiro SessionMigration 的迁移标记目录
+- feat(settings): Kiro 原始配置文件编辑入口扩展
+- feat(app): 项目作用域全局化与会话按项目过滤
+- fix(agent): Agents/Skills 面板 scope 徽标走 i18n
+- fix(agent): Steering 面板 scope 徽标走 i18n，替换硬编码中文
+- feat(agent): 项目作用域分层写入与选择器持久化
+- feat(agent): 配置资产去重与损坏检测
+- feat(agent): Agent 配置页 tab 分组、体检扩项与 mode 联动提示
+- fix(agent): kiroAgent.memory 加入 set_kiro_agent_setting 白名单
+- feat(agent): surface memory details, editing, and scope filtering
+- feat(sandbox): add project-level config with tighten-only merge
+- feat(memory): add paging, scope filter, and create/edit
+- chore(agent): 移除更名后的旧 KiroConfig 路径文件
+- feat(agent): 新增记忆管理板块与命令沙箱配置
+- refactor(agent): KiroConfig 更名 AgentConfig，新增总览与配置体检
+- fix(steering): align fileMatchPattern and directory scan with the IDE
+- fix(proxy): follow the OS proxy and stop logging env probes
+- fix(cli): write lowercase provider into social token
+- feat(sidebar): start collapsed by default
+- fix(window): keep the window hidden until first content is ready
+- chore(deps): pin tauri plugins and stop warmup from precompiling App.tsx
+- fix(gateway): 流式响应体日志记录完整协议响应，不再因纯工具调用回合 text 为空而丢失
+- refactor(gateway): 请求日志表把「客户端」列移到路径之后
+- feat(gateway): 请求日志表新增「客户端」列（User-Agent）
+- feat(gateway): 流式请求日志标明 SSE 明细文件与打开入口
+- fix(gateway): 同一 tool_use id 重复发 content_block_start
+- docs(gateway): 补齐根目录下的协议事实与对账文档
+- docs(gateway): 协议规范与上游字段取证入库，与实现一起追溯
+- docs(gateway): 修正 AnthropicTool 注释与实现对齐
+- feat(gateway): Responses hosted tools 跳过留痕 + namespace 层 defer_loading 语义钉死
+- refactor(gateway): Tool Search 代答回合构造抽为共用函数 + 测试锁定
+- revert(gateway): 回退 client toolset 展开——官方 schema-less，展开依据不成立
+- feat(gateway): 官方工具协议对齐 + Tool Search 全链路 + 网关上游独立代理
+- test(gateway): document 链路回归测试（G-doc）——三形状提取/去重/6 文档拒收/历史保留与 file_id 跳过
+- feat(gateway): 接通 document/PDF 上行链路（G-doc）
+- feat(gateway): 三协议 reasoning 契约对齐官方 Kiro 1.4.5（G-2/G-7/R1-R5）
+- feat(ui): 网关模型映射规则 i18n 预备键（gatewayMapping）
+- chore(ui): 删除网关重构遗留的孤儿弹窗与失效 i18n 键
+- fix(gateway): amz-sdk-request 的 max 与真实重试上界同源（G-6）
+- fix(gateway): Responses 终态与 item 状态收敛为单一来源（G-8 补丁）
+- test(gateway): stopReason/refusal 解析与出站映射回归（+14）
+- feat(gateway): 消费上游 stopReason/refusal 终止语义（Kiro 1.4.5 G-8/G-8b/G-9）
+- fix(ui): 清除遗漏的毛玻璃与随玻璃态失效的死代码
+- feat(gateway): 网关可观测性重构 + 三端平台探测 + 主题修正
+- fix(gateway): 原生 AMRF 的 thinking 信封对齐官方形状
+- feat(gateway): 实现 stop_sequences 响应侧截断
+- fix(gateway): 补齐 auto 排除、max_tokens 下发与陈旧标签剥离
+- feat(gateway): thinking 启用但无 effort 时补默认档位
+- fix(gateway): 尊重客户端显式 thinking.type=disabled
+- fix(gateway): effort 投递层与 thinking 解耦，Anthropic 协议 effort 真正生效
+- feat(gateway): effort 档位改由上游模型清单动态决定
+- feat(gateway): 透传 effort 档位到官方 output_config 通道
+- feat(gateway): 对齐 Kiro 官方模型清单与 thinking 行为
+- fix(style): 修复 dark: 变体从未生效
+- fix(style): 修复 macOS 交通灯避让与滚动条样式从未生效
+- refactor(gateway): 两笔技术债——StreamState 收拢 + UpstreamRequestError 结构体
+- fix(gateway): 429 时采用服务端 x-amzn-kiro-ratelimit-retry-after 窗口
+- feat(settings): agents json 校验 + powers agent-plugin 布局识别
+- feat(settings): workflows/steering/hooks 校验对齐 Kiro 1.1.70
+- feat(skills): 对齐 Kiro 1.1.70 skill 校验规则，防静默失效
+- feat(gateway): 剥离 Anthropic 服务端工具 + 权限 capability 补齐
+- feat(gateway): Claude Code WebSearch 子请求走 Kiro 远程 MCP 搜索
+- fix(auto-switch): 企业号 profileArn 发现失败时跳过本轮，不套 BuilderId 默认 ARN
+- fix(gateway): Enterprise 上游请求携带真实 profileArn
+- fix: Enterprise getUsageLimits 使用 ListAvailableProfiles 解析真实 profileArn
+- refactor(gateway): 收敛客户端接入信息到 buildGatewayClientRecipes 单一数据源
+- feat(gateway): enhance client config dialog with auth/endpoint info and other-clients fallback; fix i18n interpolation
+- fix(gateway): align client api key parsing with backend disabled-key filtering
+- refactor(gateway): drop dead providers and log-polling branch; add rate-limit controls
+- chore(auto-switch): raise disabled poll interval to 60s
+- fix(i18n): add missing hooks.scope keys and drop Chinese fallbacks
+- chore(gateway): drop stub get_cache_config command
+- fix(gateway): count only existing accounts in account pool counters
+- feat(gateway): surface model/endpoint stats and account health in request logs dialog
+- feat(kiro-config): surface active ignore files in nested AGENTS.md panel
+- chore(tsconfig): add ignoreDeprecations 6.0
+- feat(steering): honor .kiroignore and .gitignore when scanning nested AGENTS.md
+- fix(i18n): remove duplicated restartAsAdmin keys in ru and zh-CN locales
+- feat(settings): warn when remote sessions endpoint is overridden by env var
+- feat(permissions): add built-in permission presets and read-only shell command groups
+- refactor(powers): reuse REGISTRY_ID_RECOMMENDED constant in powers_cmd
+- feat(settings): 支持配置远程会话门户地址（G5，Kiro 1.1.14）
+- feat(powers): 支持从本地文件夹 / GitHub URL 安装自定义 Power（G4，Kiro 1.1.14）
+- fix(config): 补齐云配置只读守卫的漏网点
+- feat(config): 云配置只读语义（G1，Kiro 1.1.14）
+- fix(build): 注册 specs_cmd / workflows_cmd 模块，补齐 create_workflow
+- feat(workflows): 新增 Workflows 管理面板（G7，Kiro 1.1.14）
+- feat(specs): 新增 Specs 管理面板（G6，Kiro 1.1.14）
+- feat(steering): 支持嵌套 AGENTS.md（G2，Kiro 1.1.14）
+- feat(permissions): 支持项目级权限作用域，并修正能力名
+- fix(mcp): 按 Kiro MCP 配置 schema 补齐字段，修复保存时丢失 OAuth 配置
+- feat(models): 同步 Kiro models 更新日志，新增 Claude Opus 5 并更新 GPT-5.6 上下文
+- chore(deps): 动画依赖改用 bun 管理的 tw-animate-css
+- refactor(css): 动画改用 tw-animate-css 纯 CSS，去掉 v3 插件兼容层
+- fix(ui): 注册 tailwindcss-animate 并修正 Radix 组件里失效的 data-* 变体
+- fix(css): 补三个从未定义的动画类，并去掉覆盖 no-scrollbar 的内联样式
+- fix(layout): 会话页页头提升到 Tab 外层，Gateway 补页头并对齐内边距
+- fix(css): 补上 no-scrollbar 工具类定义（此前是空类）
+- fix(layout): 修复 CLI 会话区高度链，并清理未使用导入
+- refactor(theme): 抽出主题注册表作为唯一来源，修复侧栏主题轮转
+- fix(settings): 自动换号阈值清空输入不再被静默写成 0
+- fix(types): 修正 DialogContext 与 bootSplash 测试的既有类型错误
+- refactor(settings): 统一配置行样式并修复设置页若干问题
+- feat(i18n): 网关配置页与弹窗接入 i18n
+- fix(gateway): 修复请求日志弹窗缓存节省文案的 JSX 语法错误
+- feat(i18n): 网关三大弹窗接入 i18n（请求日志/客户端 Key/模型映射）
+- fix(i18n): 会话管理 CLI tab 接入 i18n，菜单命名回退在线登录
+- fix(i18n): 为会话管理页接入 i18n，移除全部硬编码中文
+- fix(i18n): 统一网关菜单与页内品牌名为 Kiro API 网关
+- fix(settings): 标签栏固定，仅内容区滚动
+- fix(i18n): 修正「规则管理」命名，避免与设置页 Kiro tab 撞名
+- fix(log): 加固日志轮转与提权数据目录
+- fix(kiro-config): Hooks 在无项目时不可用
+- feat(settings): 新增外观设置（列表密度 / 界面缩放 / 减少动效 / 跟随系统）
+- feat(kiro-config): 适配 Kiro IDE 1.0（权限规则 / 用户级 Hooks / Agent 高级设置）
+- refactor(gateway): 删除未引用的 Responses 协议强类型模型
+- fix(gateway): 消除 models 门面拆分引入的 unused_imports 警告
+- refactor(gateway): 按职责拆分 compress
+- refactor(gateway): 按职责拆分 load_balancer
+- refactor(gateway): 按下游协议拆分 models
+- refactor(gateway): 按主题拆分 stream::tests
+- refactor(gateway): 按主题拆分 gateway::tests
+- refactor(gateway): 按被测源模块拆分 proxy::tests
+- refactor(gateway): 按主题拆分 converter::tests
+- test(core): 隔离 deep_link_handler 的全局状态测试
+- refactor(gateway): 按下游协议拆分 converter::normalize
+- refactor(gateway): 按职责拆分 proxy 非测试代码
+- refactor(gateway): 按职责拆分 converter 非测试代码
+- refactor(gateway): 拆分 proxy 模块，测试代码移出主文件
+- refactor(gateway): 拆分 converter 模块，测试代码移出主文件
+- test(gateway): 修复测试基线并消除真实 HTTP 用例的端口竞态
+- docs(ci): 同步工作流与文档的数据路径与架构判定
+- build(msi): 打包配置与 Windows 安装体验收尾
+- refactor(paths): 应用数据目录统一收敛到 core::paths
+- fix: Enterprise account userInfo fallback chain (issue #136)
+- fix(auto-switch): make enabled auto-switch actually switch accounts
+- feat(gateway): align Chat/Responses/Anthropic mapping to official APIs
+- fix(gateway): 恢复路由分配测试并接入真实 test_route_config
+- i18n: 网关在线测试更名为 API Playground
+- refactor: 统一 getUsageLimits 路径并优化企业号 region 回退
+- fix: 清理 getUsageLimits 去 profileArn 后的 warning 与测试 URL
+- feat: add region fallback for enterprise usage limits
+- fix: remove profileArn from getUsageLimits URL for enterprise accounts
+- feat(gateway): 用 tiktoken-rs 精确估算 OpenAI token，并清理 Claude 3 映射
+- fix: 按 review 加固 external_idp / IdC startUrl / 提权与 deep link
+- feat: 支持 external_idp（微软/Azure AD）账号导入与刷新
+- fix: 修复非 us-east-1 企业 IdC 号导入后失效刷新 400
+- fix: 加固账号导入/提权/OAuth 回调的几处安全与健壮性问题
+- feat(models): add GPT-5.6 series and Claude Sonnet 5 support
+- feat(gateway): add CORS support and update default agent mode
+- refactor(session-manager): polish workspace/session UI with model and execution badges
+- feat(session): add V1 session file compatibility fields
+- feat(gateway): honor OpenAI stream_options.include_usage
+- refactor: migrate EditAccountModal update_account invoke to accountApi wrapper
+- refactor: migrate get_available_models invoke to gatewayApi wrapper and internalize invoke in settingsActions
+- refactor: migrate EditMCPModal save_mcp_server invoke to kiroConfigApi wrapper
+- refactor: complete api layer migration for kiroConfig/gateway/account modules and detect CloudFront 403 blocks in token refresh
+- refactor: route remaining invoke cals through typed api wraper modules
+- refactor: replace scattered invoke cals with typed api wrapper modules
+- feat: add batch enable/disable and enabled-status filter to AccountManager
+- fix: preserve account selection state after refresh in AccountManager
+- feat: add quick "add account" button to account list footer
+- feat: add Claude Sonnet 5 to the selectable model list and make it the recommended option
+- refactor: 重构企业账号认证流程，移除region探测逻辑
+- fix: 修正导入账号时IdC provider判断逻辑
+- feat: add model mapping support for gateway proxy
+- 优化代理日志：移除无意义的日志打印
+- feat: support system environment proxy for generateAssistantResponse
+- 修复账号切换和重启功能
+- refactor: use get_usage_limits for overage status update
+- fix: restore tool calling functionality by always passing tools definition
+- fix: handle Option<String> for upstream_response_body in log
+- feat: add detailed error message to gateway account failure logs
+- debug: add detailed logging for Enterprise account creation flow
+- fix: emit accounts-updated event after Enterprise login to refresh UI
+- debug: add logging for login-success event emission
+- debug: add detailed logging for Enterprise account save process
+- fix: complete region detection removal - fix compilation errors
+- refactor: simplify online login by removing multi-region probing, use us-east-1 directly
+- fix: extend getUsageLimits graceful fallback to all account operations
+- fix: allow account creation even if getUsageLimits fails, usage_data can be empty
+- fix: update test to match new resolve_idc_login_email behavior (allow Enterprise with no userId/email)
+- debug: simplify log to print only userInfo object
+- debug: print Enterprise userInfo details
+- debug: log Enterprise usage_data to diagnose missing userId
+- refactor: simplify Enterprise account creation logic
+- fix: allow Enterprise account to have empty email and userId
+- fix: allow Enterprise account without userId or email, generate ID if missing
+- fix: resolve Bedrock API TOOL_CONFIG_MISSING error
+- fix: one-key account switch ignores threshold limit, only skip accounts with zero quota
+- fix(gateway): re-add missing Zap icon import
+- refactor(gateway): remove unimplemented route test dialog
+
+
+---
+
+📥 **下载地址**：[GitHub Releases](https://github.com/hj01857655/kiro-account-manager/releases/tag/v1.9.3)

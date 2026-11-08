@@ -1132,32 +1132,6 @@ pub async fn proxy_handler(
                     continue;
                 }
 
-                // 检查是否是账户封禁错误 (403 + BANNED: 前缀)
-                if status == StatusCode::FORBIDDEN && error_type == "account_banned_error" {
-                    let account_id = extract_account_id_from_upstream(&current_upstream);
-
-                    // 保存最后一个封禁错误详情
-                    last_retriable_error = Some((
-                        status,
-                        error_type.to_string(),
-                        message.clone(),
-                        upstream_response_body.clone(),
-                    ));
-
-                    // 标记账号为封禁（永久不可用）
-                    state.load_balancer.mark_account_banned(&account_id).await;
-
-                    log::warn!(
-                        "[Gateway] 账号 {} 被封禁，标记为不可用并切换账号 (尝试: {}/{})",
-                        current_upstream.source_label,
-                        account_attempt,
-                        available_account_count
-                    );
-
-                    // 继续尝试下一个账号
-                    continue;
-                }
-
                 // 401 认证错误：直接标记账号为 invalid 并切换
                 if status == StatusCode::UNAUTHORIZED {
                     let account_id = extract_account_id_from_upstream(&current_upstream);
