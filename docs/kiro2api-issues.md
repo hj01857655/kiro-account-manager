@@ -212,6 +212,8 @@ kiro2api 的准确描述是 **Kiro 账号池的本地协议反代 + 取号调度
 >
 > **状态：已修（2026-10-18）。** CORS 从 `allow_origin(Any)` 收敛为 `AllowOrigin::predicate` + `is_local_origin`：只放行 `http://localhost[:port]`、`http://127.0.0.1[:port]`、`http://[::1][:port]`；前缀后必须是端口分隔符或结束，否则 `http://localhost.evil.com` 会被 `starts_with` 误放行（有测试锁住）。`allow_headers` 同时从 `Any` 收敛为 `Authorization` / `Content-Type` / `x-api-key` 三项。
 >
+> **后续调整（2026-11-08，issue #137）**：`/health` 改为免客户端 Key——探活与反代健康检查不该要求业务 Key（响应体只有 `{"ok":true}` 无敏感面），`generate_local_response` 对 endpoint=health 跳过 `verify_client_auth`；local_only 与 IP 白名单的网络边界不变。`/v1/models` 与两个 token 计数端点仍需 Key，运行时测试已同步改写。
+>
 > **无 Origin 的请求不受影响**：`AllowOrigin::to_future` 对无 Origin 的请求直接返回 `None`（闭包根本不调用），CORS 层不设回显头但**不拒绝请求**——curl、SDK、探活工具全部照常工作，有测试验证。
 >
 > 验证：`cargo test --bins` 304 passed / 0 failed；新增 `local_origin_accepts_loopback_and_rejects_lookalikes` 与 `runtime_rejects_models_without_client_key`（后者同时锁定「无 Key 401」与「本地 Origin 回显、外地不回显」）。

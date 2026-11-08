@@ -122,20 +122,25 @@ pub async fn generate_local_response(
         )
         .await;
     }
-    if let Err(message) = verify_client_auth(&headers, &state.config) {
-        let sanitized = sanitize_error(&message);
-        return gateway_error_with_log(
-            &state,
-            ResponseFormat::Responses,
-            &log_context,
-            GatewayErrorDetails {
-                status: StatusCode::UNAUTHORIZED,
-                error_type: "authentication_error",
-                message: &sanitized,
-                response_body: None,
-            },
-        )
-        .await;
+    // /health 免客户端 Key（issue #137：探活与反代健康检查不该要求业务 Key，
+    // 响应体只有 {"ok":true} 无敏感面）；local_only / IP 白名单的网络边界仍然生效。
+    // 其余本地端点照常验 Key。
+    if endpoint != "health" {
+        if let Err(message) = verify_client_auth(&headers, &state.config) {
+            let sanitized = sanitize_error(&message);
+            return gateway_error_with_log(
+                &state,
+                ResponseFormat::Responses,
+                &log_context,
+                GatewayErrorDetails {
+                    status: StatusCode::UNAUTHORIZED,
+                    error_type: "authentication_error",
+                    message: &sanitized,
+                    response_body: None,
+                },
+            )
+            .await;
+        }
     }
 
     let serialized = serialize_logged_value(&response_body);

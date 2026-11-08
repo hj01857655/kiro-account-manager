@@ -72,8 +72,8 @@ async fn runtime_rejects_models_without_client_key() {
         .await
         .expect("models request should complete");
 
-    // 四个本地端点（/health、/v1/models、两个 token 计数）共用
-    // generate_local_response，客户端 Key 校验在那里统一完成。
+    // 四个本地端点共用 generate_local_response；/health 免 Key（issue #137），
+    // 其余三个（/v1/models、两个 token 计数）在那里统一校验客户端 Key。
     assert_eq!(
         response.status(),
         StatusCode::UNAUTHORIZED,
@@ -88,7 +88,8 @@ async fn runtime_rejects_models_without_client_key() {
         .send()
         .await
         .expect("local-origin health request should complete");
-    assert_eq!(local.status(), StatusCode::UNAUTHORIZED);
+    // /health 免 Key（issue #137），此处只验证 CORS 回显语义
+    assert_eq!(local.status(), StatusCode::OK);
     assert_eq!(
         local
             .headers()
@@ -240,7 +241,7 @@ async fn runtime_serves_count_tokens_over_real_http() {
 }
 
 #[tokio::test]
-async fn runtime_rejects_unauthenticated_health_requests_over_real_http() {
+async fn runtime_serves_health_without_client_key_over_real_http() {
     let guard = RuntimeHttpTestGuard::new();
     let port = guard.port;
 
@@ -255,7 +256,8 @@ async fn runtime_rejects_unauthenticated_health_requests_over_real_http() {
         .await
         .expect("health request should succeed");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // /health 免 Key：不带凭证也应 200（issue #137）
+    assert_eq!(response.status(), StatusCode::OK);
     stop_runtime(&mut runtime).await;
 }
 
@@ -270,11 +272,11 @@ async fn runtime_rejects_raw_authorization_header_without_bearer_over_real_http(
         .expect("runtime should start");
 
     let response = reqwest::Client::new()
-        .get(format!("http://127.0.0.1:{port}/health"))
+        .get(format!("http://127.0.0.1:{port}/v1/models"))
         .header("Authorization", "kiro")
         .send()
         .await
-        .expect("health request should succeed");
+        .expect("models request should succeed");
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     stop_runtime(&mut runtime).await;
