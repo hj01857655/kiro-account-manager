@@ -48,7 +48,7 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 
 ## 📥 下载
 
-**最新版本 v1.9.2**（发布于 2026-06-17）：请前往 [Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest)（自动保持最新）
+**最新版本 v1.9.3**（发布于 2026-11-08）：请前往 [Releases](https://github.com/hj01857655/kiro-account-manager/releases/latest)（自动保持最新）
 
 > 以下下载链接可能滞后，以 Releases 为准。
 
@@ -57,23 +57,23 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 > | 文件特征 | 安装位置 | 管理员权限 | 适合谁 |
 > |---------|---------|-----------|--------|
 > | `..._x64_zh-CN.msi` | 默认 `%LOCALAPPDATA%\Apps\KiroAccountManager`，安装界面可选 `C:\Program Files` | 默认**不需要**；选「为所有用户安装」时需要 | **推荐**。个人使用、公司/学校电脑无本地管理员权限，以及 IT 统一部署 |
-> | `..._portable.zip` | 解压位置自定 | 不需要 | 不想写入注册表；解压后直接双击 exe 运行（需系统已装 Edge WebView2 运行时，Win10/11 一般自带），**需手动下载新版本覆盖** |
+> | `..._portable.zip`（x64 / arm64） | 解压位置自定 | 不需要 | 不想写入注册表；解压后直接双击 exe 运行（需系统已装 Edge WebView2 运行时，Win10/11 一般自带），**需手动下载新版本覆盖** |
 >
 
 | 平台 | 架构 | 文件格式 | 下载链接 |
 |------|------|---------|---------|
-| 🪟 **Windows** | x64 | MSI 安装包 | [KiroAccountManager_1.9.2_x64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_x64_zh-CN.msi) |
-| 🪟 **Windows** | ARM64 | MSI 安装包 | [KiroAccountManager_1.9.2_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64_zh-CN.msi) |
-| 🍎 **macOS** | x64 / Intel | DMG 镜像 | [KiroAccountManager_1.9.2_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_x64.dmg) |
-| 🍎 **macOS** | x64 / Intel | App 压缩包 | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_x64.app.tar.gz) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG 镜像 | [KiroAccountManager_1.9.2_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_aarch64.dmg) |
-| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App 压缩包 | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_aarch64.app.tar.gz) |
-| 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.2_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.AppImage) |
-| 🐧 **Linux** | x86_64 | DEB 包 | [KiroAccountManager_1.9.2_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_amd64.deb) |
-| 🐧 **Linux** | x86_64 | RPM 包 | [KiroAccountManager-1.9.2-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager-1.9.2-1.x86_64.rpm) |
-| 🐧 **Linux** | ARM64 | AppImage | [KiroAccountManager_1.9.2_arm64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64.AppImage) |
-| 🐧 **Linux** | ARM64 | DEB 包 | [KiroAccountManager_1.9.2_arm64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager_1.9.2_arm64.deb) |
-| 🐧 **Linux** | ARM64 | RPM 包 | [KiroAccountManager-1.9.2-1.aarch64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.2/KiroAccountManager-1.9.2-1.aarch64.rpm) |
+| 🪟 **Windows** | x64 | MSI 安装包 | [KiroAccountManager_1.9.3_x64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_x64_zh-CN.msi) |
+| 🪟 **Windows** | ARM64 | MSI 安装包 | [KiroAccountManager_1.9.3_arm64_zh-CN.msi](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_arm64_zh-CN.msi) |
+| 🍎 **macOS** | x64 / Intel | DMG 镜像 | [KiroAccountManager_1.9.3_x64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_x64.dmg) |
+| 🍎 **macOS** | x64 / Intel | App 压缩包 | [KiroAccountManager_x64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_x64.app.tar.gz) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | DMG 镜像 | [KiroAccountManager_1.9.3_aarch64.dmg](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_aarch64.dmg) |
+| 🍎 **macOS** | ARM64 / Apple Silicon (M1/M2/M3/M4/M5) | App 压缩包 | [KiroAccountManager_aarch64.app.tar.gz](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_aarch64.app.tar.gz) |
+| 🐧 **Linux** | x86_64 | AppImage | [KiroAccountManager_1.9.3_amd64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_amd64.AppImage) |
+| 🐧 **Linux** | x86_64 | DEB 包 | [KiroAccountManager_1.9.3_amd64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_amd64.deb) |
+| 🐧 **Linux** | x86_64 | RPM 包 | [KiroAccountManager-1.9.3-1.x86_64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager-1.9.3-1.x86_64.rpm) |
+| 🐧 **Linux** | ARM64 | AppImage | [KiroAccountManager_1.9.3_arm64.AppImage](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_arm64.AppImage) |
+| 🐧 **Linux** | ARM64 | DEB 包 | [KiroAccountManager_1.9.3_arm64.deb](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager_1.9.3_arm64.deb) |
+| 🐧 **Linux** | ARM64 | RPM 包 | [KiroAccountManager-1.9.3-1.aarch64.rpm](https://github.com/hj01857655/kiro-account-manager/releases/download/v1.9.3/KiroAccountManager-1.9.3-1.aarch64.rpm) |
 
 > **macOS 样式说明**：若出现样式显示异常，请基于当前仓库源码自行调整（我没有 macOS 设备，无法复现与调试）。
 
