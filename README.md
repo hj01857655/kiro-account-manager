@@ -98,7 +98,7 @@ Kiro Account Manager 是一个基于 **Tauri 2.x** 的桌面应用，用于集�
 以下内容按 GitHub Release 的实际发布时间窗口整理。  
 **「未发版」** 为 `public` 分支已合入、尚未打 GitHub Release 的改动（用户安装包仍以 Releases 为准）。
 
-### 🚧 未发版（public，相对 v1.9.2）
+### 🚧 未发版（public，相对 v1.9.3）
 
 - **修复**: 网关数据面补发 `TokenType: EXTERNAL_IDP` — 微软 Entra ID（`external_idp`）账号此前仅管理面注入该头，对话主路径（`call_generate_assistant_response`）漏发导致网关核心对话不可用；现与管理面对齐
 - **修复**: macOS Cmd 系快捷键拦截与字体渲染灰阶抗锯齿
