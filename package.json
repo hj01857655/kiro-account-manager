@@ -1,7 +1,7 @@
 {
   "name": "kiro-account-manager",
   "private": true,
-  "version": "1.9.2",
+  "version": "1.9.3",
   "description": "Kiro Account Manager - 管理 Kiro IDE 账号，支持多账号切换和配额监控",
   "author": "hj01857655",
   "license": "CC-BY-NC-SA-4.0",
