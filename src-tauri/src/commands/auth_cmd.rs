@@ -10,7 +10,8 @@ use crate::auth::User;
 use crate::clients::kiro_auth_client::KiroAuthServiceClient;
 use crate::commands::common::{
     extract_user_info, find_existing_account_idx, generate_account_machine_id,
-    get_usage_by_provider_with_machine_id, lock_store, save_store, update_account_status,
+    get_usage_by_account, get_usage_by_provider_with_machine_id, lock_store, save_store,
+    update_account_status,
 };
 use crate::core::account::Account;
 use crate::core::protocol_registry;
@@ -130,6 +131,8 @@ fn clear_auth_state(auth: &crate::auth::AuthState) {
 #[tauri::command]
 pub fn cancel_kiro_login(state: State<'_, AppState>) -> bool {
     let cancelled_social = crate::core::deep_link_handler::cancel_waiter();
+    // external_idp 两段式复用 IdC 的 pending 机制（见 idc.rs descriptor 分支），
+    // cancel_pending_idc_login 已覆盖；无独立取消入口
     let cancelled_idc = cancel_pending_idc_login();
     match lock_store(&state.pending_login, "pending_login") {
         Ok(mut pending_login) => {
@@ -315,9 +318,10 @@ async fn login_idc(
 ) -> Result<String, String> {
     let idc_provider = create_idc_provider(config);
     let provider_id = idc_provider.get_provider_id().to_string();
-    let auth_method = idc_provider.get_auth_method();
-
     let auth_result = idc_provider.login().await?;
+    // 日志/回显用的 auth_method 跟随实际登录结果（external_idp 两段式会返回
+    // "external_idp" 而非 provider 默认的 "IdC"）
+    let auth_method = auth_result.auth_method.clone();
 
     // 先查找已存在账号，优先使用已有的 machine_id
     let existing_machine_id = {
@@ -343,18 +347,49 @@ async fn login_idc(
         .filter(|id| !id.trim().is_empty())
         .unwrap_or_else(generate_account_machine_id);
 
-    let usage_result = match get_usage_by_provider_with_machine_id(
-        &provider_id,
-        &auth_result.access_token,
-        &account_machine_id,
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(e) => {
-            log::warn!("Failed to get usage for {}: {}", provider_id, e);
-            // 即使 getUsageLimits 失败，也能保存账号
-            crate::commands::common::UsageResult::empty()
+    // external_idp 结果（Enterprise + Kiro 门户 Start URL 走的两段式）：
+    // usage 需要带微软 token_endpoint 元数据的临时账号（刷新/数据面据此路由），
+    // 不能走 get_usage_by_provider_with_machine_id（它会把 Enterprise 硬设为 IdC 路由）。
+    let is_external_idp_login = auth_result.auth_method == "external_idp";
+    let usage_result = if is_external_idp_login {
+        let mut temp_account = Account::new(String::new(), String::new());
+        temp_account.provider = Some(provider_id.clone());
+        temp_account.auth_method = Some("external_idp".to_string());
+        temp_account.client_id = auth_result.client_id.clone();
+        temp_account.token_endpoint = auth_result.token_endpoint.clone();
+        temp_account.issuer_url = auth_result.issuer_url.clone();
+        temp_account.scopes = auth_result.idp_scopes.clone();
+        temp_account.machine_id = Some(account_machine_id.clone());
+        match get_usage_by_account(&temp_account, &auth_result.access_token).await {
+            Ok(result) => result,
+            Err(e) => {
+                log::warn!("Failed to get usage for external_idp account: {e}");
+                // 微软 JWT 必带 email/preferred_username claim，这里兜底提取，
+                // 避免 usage 失败时账号完全没有标识
+                let fallback_email = crate::auth::external_idp_login::extract_email_from_jwt(
+                    &auth_result.access_token,
+                );
+                let mut empty = crate::commands::common::UsageResult::empty();
+                if let Some(email) = fallback_email {
+                    empty.usage_data = serde_json::json!({ "userInfo": { "email": email } });
+                }
+                empty
+            }
+        }
+    } else {
+        match get_usage_by_provider_with_machine_id(
+            &provider_id,
+            &auth_result.access_token,
+            &account_machine_id,
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                log::warn!("Failed to get usage for {}: {}", provider_id, e);
+                // 即使 getUsageLimits 失败，也能保存账号
+                crate::commands::common::UsageResult::empty()
+            }
         }
     };
 
@@ -419,6 +454,14 @@ async fn login_idc(
         existing.start_url.clone_from(&auth_result.start_url); // 保存 start_url
         existing.sso_session_id = auth_result.sso_session_id;
         existing.id_token = auth_result.id_token;
+        // external_idp 结果：写入微软刷新元数据（token_endpoint/issuer/scopes），
+        // 后续刷新据此走微软链路而非 AWS OIDC
+        if is_external_idp_login {
+            existing.auth_method = Some("external_idp".to_string());
+            existing.token_endpoint = auth_result.token_endpoint.clone();
+            existing.issuer_url = auth_result.issuer_url.clone();
+            existing.scopes = auth_result.idp_scopes.clone();
+        }
         // IdC 登录结果通常无 profileArn；优先落库 usage 解析到的真实 ARN
         existing.profile_arn = usage_result
             .resolved_profile_arn
@@ -435,7 +478,11 @@ async fn login_idc(
     } else {
         let mut account = Account::new(
             final_email.clone().unwrap_or_else(|| format!("{provider_id}_account")),
-            format!("Kiro {provider_id} 账号"),
+            if is_external_idp_login {
+                "Kiro 企业 SSO 账号".to_string()
+            } else {
+                format!("Kiro {provider_id} 账号")
+            },
         );
         // 如果 Enterprise 账号没有 email，设回 None
         if provider_id == "Enterprise" && final_email.is_none() {
@@ -444,7 +491,7 @@ async fn login_idc(
         account.access_token = Some(auth_result.access_token.clone());
         account.refresh_token = Some(auth_result.refresh_token.clone());
         account.provider = Some(provider_id.clone());
-        account.auth_method = Some("IdC".to_string());
+        account.auth_method = Some(auth_result.auth_method.clone());
         account.user_id = user_id;
         account.expires_at = Some(auth_result.expires_at.clone());
         account.client_id_hash = auth_result.client_id_hash;
@@ -454,6 +501,12 @@ async fn login_idc(
         account.start_url.clone_from(&auth_result.start_url); // 保存 start_url
         account.sso_session_id = auth_result.sso_session_id;
         account.id_token = auth_result.id_token;
+        // external_idp 结果：写入微软刷新元数据
+        if is_external_idp_login {
+            account.token_endpoint = auth_result.token_endpoint.clone();
+            account.issuer_url = auth_result.issuer_url.clone();
+            account.scopes = auth_result.idp_scopes.clone();
+        }
         account.profile_arn = usage_result
             .resolved_profile_arn
             .clone()
