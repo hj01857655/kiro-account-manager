@@ -60,7 +60,7 @@ function Settings() {
     const [enableCodebaseIndexing, setEnableCodebaseIndexing] = useState(false) // 对齐 Kiro 1.0 默认（实验特性，默认关）
 
     // Agent 设置
-    const [agentAutonomy, setAgentAutonomy] = useState('Autopilot') // 'Autopilot' | 'Supervised'（对齐 Kiro 1.0 默认）
+    const [chatPermissionsDefault, setChatPermissionsDefault] = useState('autoApprove') // 'default' | 'autoApprove' | 'autopilot'
     const [enableTabAutocomplete, setEnableTabAutocomplete] = useState(false) // 对齐 Kiro 1.0 默认
     const [usageSummary, setUsageSummary] = useState(true)
     const [enableDebugLogs, setEnableDebugLogs] = useState(false)
@@ -111,8 +111,8 @@ function Settings() {
                 setOriginalProxy(proxy)
                 setAiModel(kiroSettings.modelSelection || 'claude-sonnet-4.5')
                 setEnableCodebaseIndexing(kiroSettings.enableCodebaseIndexing ?? false)
-                // Agent 设置（默认值对齐 Kiro 1.0）
-                setAgentAutonomy(kiroSettings.agentAutonomy || 'Autopilot')
+                // 聊天权限模式：chat.permissions.default
+                setChatPermissionsDefault(kiroSettings.chatPermissionsDefault || 'autoApprove')
                 setEnableTabAutocomplete(kiroSettings.enableTabAutocomplete ?? false)
                 setUsageSummary(kiroSettings.usageSummary ?? true)
                 setEnableDebugLogs(kiroSettings.enableDebugLogs ?? false)
@@ -288,9 +288,9 @@ function Settings() {
 
     const handleCodebaseIndexingChange = makeKiroBoolToggle(setEnableCodebaseIndexing, runKiroCommand, 'set_kiro_codebase_indexing', 'enableCodebaseIndexing')
 
-    const handleAgentAutonomyChange = async (mode: string) => {
-        setAgentAutonomy(mode)
-        await runKiroCommand('set_kiro_agent_autonomy', { autonomy: mode })
+    const handleChatPermissionsDefaultChange = async (mode: string) => {
+        setChatPermissionsDefault(mode)
+        await runKiroCommand('set_chat_permissions_default', { mode })
     }
 
     const handleTabAutocompleteChange = makeKiroBoolToggle(setEnableTabAutocomplete, runKiroCommand, 'set_kiro_tab_autocomplete', 'enableTabAutocomplete')
@@ -479,7 +479,7 @@ function Settings() {
                         <SettingsKiro
                             aiModel={aiModel}
                             lockModel={lockModel}
-                            agentAutonomy={agentAutonomy}
+                            chatPermissionsDefault={chatPermissionsDefault}
                             httpProxy={httpProxy}
                             setHttpProxy={setHttpProxy}
                             originalProxy={originalProxy}
@@ -496,7 +496,7 @@ function Settings() {
                             telemetry={telemetry}
                             handleApplyModel={handleApplyModel}
                             handleLockModelChange={handleLockModelChange}
-                            handleAgentAutonomyChange={handleAgentAutonomyChange}
+                            handleChatPermissionsDefaultChange={handleChatPermissionsDefaultChange}
                             handleApplyProxy={handleApplyProxy}
                             handleDetectProxy={handleDetectProxy}
                             handleAppProxyModeChange={handleAppProxyModeChange}

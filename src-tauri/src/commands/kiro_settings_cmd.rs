@@ -14,7 +14,7 @@ pub struct KiroSettings {
     pub model_selection: Option<String>,
     pub enable_codebase_indexing: bool,
     // Agent 设置
-    pub agent_autonomy: Option<String>,
+    pub chat_permissions_default: Option<String>, // "default" | "autoApprove" | "autopilot"
     pub enable_tab_autocomplete: bool,
     pub usage_summary: bool,
     pub enable_debug_logs: bool,
@@ -68,10 +68,10 @@ impl Default for KiroSettings {
         Self {
             http_proxy: None,
             model_selection: Some("claude-sonnet-4.5".to_string()),
-            // 默认值对齐 Kiro 1.0 configuration 声明：enableCodebaseIndexing=false（实验特性）、
-            // agentAutonomy=Autopilot、enableTabAutocomplete=false、notify.failure/success=false。
+            // 默认值对齐 Kiro 1.x configuration 声明：enableCodebaseIndexing=false（实验特性）、
+            // chat.permissions.default=autoApprove、enableTabAutocomplete=false、notify.failure/success=false。
             enable_codebase_indexing: false,
-            agent_autonomy: Some("Autopilot".to_string()),
+            chat_permissions_default: Some("autoApprove".to_string()),
             enable_tab_autocomplete: false,
             usage_summary: true,
             enable_debug_logs: false,
@@ -379,7 +379,7 @@ fn get_kiro_settings_inner() -> Result<KiroSettings, String> {
         "kiroAgent.codeReferences.referenceTracker",
         false
     );
-    let agent_autonomy = sync2way_string!(agent_autonomy, "kiroAgent.agentAutonomy", "Autopilot");
+    let chat_permissions_default = sync2way_string!(chat_permissions_default, "chat.permissions.default", "autoApprove");
     let configure_mcp = sync2way_string!(configure_mcp, "kiroAgent.configureMCP", "Enabled");
     let tool_card_display_mode = sync2way_string!(
         tool_card_display_mode,
@@ -525,7 +525,7 @@ fn get_kiro_settings_inner() -> Result<KiroSettings, String> {
         http_proxy,
         model_selection,
         enable_codebase_indexing: codebase_indexing,
-        agent_autonomy: Some(agent_autonomy),
+        chat_permissions_default: Some(chat_permissions_default),
         enable_tab_autocomplete: tab_autocomplete,
         usage_summary,
         enable_debug_logs: debug_logs,
@@ -706,17 +706,18 @@ pub async fn set_kiro_codebase_indexing(enabled: bool) -> Result<(), String> {
     run_kiro_blocking(move || set_kiro_codebase_indexing_inner(enabled)).await
 }
 
-// 设置 Agent 自主模式
-fn set_kiro_agent_autonomy_inner(autonomy: String) -> Result<(), String> {
+// IDE 三模式：Supervised / Accept file changes / Approve for me
+// 配置项是 chat.permissions.default。
+fn set_chat_permissions_default_inner(mode: String) -> Result<(), String> {
     set_kiro_generic_inner(
-        "kiroAgent.agentAutonomy".to_string(),
-        serde_json::json!(autonomy),
+        "chat.permissions.default".to_string(),
+        serde_json::json!(mode),
     )
 }
 
 #[tauri::command]
-pub async fn set_kiro_agent_autonomy(autonomy: String) -> Result<(), String> {
-    run_kiro_blocking(move || set_kiro_agent_autonomy_inner(autonomy)).await
+pub async fn set_chat_permissions_default(mode: String) -> Result<(), String> {
+    run_kiro_blocking(move || set_chat_permissions_default_inner(mode)).await
 }
 
 // 设置 Tab 自动补全
@@ -854,9 +855,9 @@ fn sync_to_app_settings(key: &str, value: &serde_json::Value) {
         "kiroAgent.notifications.billing" => {
             app.notify_billing = value.as_bool();
         }
-        // === Kiro 1.0 Agent 高级设置（原先只写 IDE，现在一并镜像到 app-settings）===
-        "kiroAgent.agentAutonomy" => {
-            app.agent_autonomy = value.as_str().map(String::from);
+        // === Kiro Agent 高级设置（原先只写 IDE，现在一并镜像到 app-settings）===
+        "chat.permissions.default" => {
+            app.chat_permissions_default = value.as_str().map(String::from);
         }
         "kiroAgent.toolCardDisplayMode" => {
             app.tool_card_display_mode = value.as_str().map(String::from);

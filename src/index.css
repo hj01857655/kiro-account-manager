@@ -269,8 +269,10 @@
   body {
     /* 完全平铺：三层径向渐变整体移除（花里胡哨 complaints 的最终解），
        背景退为纯 --bg-color，层次感完全交给卡片边框/阴影/留白。
-       各主题的 --bg-gradient-* 变量保留（其他处可能引用），仅不再上 body。 */
-    background-color: var(--bg-color);
+       各主题的 --bg-gradient-* 变量保留（其他处可能引用），仅不再上 body。
+       !important 必需：index.html 的内联 <style> 给 body 写了 #0b1220，
+       未分层样式优先级高于 @layer base，不加则浅色主题 body 恒为黑色。 */
+    background-color: var(--bg-color) !important;
     background-attachment: fixed;
     color: var(--foreground);
     min-height: 100vh;

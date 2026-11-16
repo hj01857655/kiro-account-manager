@@ -31,13 +31,13 @@ import SandboxCard from './SandboxCard'
 //   10.  http.*/app  —— 网络代理（按约定压尾）
 //
 // 说明：`kiro.*` 在 Kiro 里只有 startupMode 一个键，凑不成独立 section，因此并入
-// 「Agent 行为」——它决定 Kiro 是否直接进 Agent 聚焦，与 agentAutonomy 是一对。
+// 「Agent 行为」——它决定 Kiro 是否直接进 Agent 聚焦，与 chatPermissionsDefault 是一对。
 
 interface SettingsKiroProps {
   // 模型/工具
   aiModel: string
   lockModel: boolean
-  agentAutonomy: string
+  chatPermissionsDefault: string
   // 代理
   httpProxy: string
   setHttpProxy: (value: string) => void
@@ -58,7 +58,7 @@ interface SettingsKiroProps {
   // handlers
   handleApplyModel: (model: string) => Promise<void>
   handleLockModelChange: (checked: boolean) => Promise<void>
-  handleAgentAutonomyChange: (mode: string) => Promise<void>
+  handleChatPermissionsDefaultChange: (mode: string) => Promise<void>
   handleApplyProxy: () => Promise<void>
   handleDetectProxy: () => Promise<void>
   handleAppProxyModeChange: (mode: string) => Promise<void>
@@ -76,7 +76,7 @@ const STARTUP_MODES = ['code', 'agentFocus'] as const
 function SettingsKiro({
   aiModel,
   lockModel,
-  agentAutonomy,
+  chatPermissionsDefault,
   httpProxy,
   setHttpProxy,
   originalProxy,
@@ -93,7 +93,7 @@ function SettingsKiro({
   telemetry,
   handleApplyModel,
   handleLockModelChange,
-  handleAgentAutonomyChange,
+  handleChatPermissionsDefaultChange,
   handleApplyProxy,
   handleDetectProxy,
   handleAppProxyModeChange,
@@ -195,12 +195,13 @@ function SettingsKiro({
             </Select>
           </div>
           <div>
-            <Label className="block text-[11px] text-muted-foreground mb-1">{t('settings.agentAutonomy')}</Label>
-            <Select value={agentAutonomy} onValueChange={handleAgentAutonomyChange}>
+            <Label className="block text-[11px] text-muted-foreground mb-1">{t('settings.chatPermissionsDefault')}</Label>
+            <Select value={chatPermissionsDefault} onValueChange={handleChatPermissionsDefaultChange}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="Supervised">{t('settings.agentSupervised')}</SelectItem>
-                <SelectItem value="Autopilot">{t('settings.agentAutopilot')}</SelectItem>
+                <SelectItem value="default">{t('settings.chatPermissionSupervised')}</SelectItem>
+                <SelectItem value="autoApprove">{t('settings.chatPermissionApproveForMe')}</SelectItem>
+                <SelectItem value="autopilot">{t('settings.chatPermissionAcceptFileChanges')}</SelectItem>
               </SelectContent>
             </Select>
           </div>

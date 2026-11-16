@@ -44,7 +44,7 @@ pub struct AppSettings {
     pub telemetry_edit_stats_decorations: Option<bool>,
     pub telemetry_edit_stats_status_bar: Option<bool>,
     // Kiro IDE 设置镜像（与 settings.json 双向同步：IDE 优先，app 侧改动同时写两个文件）
-    pub agent_autonomy: Option<String>,
+    pub chat_permissions_default: Option<String>,
     pub tool_card_display_mode: Option<String>,
     pub terminal_command_timeout: Option<i64>,
     pub agent_ignore_files: Option<Vec<String>>,
@@ -113,8 +113,8 @@ impl Default for AppSettings {
             telemetry_edit_stats_details: Some(false),
             telemetry_edit_stats_decorations: Some(false),
             telemetry_edit_stats_status_bar: Some(false),
-            // 镜像字段默认值对齐 Kiro 1.0 configuration 声明
-            agent_autonomy: Some("Autopilot".to_string()),
+            // 镜像字段默认值对齐 Kiro 1.x configuration 声明
+            chat_permissions_default: Some("autoApprove".to_string()),
             tool_card_display_mode: Some("collapseOnComplete".to_string()),
             terminal_command_timeout: None,
             agent_ignore_files: None,
@@ -180,7 +180,7 @@ impl AppSettings {
         apply_if_some!(telemetry_edit_stats_details);
         apply_if_some!(telemetry_edit_stats_decorations);
         apply_if_some!(telemetry_edit_stats_status_bar);
-        apply_if_some!(agent_autonomy);
+        apply_if_some!(chat_permissions_default);
         apply_if_some!(tool_card_display_mode);
         apply_if_some!(terminal_command_timeout);
         apply_if_some!(agent_ignore_files);
